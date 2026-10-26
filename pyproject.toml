@@ -3,7 +3,7 @@ requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "document-tools-desktop"
+name = "ferramentas-de-arquivo"
 version = "0.2.0"
 description = "Ferramentas locais para PDFs e imagens, com interface desktop."
 readme = "README.md"
@@ -24,7 +24,7 @@ dev = [
 ]
 
 [project.scripts]
-document-tools = "document_tools.gui:main"
+ferramentas-de-arquivo = "document_tools.gui:main"
 
 [tool.setuptools.packages.find]
 include = ["document_tools*"]
