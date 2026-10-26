@@ -348,6 +348,8 @@ def _format_image_for_output(image: Image.Image, image_format: str) -> Image.Ima
     has_transparency = image.mode in ALPHA_MODES or "transparency" in image.info
     if image_format in {"JPEG", "BMP"} and has_transparency:
         return _flatten_to_rgb(image)
+    if image_format == "WEBP" and has_transparency:
+        return image.copy() if image.mode in {"RGBA", "LA"} else image.convert("RGBA")
     if image_format == "JPEG":
         return image.copy() if image.mode in {"RGB", "L"} else image.convert("RGB")
     if image_format == "BMP":
@@ -373,6 +375,15 @@ def convert_image(
     image_format = output_format.upper().strip()
     if image_format not in SUPPORTED_OUTPUT_FORMATS:
         raise ValueError(f"Formato de saída não suportado: {output_format}")
+    expected_suffixes = {
+        "JPEG": {".jpg", ".jpeg"},
+        "PNG": {".png"},
+        "WEBP": {".webp"},
+        "BMP": {".bmp"},
+        "TIFF": {".tif", ".tiff"},
+    }
+    if output.suffix.lower() not in expected_suffixes[image_format]:
+        raise ValueError(f"A extensão de saída não corresponde ao formato {image_format}.")
     if not source.is_file():
         raise FileNotFoundError(f"Imagem não encontrada: {source}")
     if source == output:
