@@ -1,0 +1,39 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore Ypdf.Desktop.slnx
+
+      - name: Build
+        run: dotnet build Ypdf.Desktop.slnx --configuration Release --no-restore
+
+      - name: Publish portable Windows x64
+        run: dotnet publish Application/Ypdf.Desktop.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true --output artifacts/Ypdf-Portable-win-x64
+
+      - name: Upload publish artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ypdf-Portable-win-x64
+          path: artifacts/Ypdf-Portable-win-x64/
+          if-no-files-found: error
