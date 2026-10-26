@@ -3,9 +3,9 @@ requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ferramentas-de-arquivo"
-version = "0.2.0"
-description = "Ferramentas locais para PDFs e imagens, com interface desktop."
+name = "pdf-hub"
+version = "0.3.0"
+description = "Desktop tools for locally processing PDF files and images."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "AGPL-3.0-only"
@@ -24,7 +24,7 @@ dev = [
 ]
 
 [project.scripts]
-ferramentas-de-arquivo = "document_tools.gui:main"
+pdf-hub = "document_tools.gui:main"
 
 [tool.setuptools.packages.find]
 include = ["document_tools*"]
