@@ -104,12 +104,12 @@ def _open_reader(path: Path, stream):
         except Exception as error:
             raise ValueError(
                 f"Não foi possível abrir o PDF criptografado '{path.name}'. "
-                "Se ele exigir uma senha, informe uma senha válida ou remova a proteção."
+                "Esta versão não permite digitar uma senha de usuário. Salve uma cópia sem senha para continuar."
             ) from error
         if not decrypted:
             raise ValueError(
-                f"O PDF '{path.name}' exige uma senha para ser aberto. "
-                "Informe a senha ou remova a proteção antes de continuar."
+                f"O PDF '{path.name}' exige uma senha de usuário. "
+                "Esta versão ainda não permite digitá-la; salve uma cópia sem senha antes de continuar."
             )
     if len(reader.pages) < 1:
         raise ValueError(f"O PDF '{path.name}' não contém páginas.")
