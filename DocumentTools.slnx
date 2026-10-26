@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/Application/">
+    <Project Path="Application/DocumentTools.Desktop.csproj" />
+  </Folder>
+</Solution>
