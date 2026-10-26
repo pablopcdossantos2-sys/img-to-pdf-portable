@@ -1,4 +1,2 @@
--r requirements.txt
-pytest==9.1.1
-PyInstaller==6.22.3
-pip-audit==2.10.1
+# Runtime plus test, packaging and security-audit tools.
+-e .[dev]
