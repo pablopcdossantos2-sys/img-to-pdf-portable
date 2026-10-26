@@ -90,25 +90,25 @@ jobs:
           --clean
           --onefile
           --windowed
-          --name DocumentTools
+          --name FerramentasDeArquivo
           main.py
 
       - name: Smoke-test packaged executable
         shell: pwsh
         run: |
-          & .\dist\DocumentTools.exe --selftest
+          & .\dist\FerramentasDeArquivo.exe --selftest
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Create SHA-256 checksum
         shell: pwsh
         run: |
-          $hash = (Get-FileHash .\dist\DocumentTools.exe -Algorithm SHA256).Hash.ToLower()
-          "$hash  DocumentTools.exe" | Set-Content .\dist\DocumentTools.exe.sha256 -NoNewline
+          $hash = (Get-FileHash .\dist\FerramentasDeArquivo.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  DocumentTools.exe" | Set-Content .\dist\FerramentasDeArquivo.exe.sha256 -NoNewline
 
       - name: Upload portable executable and checksum
         uses: actions/upload-artifact@v4
         with:
-          name: DocumentTools-Portable-win-x64
+          name: Ferramentas-de-Arquivo-Portable-win-x64
           path: |
             dist/DocumentTools.exe
             dist/DocumentTools.exe.sha256
