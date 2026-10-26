@@ -232,11 +232,9 @@ def merge_pdfs(pdf_paths: Sequence[str | Path], output_path: str | Path) -> Path
         for index, source in enumerate(sources):
             with source.open("rb") as stream:
                 reader = _open_reader(source, stream)
-                writer.append(reader, import_outline=True)
                 if index == 0:
-                    first_reader = reader
-        if first_reader is not None:
-            _copy_metadata(first_reader, writer)
+                    _copy_metadata(reader, writer)
+                writer.append(reader, import_outline=True)
         writer.write(temporary)
 
     _atomic_pdf_save(output, write)
