@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace DocumentTools.Desktop.ViewModels;
 
@@ -10,7 +9,7 @@ public sealed record FileEntry(string FullPath)
     public string Folder => Path.GetDirectoryName(FullPath) ?? FullPath;
 }
 
-public sealed class MainWindowViewModel : ObservableObject
+public sealed class MainWindowViewModel : ViewModelBase
 {
     private FileEntry? _selectedImage;
     private FileEntry? _selectedPdf;
@@ -69,8 +68,16 @@ public sealed class MainWindowViewModel : ObservableObject
     public bool IsBusy
     {
         get => _isBusy;
-        set => SetProperty(ref _isBusy, value);
+        set
+        {
+            if (SetProperty(ref _isBusy, value))
+            {
+                OnPropertyChanged(nameof(CanStartOperation));
+            }
+        }
     }
+
+    public bool CanStartOperation => !IsBusy;
 
     public string ImagesSummary => Images.Count switch
     {
