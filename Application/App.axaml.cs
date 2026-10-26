@@ -1,12 +1,10 @@
-using System.Linq;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
-using Ypdf.Desktop.ViewModels;
-using Ypdf.Desktop.Views;
+using DocumentTools.Desktop.ViewModels;
+using DocumentTools.Desktop.Views;
 
-namespace Ypdf.Desktop;
+namespace DocumentTools.Desktop;
 
 internal sealed partial class App : Application
 {
@@ -19,11 +17,6 @@ internal sealed partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            // Avoid duplicate validations from both Avalonia and the CommunityToolkit.
-            // More info:
-            // https://docs.avaloniaui.net/docs/guides/development-guides/data-validation#manage-validationplugins
-            DisableAvaloniaDataAnnotationValidation();
-
             desktop.MainWindow = new MainWindow
             {
                 DataContext = new MainWindowViewModel(),
@@ -31,18 +24,5 @@ internal sealed partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
-    }
-
-    private static void DisableAvaloniaDataAnnotationValidation()
-    {
-        DataAnnotationsValidationPlugin[] dataValidationPluginsToRemove =
-        [..
-            BindingPlugins.DataValidators.OfType<DataAnnotationsValidationPlugin>()
-        ];
-
-        foreach (DataAnnotationsValidationPlugin plugin in dataValidationPluginsToRemove)
-        {
-            BindingPlugins.DataValidators.Remove(plugin);
-        }
     }
 }
