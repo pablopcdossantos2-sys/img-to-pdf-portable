@@ -7,6 +7,16 @@ if not exist ".venv\Scripts\python.exe" (
     pause
     exit /b 1
 )
+".venv\Scripts\python.exe" -c "import PySide6, pypdf, PIL" >nul 2>nul
+if errorlevel 1 (
+    echo O ambiente virtual esta incompleto ou pode ter sido movido.
+    echo Apague a pasta .venv e execute instalar-e-iniciar.bat novamente.
+    pause
+    exit /b 1
+)
 ".venv\Scripts\python.exe" main.py
-if errorlevel 1 pause
+if errorlevel 1 (
+    echo Se a pasta do projeto foi movida, apague .venv e rode instalar-e-iniciar.bat.
+    pause
+)
 endlocal
