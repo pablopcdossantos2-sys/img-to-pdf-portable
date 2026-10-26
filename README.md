@@ -1,56 +1,91 @@
 # Ferramentas de Arquivo
 
-Aplicativo desktop para operações locais com PDFs e imagens. A interface é em português brasileiro e foi construída com Avalonia UI; o processamento de documentos usa PDFsharp.
+Aplicativo desktop para trabalhar com PDFs e imagens localmente, com uma interface moderna em português brasileiro. O projeto agora usa **Python, PySide6, pypdf e Pillow**.
 
 ## O que já funciona
 
-- **Imagens para PDF:** transforma várias imagens em páginas A4, preservando a proporção e permitindo reorganizar a sequência antes da conversão.
-- **Unir PDFs:** combina dois ou mais documentos na ordem escolhida.
-- **Extrair páginas:** salva páginas individuais ou intervalos, por exemplo `1-3, 5, 8-10`.
-- **Interface visual:** janela moderna, seleção de arquivos, listas organizáveis, mensagens de status e confirmação antes de substituir um arquivo existente.
-- **Proteção dos originais:** as operações criam um novo arquivo; arquivos de origem não podem ser escolhidos como destino.
+### PDFs
+- **Unir PDFs:** combina vários arquivos na ordem escolhida.
+- **Extrair páginas:** seleciona páginas e intervalos, como `1-3, 5, 8-10`, preservando a ordem informada.
+- **Girar páginas:** rotação em 90°, 180° ou 270°, em todas as páginas ou somente nas selecionadas.
+- **Dividir PDF:** cria um arquivo PDF individual para cada página. A função se recusa a sobrescrever nomes que já existam na pasta de destino.
+- **Imagens para PDF:** cada imagem vira uma página A4; orientação e proporção são preservadas, com margens configuráveis no código.
 
-Formatos de imagem aceitos nesta versão: JPG/JPEG, PNG e BMP. PDFs protegidos por senha e arquivos danificados podem não ser processados. A extração aceita intervalos e páginas separadas por vírgula; intervalos inválidos e páginas repetidas são recusados.
+### Imagens
+- **Converter e redimensionar em lote:** JPEG, PNG, WEBP, BMP e TIFF.
+- **Limitar dimensões:** define largura e altura máximas em pixels, preservando a proporção e sem ampliar imagens menores.
+- **Qualidade:** controle para formatos com compressão com perdas, como JPEG e WEBP.
 
-## Privacidade
+### Experiência e segurança
+- Interface desktop com abas, listas organizáveis, mensagens de status e indicador de processamento.
+- Operações longas executadas fora da thread principal da interface.
+- Processamento local; os documentos não são enviados a serviços externos.
+- Arquivos de origem protegidos contra substituição acidental.
+- Arquivos intermediários temporários e gravação atômica para operações PDF.
+- Testes automatizados executados no GitHub Actions antes da geração do executável portátil.
 
-O processamento dos documentos acontece localmente no computador. A aplicação não envia os arquivos escolhidos a um serviço externo. A conexão com a internet é necessária para baixar dependências ao compilar o código-fonte, mas não para executar as operações depois de publicada.
+PDFs danificados ou protegidos por senha podem ser recusados. A conversão de imagens depende dos formatos suportados pela versão instalada do Pillow.
 
-## Usar no Windows
+## Usar no Windows sem instalar Python
 
-A cada atualização, o fluxo do GitHub Actions compila e publica um artefato portátil para Windows x64.
+O fluxo **Python CI and package** gera o executável portátil para Windows x64.
 
-1. Abra a aba **Actions** deste repositório.
-2. Selecione a execução mais recente do fluxo **Build and package**.
+1. Abra a aba [Actions](https://github.com/pablopcdossantos2-sys/img-to-pdf-portable/actions).
+2. Entre na execução mais recente com o nome **Python CI and package** e confirme que ela terminou com sucesso.
 3. Na seção **Artifacts**, baixe `DocumentTools-Portable-win-x64`.
-4. Extraia o ZIP para uma pasta e execute `DocumentTools.Desktop.exe`.
+4. Extraia o arquivo ZIP e execute `DocumentTools.exe`.
 
-O artefato é self-contained: não exige que o .NET seja instalado separadamente. O Windows pode exibir um aviso de segurança para executáveis baixados da internet; confirme a origem do arquivo antes de executá-lo.
+O executável contém o runtime necessário e não requer uma instalação separada do Python. O Windows pode mostrar um aviso de segurança para arquivos baixados; confira a origem antes de executar.
 
-## Compilar a partir do código-fonte
+> O artefato de Actions é temporário e tem prazo de expiração definido pelo GitHub. Um release permanente poderá ser publicado separadamente depois de validar o pacote em uso real no Windows.
 
-Recomendado: SDK do .NET 10. O projeto tem como alvo o .NET 8 e usa o formato de solução `.slnx`.
+## Executar a partir do código-fonte
+
+Requisitos: Windows, macOS ou Linux e Python 3.13 recomendado (Python 3.11 ou superior é declarado no projeto).
 
 Na pasta do repositório, execute:
 
 ```powershell
-dotnet restore DocumentTools.slnx
-dotnet build DocumentTools.slnx --configuration Release
-dotnet test DocumentTools.slnx --configuration Release
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python main.py
 ```
 
-Para gerar uma publicação portátil para Windows x64:
+No macOS ou Linux, a ativação do ambiente virtual usa:
+
+```bash
+source .venv/bin/activate
+```
+
+### Testes e compilação do executável
+
+Instale as dependências de desenvolvimento e execute os testes:
 
 ```powershell
-dotnet publish Application/DocumentTools.Desktop.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true --output artifacts/DocumentTools-Portable-win-x64
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
 ```
 
-Os testes automatizados cobrem a validação e a ordem dos intervalos de páginas, a criação de PDF a partir de imagens, a união de arquivos e a extração de páginas. O GitHub Actions executa esses testes antes de publicar o pacote portátil.
+Para gerar o executável localmente no Windows:
 
-## Próximas etapas
+```powershell
+python -m PyInstaller --noconfirm --clean --onefile --windowed --name DocumentTools --collect-all PySide6 --collect-all shiboken6 main.py
+```
 
-Funcionalidades que podem ser adicionadas nas próximas versões: girar e reordenar páginas de PDF, converter PDF para imagens, redimensionar/comprimir imagens, dividir um documento em vários arquivos e adicionar processamento em lote com progresso detalhado.
+O executável será criado em `dist/DocumentTools.exe`.
+
+## Estrutura principal
+
+- `main.py`: ponto de entrada da aplicação.
+- `document_tools/gui.py`: interface PySide6.
+- `document_tools/pdf_ops.py`: operações PDF e imagem.
+- `tests/`: testes automatizados.
+- `requirements.txt`: dependências de execução.
+- `requirements-dev.txt`: testes e empacotamento.
+- `.github/workflows/build.yml`: testes e geração do executável Windows.
 
 ## Licença
 
-O projeto está sob a licença GNU AGPL v3, conforme o arquivo `LICENSE`. A dependência PDFsharp 6.2.4 tem licença MIT. Confira os termos de todas as dependências antes de redistribuir versões modificadas.
+O projeto usa a GNU AGPL v3, conforme o arquivo `LICENSE`. As dependências têm seus próprios termos: consulte [LICENSES-THIRD-PARTY.md](LICENSES-THIRD-PARTY.md), em especial as condições aplicáveis às bibliotecas Qt incluídas no executável.
