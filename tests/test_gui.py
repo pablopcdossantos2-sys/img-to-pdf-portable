@@ -5,9 +5,9 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtWidgets import QApplication, QListWidget, QListWidgetItem
+from PySide6.QtWidgets import QApplication, QLineEdit, QListWidget, QListWidgetItem
 
-from document_tools.gui import DocumentToolsWindow
+from document_tools.gui import APP_NAME, DocumentToolsWindow
 
 
 @pytest.fixture(scope="module")
@@ -74,3 +74,17 @@ def test_move_selected_down_preserves_contiguous_block_order(qt_app: QApplicatio
 
     assert names(widget) == ["a", "d", "b", "c", "e"]
     assert selected_names(widget) == ["b", "c"]
+
+
+def test_window_is_branded_pdf_hub_and_exposes_password_fields(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    try:
+        assert APP_NAME == "PDF Hub"
+        assert window.windowTitle() == "PDF Hub"
+        assert window.extract_password.echoMode() == QLineEdit.EchoMode.Password
+        assert window.rotate_password.echoMode() == QLineEdit.EchoMode.Password
+        assert window.split_password.echoMode() == QLineEdit.EchoMode.Password
+        assert window.image_all_frames.isChecked()
+        assert window.output_permissions.currentData() in (0o600, 0o644)
+    finally:
+        window.close()
