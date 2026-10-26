@@ -1,7 +1,7 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace Ypdf.Desktop.ViewModels;
+namespace DocumentTools.Desktop.ViewModels;
 
-internal abstract class ViewModelBase : ObservableObject
+public abstract class ViewModelBase : ObservableObject
 {
 }
