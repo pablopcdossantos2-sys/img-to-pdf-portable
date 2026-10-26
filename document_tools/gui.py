@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QFrame,
@@ -534,12 +535,33 @@ class DocumentToolsWindow(QMainWindow):
         up.clicked.connect(lambda: self._move_selected(list_widget, -1))
         down = QPushButton("↓  Descer")
         down.clicked.connect(lambda: self._move_selected(list_widget, 1))
+        duplicate = QPushButton("Duplicar selecionadas")
+        duplicate.clicked.connect(lambda: self._duplicate_selected(list_widget))
         buttons.addWidget(add)
         buttons.addWidget(remove)
+        buttons.addWidget(duplicate)
         buttons.addStretch(1)
         buttons.addWidget(up)
         buttons.addWidget(down)
         layout.addLayout(buttons)
+
+        options = QHBoxLayout()
+        options.addWidget(QLabel("Resolução:"))
+        self.image_dpi = QSpinBox()
+        self.image_dpi.setRange(72, 600)
+        self.image_dpi.setValue(150)
+        self.image_dpi.setSuffix(" DPI")
+        options.addWidget(self.image_dpi)
+        options.addSpacing(18)
+        options.addWidget(QLabel("Margem:"))
+        self.image_margin = QDoubleSpinBox()
+        self.image_margin.setRange(0, 40)
+        self.image_margin.setDecimals(1)
+        self.image_margin.setValue(10)
+        self.image_margin.setSuffix(" mm")
+        options.addWidget(self.image_margin)
+        options.addStretch(1)
+        layout.addLayout(options)
 
         bottom = QHBoxLayout()
         hint = QLabel("Formatos: JPG, PNG, BMP, WEBP e TIFF.")
@@ -561,6 +583,19 @@ class DocumentToolsWindow(QMainWindow):
     def _remove_selected(list_widget: QListWidget) -> None:
         for item in list_widget.selectedItems():
             list_widget.takeItem(list_widget.row(item))
+
+    @staticmethod
+    def _duplicate_selected(list_widget: QListWidget) -> None:
+        rows = sorted({list_widget.row(item) for item in list_widget.selectedItems()})
+        if not rows:
+            return
+        for row in reversed(rows):
+            original = list_widget.item(row)
+            duplicate = QListWidgetItem(original.text())
+            duplicate.setToolTip(original.toolTip())
+            duplicate.setData(Qt.ItemDataRole.UserRole, original.data(Qt.ItemDataRole.UserRole))
+            list_widget.insertItem(row + 1, duplicate)
+            duplicate.setSelected(True)
 
     @staticmethod
     def _move_selected(list_widget: QListWidget, offset: int) -> None:
@@ -594,9 +629,11 @@ class DocumentToolsWindow(QMainWindow):
         output = self._require_output_pdf("imagens.pdf", source_paths=sources)
         if not output:
             return
+        dpi = self.image_dpi.value()
+        margin_mm = self.image_margin.value()
         self._run_task(
             "Criando PDF a partir das imagens…",
-            lambda: f"PDF criado: {images_to_pdf(sources, output)}",
+            lambda: f"PDF criado: {images_to_pdf(sources, output, dpi=dpi, margin_mm=margin_mm)}",
             output_location=output,
         )
 
@@ -618,8 +655,11 @@ class DocumentToolsWindow(QMainWindow):
         up.clicked.connect(lambda: self._move_selected(self.pdf_list, -1))
         down = QPushButton("↓  Descer")
         down.clicked.connect(lambda: self._move_selected(self.pdf_list, 1))
+        duplicate = QPushButton("Duplicar selecionados")
+        duplicate.clicked.connect(lambda: self._duplicate_selected(self.pdf_list))
         buttons.addWidget(add)
         buttons.addWidget(remove)
+        buttons.addWidget(duplicate)
         buttons.addStretch(1)
         buttons.addWidget(up)
         buttons.addWidget(down)
@@ -642,7 +682,7 @@ class DocumentToolsWindow(QMainWindow):
         self.status_label.setText(f"{added} PDF(s) adicionado(s)." if added else "Nenhum PDF novo adicionado.")
 
     def _merge_pdfs(self) -> None:
-        sources = self._selected_paths(self.pdf_list)
+        sources = self._all_paths(self.pdf_list)
         if len(sources) < 2:
             QMessageBox.information(self, "Unir PDFs", "Adicione pelo menos dois PDFs.")
             return
@@ -920,7 +960,7 @@ class DocumentToolsWindow(QMainWindow):
             self.convert_directory.setText(path)
 
     def _convert_images(self) -> None:
-        sources = self._selected_paths(self.convert_list)
+        sources = self._all_paths(self.convert_list)
         directory_text = self.convert_directory.text().strip()
         if not sources:
             QMessageBox.information(self, "Converter imagens", "Adicione pelo menos uma imagem.")
