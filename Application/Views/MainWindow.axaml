@@ -84,7 +84,7 @@
                                              SelectedItem="{Binding SelectedImage, Mode=TwoWay}"
                                              Background="Transparent"
                                              BorderThickness="0"
-                                             HorizontalContentAlignment="Stretch">
+>
                                         <ListBox.ItemTemplate>
                                             <DataTemplate x:DataType="vm:FileEntry">
                                                 <StackPanel Margin="7,5" Spacing="3">
