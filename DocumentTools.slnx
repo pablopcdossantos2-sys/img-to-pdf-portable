@@ -2,4 +2,7 @@
   <Folder Name="/Application/">
     <Project Path="Application/DocumentTools.Desktop.csproj" />
   </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="Tests/DocumentTools.Tests.csproj" />
+  </Folder>
 </Solution>
