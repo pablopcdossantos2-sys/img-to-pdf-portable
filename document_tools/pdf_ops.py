@@ -81,7 +81,7 @@ def _atomic_pdf_save(output: Path, write_document: Callable[[Path], None]) -> No
 
 
 def _open_reader(path: Path, stream):
-    reader = PdfReader(stream, strict=True)
+    reader = PdfReader(stream, strict=False)
     if reader.is_encrypted:
         raise ValueError(
             f"O PDF '{path.name}' está protegido por senha. Remova a proteção antes de continuar."
