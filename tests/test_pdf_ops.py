@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 
 import pytest
 from PIL import Image
 from pypdf import PdfReader, PdfWriter
 
+import document_tools.pdf_ops as pdf_ops
 from document_tools.pdf_ops import (
     convert_image,
     extract_pages,
@@ -17,13 +19,20 @@ from document_tools.pdf_ops import (
 )
 
 
-def create_pdf(path: Path, widths: list[float]) -> Path:
+def create_pdf(path: Path, widths: list[float], *, password: str | None = None) -> Path:
     writer = PdfWriter()
     for width in widths:
         writer.add_blank_page(width=width, height=300)
+    if password is not None:
+        writer.encrypt(user_password=password, owner_password="owner", algorithm="AES-256")
     with path.open("wb") as stream:
         writer.write(stream)
     return path
+
+
+def read_pdf(path: Path) -> PdfReader:
+    """Read from memory so tests never leave a file handle open on Windows."""
+    return PdfReader(BytesIO(path.read_bytes()))
 
 
 def test_parse_page_ranges_expands_ranges_and_preserves_order() -> None:
@@ -48,6 +57,10 @@ def test_parse_page_ranges_rejects_invalid_input(
         parse_page_ranges(specification, page_count)
 
 
+def test_parse_page_ranges_can_allow_duplicate_pages() -> None:
+    assert parse_page_ranges("2, 1-2", 3, allow_duplicates=True) == [1, 0, 1]
+
+
 def test_images_to_pdf_creates_one_a4_page_per_image(tmp_path: Path) -> None:
     portrait = tmp_path / "portrait.png"
     landscape = tmp_path / "landscape.png"
@@ -58,24 +71,48 @@ def test_images_to_pdf_creates_one_a4_page_per_image(tmp_path: Path) -> None:
     result = images_to_pdf([portrait, landscape], output)
 
     assert result == output.resolve()
-    reader = PdfReader(str(output))
+    reader = read_pdf(output)
     assert len(reader.pages) == 2
     assert float(reader.pages[0].mediabox.height) > float(reader.pages[0].mediabox.width)
     assert float(reader.pages[1].mediabox.width) > float(reader.pages[1].mediabox.height)
 
 
-def test_merge_pdfs_preserves_document_order(tmp_path: Path) -> None:
+def test_images_to_pdf_flattens_transparency_over_white(tmp_path: Path) -> None:
+    source = tmp_path / "transparent.png"
+    output = tmp_path / "transparent.pdf"
+    image = Image.new("RGBA", (16, 16), (255, 0, 0, 0))
+    image.putpixel((8, 8), (255, 0, 0, 128))
+    image.save(source)
+    image.close()
+
+    images_to_pdf([source], output)
+
+    reader = read_pdf(output)
+    assert len(reader.pages) == 1
+    embedded_images = reader.pages[0].images
+    assert embedded_images
+    with embedded_images[0].image as extracted:
+        background = extracted.convert("RGB").getpixel((0, 0))
+        assert min(background) >= 245
+
+
+def test_merge_pdfs_preserves_document_order_and_outline(tmp_path: Path) -> None:
     first = create_pdf(tmp_path / "first.pdf", [120, 130])
     second = create_pdf(tmp_path / "second.pdf", [220, 230, 240])
     output = tmp_path / "merged.pdf"
+    writer = PdfWriter(clone_from=str(second))
+    writer.add_outline_item("Second document", 0)
+    with second.open("wb") as stream:
+        writer.write(stream)
 
     merge_pdfs([first, second], output)
 
-    reader = PdfReader(str(output))
+    reader = read_pdf(output)
     assert len(reader.pages) == 5
     assert [round(float(page.mediabox.width)) for page in reader.pages] == [
         120, 130, 220, 230, 240
     ]
+    assert reader.outline
 
 
 def test_extract_pages_keeps_requested_order(tmp_path: Path) -> None:
@@ -84,40 +121,88 @@ def test_extract_pages_keeps_requested_order(tmp_path: Path) -> None:
 
     extract_pages(source, "5, 2-3", output)
 
-    reader = PdfReader(str(output))
+    reader = read_pdf(output)
     assert len(reader.pages) == 3
     assert [round(float(page.mediabox.width)) for page in reader.pages] == [
         150, 120, 130
     ]
 
 
-def test_rotate_pdf_rotates_only_requested_pages(tmp_path: Path) -> None:
+def test_extract_pages_can_repeat_pages_when_requested(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [110, 120, 130])
+    output = tmp_path / "repeated.pdf"
+
+    extract_pages(source, "2, 1-2", output, allow_duplicates=True)
+
+    reader = read_pdf(output)
+    assert [round(float(page.mediabox.width)) for page in reader.pages] == [120, 110, 120]
+
+
+@pytest.mark.parametrize("angle", [90, 180, 270])
+def test_rotate_pdf_rotates_only_requested_pages(tmp_path: Path, angle: int) -> None:
     source = create_pdf(tmp_path / "source.pdf", [120, 130, 140])
-    output = tmp_path / "rotated.pdf"
+    output = tmp_path / f"rotated-{angle}.pdf"
 
-    rotate_pdf(source, output, 90, "2")
+    rotate_pdf(source, output, angle, "2, 2")
 
-    reader = PdfReader(str(output))
-    assert [int(page.get("/Rotate", 0)) for page in reader.pages] == [0, 90, 0]
+    reader = read_pdf(output)
+    assert [int(page.get("/Rotate", 0)) for page in reader.pages] == [0, angle, 0]
 
 
-def test_split_pdf_creates_one_file_per_page_and_refuses_overwrite(
-    tmp_path: Path,
-) -> None:
+def test_split_pdf_creates_missing_destination_directory(tmp_path: Path) -> None:
     source = create_pdf(tmp_path / "source.pdf", [120, 130, 140])
-    output_dir = tmp_path / "split"
-    output_dir.mkdir()
+    output_dir = tmp_path / "new" / "split"
 
     outputs = split_pdf(source, output_dir)
 
+    assert output_dir.is_dir()
     assert [path.name for path in outputs] == [
         "source-pagina-001.pdf",
         "source-pagina-002.pdf",
         "source-pagina-003.pdf",
     ]
-    assert all(len(PdfReader(str(path)).pages) == 1 for path in outputs)
+    assert all(len(read_pdf(path).pages) == 1 for path in outputs)
     with pytest.raises(FileExistsError, match="já contém"):
         split_pdf(source, output_dir)
+
+
+def test_split_pdf_rolls_back_partial_outputs_on_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [120, 130, 140])
+    output_dir = tmp_path / "split"
+    original_save = pdf_ops._atomic_pdf_save
+    calls = 0
+
+    def fail_second_save(output: Path, write_document, *, overwrite: bool = True) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("simulated failure")
+        original_save(output, write_document, overwrite=overwrite)
+
+    monkeypatch.setattr(pdf_ops, "_atomic_pdf_save", fail_second_save)
+    with pytest.raises(OSError, match="simulated failure"):
+        split_pdf(source, output_dir)
+    assert list(output_dir.glob("*.pdf")) == []
+
+
+def test_empty_password_encrypted_pdf_can_be_processed(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "owner-only.pdf", [120, 130], password="")
+    output = tmp_path / "extracted.pdf"
+
+    extract_pages(source, "1", output)
+
+    assert len(read_pdf(output).pages) == 1
+
+
+def test_password_protected_pdf_gives_clear_error(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "locked.pdf", [120], password="secret")
+    output = tmp_path / "out.pdf"
+
+    with pytest.raises(ValueError, match="exige uma senha"):
+        extract_pages(source, "1", output)
+    assert not output.exists()
 
 
 def test_convert_image_resizes_and_converts_to_jpeg(tmp_path: Path) -> None:
@@ -137,9 +222,40 @@ def test_convert_image_resizes_and_converts_to_jpeg(tmp_path: Path) -> None:
     with Image.open(output) as converted:
         assert converted.format == "JPEG"
         assert converted.size == (300, 150)
+        assert converted.mode == "RGB"
+
+
+@pytest.mark.parametrize("output_format", ["PNG", "WEBP"])
+def test_cmyk_image_can_convert_to_rgb_only_formats(
+    tmp_path: Path, output_format: str
+) -> None:
+    source = tmp_path / "source.tiff"
+    output = tmp_path / f"converted.{output_format.lower()}"
+    Image.new("CMYK", (120, 60), (10, 20, 30, 40)).save(source)
+
+    convert_image(source, output, output_format)
+
+    with Image.open(output) as converted:
+        assert converted.format == output_format
+        assert converted.mode in {"RGB", "RGBA"}
+        assert converted.size == (120, 60)
+
+
+def test_convert_image_preserves_compatible_icc_profile(tmp_path: Path) -> None:
+    source = tmp_path / "profile.png"
+    output = tmp_path / "profile.jpg"
+    profile = b"test-rgb-icc-profile"
+    Image.new("RGB", (30, 20), "blue").save(source, icc_profile=profile)
+
+    convert_image(source, output, "JPEG")
+
+    with Image.open(output) as converted:
+        assert converted.info.get("icc_profile") == profile
 
 
 def test_operations_never_overwrite_their_source(tmp_path: Path) -> None:
     source = create_pdf(tmp_path / "source.pdf", [120])
+    original = source.read_bytes()
     with pytest.raises(ValueError, match="não pode substituir"):
         extract_pages(source, "1", source)
+    assert source.read_bytes() == original
