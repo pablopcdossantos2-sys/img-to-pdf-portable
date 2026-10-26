@@ -98,12 +98,14 @@ def test_images_to_pdf_flattens_transparency_over_white(tmp_path: Path) -> None:
 
 def test_merge_pdfs_preserves_document_order_and_outline(tmp_path: Path) -> None:
     first = create_pdf(tmp_path / "first.pdf", [120, 130])
-    second = create_pdf(tmp_path / "second.pdf", [220, 230, 240])
-    output = tmp_path / "merged.pdf"
-    writer = PdfWriter(clone_from=str(second))
+    second = tmp_path / "second.pdf"
+    writer = PdfWriter()
+    for width in [220, 230, 240]:
+        writer.add_blank_page(width=width, height=300)
     writer.add_outline_item("Second document", 0)
     with second.open("wb") as stream:
         writer.write(stream)
+    output = tmp_path / "merged.pdf"
 
     merge_pdfs([first, second], output)
 
