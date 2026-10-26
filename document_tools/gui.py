@@ -6,10 +6,12 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QThread, Signal, Qt
-from PySide6.QtGui import QFont
+from PySide6.QtCore import QThread, Signal, Qt, QUrl
+from PySide6.QtGui import QCloseEvent, QDesktopServices, QFont
 from PySide6.QtWidgets import (
     QApplication,
+    QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QFileDialog,
     QFormLayout,
@@ -29,8 +31,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from document_tools import __version__
 from document_tools.pdf_ops import (
-    SUPPORTED_IMAGE_SUFFIXES,
     convert_image,
     extract_pages,
     images_to_pdf,
@@ -65,8 +67,23 @@ class OperationWorker(QThread):
     def run(self) -> None:
         try:
             self.succeeded.emit(self._task())
-        except Exception as error:  # The UI must display expected file and format errors.
-            self.failed.emit(str(error) or error.__class__.__name__)
+        except Exception as error:  # The GUI translates common file and format failures.
+            self.failed.emit(self._friendly_error_message(error))
+
+    @staticmethod
+    def _friendly_error_message(error: Exception) -> str:
+        if isinstance(error, PermissionError):
+            return "Não foi possível acessar ou salvar o arquivo. Confira as permissões e feche o documento em outros programas."
+        if isinstance(error, FileNotFoundError):
+            return "O arquivo ou a pasta não foi encontrado. Confira o caminho e tente novamente."
+        if isinstance(error, FileExistsError):
+            return f"Um arquivo de destino já existe. Escolha outra pasta ou nome. Detalhe: {error}"
+        error_type = error.__class__.__name__
+        if error_type in {"UnidentifiedImageError", "DecompressionBombError"}:
+            return "A imagem é inválida, muito grande para processar com segurança ou usa um formato não suportado."
+        if error_type in {"PdfReadError", "PdfStreamError", "WrongPasswordError"}:
+            return "Não foi possível interpretar o PDF. Ele pode estar danificado ou protegido por senha."
+        return str(error) or error_type
 
 
 class DocumentToolsWindow(QMainWindow):
@@ -76,6 +93,8 @@ class DocumentToolsWindow(QMainWindow):
         self.setMinimumSize(920, 650)
         self.resize(1160, 810)
         self._worker: OperationWorker | None = None
+        self._pending_output_directory: Path | None = None
+        self._split_custom_directory = False
 
         central = QWidget()
         central_layout = QVBoxLayout(central)
@@ -97,7 +116,7 @@ class DocumentToolsWindow(QMainWindow):
         brand_text = QVBoxLayout()
         title = QLabel(APP_NAME)
         title.setObjectName("appTitle")
-        subtitle = QLabel("PDF e imagens • organizado, seguro e local")
+        subtitle = QLabel(f"PDF e imagens • v{__version__} • organizado, seguro e local")
         subtitle.setObjectName("subtitle")
         brand_text.addWidget(title)
         brand_text.addWidget(subtitle)
@@ -134,6 +153,11 @@ class DocumentToolsWindow(QMainWindow):
         self.status_label.setObjectName("statusLabel")
         self.status_label.setWordWrap(True)
         footer.addWidget(self.status_label, 1)
+        self.open_directory_button = QPushButton("Abrir pasta")
+        self.open_directory_button.setObjectName("secondaryButton")
+        self.open_directory_button.hide()
+        self.open_directory_button.clicked.connect(self._open_output_directory)
+        footer.addWidget(self.open_directory_button)
         self.progress = QProgressBar()
         self.progress.setObjectName("progress")
         self.progress.setRange(0, 0)
@@ -143,17 +167,21 @@ class DocumentToolsWindow(QMainWindow):
         central_layout.addLayout(footer)
 
         self.setCentralWidget(central)
-        self.setStatusBar(None)
         self.setStyleSheet(self._stylesheet())
 
     @staticmethod
     def _stylesheet() -> str:
         return """
-        QMainWindow, QWidget {
+        QMainWindow {
             background: #F3F6FB;
+        }
+        QWidget {
             color: #172B4D;
             font-family: "Segoe UI", "Inter", sans-serif;
             font-size: 13px;
+        }
+        QLabel {
+            background: transparent;
         }
         QFrame#headerCard {
             background: #172B4D;
@@ -187,7 +215,7 @@ class DocumentToolsWindow(QMainWindow):
         QLabel#pageTitle {
             color: #172B4D;
             font-size: 24px;
-            font-weight: 750;
+            font-weight: 700;
         }
         QLabel#intro, QLabel#muted {
             color: #718096;
@@ -215,19 +243,10 @@ class DocumentToolsWindow(QMainWindow):
             background: #EAF0F8;
             border-radius: 8px;
         }
-        QLabel.sectionTitle {
+        QLabel#sectionTitle {
             color: #172B4D;
             font-size: 17px;
             font-weight: 700;
-        }
-        QLabel.sectionHint {
-            color: #718096;
-            font-size: 12px;
-        }
-        QFrame.panel {
-            background: #FFFFFF;
-            border: 1px solid #E2E8F0;
-            border-radius: 11px;
         }
         QListWidget {
             background: #FFFFFF;
@@ -313,7 +332,6 @@ class DocumentToolsWindow(QMainWindow):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(13)
         title_label = QLabel(title)
-        title_label.setProperty("class", "sectionTitle")
         title_label.setObjectName("sectionTitle")
         description_label = QLabel(description)
         description_label.setObjectName("muted")
@@ -331,6 +349,11 @@ class DocumentToolsWindow(QMainWindow):
             else QListWidget.SelectionMode.SingleSelection
         )
         widget.setAlternatingRowColors(False)
+        widget.setDragEnabled(True)
+        widget.setAcceptDrops(True)
+        widget.setDropIndicatorShown(True)
+        widget.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        widget.setDefaultDropAction(Qt.DropAction.MoveAction)
         return widget
 
     @staticmethod
@@ -353,7 +376,7 @@ class DocumentToolsWindow(QMainWindow):
         return added
 
     @staticmethod
-    def _selected_paths(list_widget: QListWidget) -> list[str]:
+    def _all_paths(list_widget: QListWidget) -> list[str]:
         return [
             str(list_widget.item(index).data(Qt.ItemDataRole.UserRole))
             for index in range(list_widget.count())
@@ -367,26 +390,69 @@ class DocumentToolsWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, title, "", PDF_FILTER)
         return path or None
 
-    def _choose_output_pdf(self, suggested_name: str) -> str | None:
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Salvar PDF resultante", suggested_name, PDF_FILTER
-        )
-        if not path:
+    def _choose_output_pdf(
+        self,
+        suggested_name: str,
+        *,
+        source_paths: tuple[str, ...] | list[str] = (),
+    ) -> str | None:
+        dialog = QFileDialog(self, "Salvar PDF resultante", suggested_name, PDF_FILTER)
+        dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
+        dialog.setFileMode(QFileDialog.FileMode.AnyFile)
+        dialog.setDefaultSuffix("pdf")
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        dialog.setOption(QFileDialog.Option.DontConfirmOverwrite, True)
+        if dialog.exec() != QFileDialog.DialogCode.Accepted or not dialog.selectedFiles():
             return None
-        if Path(path).suffix.lower() != ".pdf":
-            path += ".pdf"
-        return path
+
+        output = Path(dialog.selectedFiles()[0]).expanduser()
+        if output.suffix.lower() != ".pdf":
+            output = output.with_suffix(".pdf")
+        output = output.resolve()
+        sources = {Path(item).expanduser().resolve() for item in source_paths}
+        if output in sources:
+            QMessageBox.warning(
+                self,
+                "Escolha outro nome",
+                "O arquivo de saída não pode substituir um dos arquivos de origem.",
+            )
+            return None
+
+        if output.exists():
+            answer = QMessageBox.question(
+                self,
+                "Confirmar substituição",
+                f"O arquivo “{output.name}” já existe. Deseja substituí-lo?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                self.status_label.setText("Operação cancelada. O arquivo existente foi preservado.")
+                return None
+        return str(output)
 
     def _choose_directory(self, title: str) -> str | None:
         path = QFileDialog.getExistingDirectory(self, title)
         return path or None
 
-    def _run_task(self, description: str, task: Callable[[], str]) -> None:
+    def _run_task(
+        self,
+        description: str,
+        task: Callable[[], str],
+        *,
+        output_location: str | Path | None = None,
+    ) -> None:
         if self._worker is not None and self._worker.isRunning():
             return
         self.status_label.setText(description)
+        self.open_directory_button.hide()
         self.progress.show()
         self.tabs.setEnabled(False)
+        if output_location is None:
+            self._pending_output_directory = None
+        else:
+            location = Path(output_location).expanduser().resolve()
+            self._pending_output_directory = location if location.is_dir() else location.parent
 
         worker = OperationWorker(task)
         self._worker = worker
@@ -397,18 +463,57 @@ class DocumentToolsWindow(QMainWindow):
 
     def _operation_succeeded(self, message: str) -> None:
         self.status_label.setText(message)
+        self.open_directory_button.setVisible(
+            self._pending_output_directory is not None
+            and self._pending_output_directory.is_dir()
+        )
 
     def _operation_failed(self, message: str) -> None:
+        self.open_directory_button.hide()
         self.status_label.setText(f"Não foi possível concluir a operação: {message}")
         QMessageBox.warning(self, "Operação não concluída", message)
 
     def _operation_finished(self) -> None:
         self.progress.hide()
         self.tabs.setEnabled(True)
+        worker = self._worker
+        if worker is not None:
+            worker.wait()
+            worker.deleteLater()
         self._worker = None
 
-    def _require_output_pdf(self, suggested_name: str) -> str | None:
-        return self._choose_output_pdf(suggested_name)
+    def _open_output_directory(self) -> None:
+        directory = self._pending_output_directory
+        if directory is None or not directory.is_dir():
+            self.status_label.setText("A pasta de saída não está disponível.")
+            self.open_directory_button.hide()
+            return
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(directory))):
+            QMessageBox.information(self, APP_NAME, f"Abra esta pasta manualmente:\n{directory}")
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        worker = self._worker
+        if worker is not None and worker.isRunning():
+            QMessageBox.information(
+                self,
+                APP_NAME,
+                "Uma operação está em andamento. Aguarde a conclusão antes de fechar o aplicativo.",
+            )
+            event.ignore()
+            return
+        if worker is not None:
+            worker.wait()
+            worker.deleteLater()
+            self._worker = None
+        event.accept()
+
+    def _require_output_pdf(
+        self,
+        suggested_name: str,
+        *,
+        source_paths: tuple[str, ...] | list[str] = (),
+    ) -> str | None:
+        return self._choose_output_pdf(suggested_name, source_paths=source_paths)
 
     def _build_image_pdf_tab(self) -> QWidget:
         page, layout = self._new_page(
@@ -459,35 +564,40 @@ class DocumentToolsWindow(QMainWindow):
 
     @staticmethod
     def _move_selected(list_widget: QListWidget, offset: int) -> None:
-        rows = sorted({list_widget.row(item) for item in list_widget.selectedItems()})
-        if not rows:
+        if offset not in (-1, 1):
+            raise ValueError("A lista só pode ser movida uma posição por vez.")
+        if not list_widget.selectedItems():
             return
+
         if offset < 0:
-            for row in rows:
-                target = row + offset
-                if target >= 0:
+            for row in range(1, list_widget.count()):
+                current = list_widget.item(row)
+                previous = list_widget.item(row - 1)
+                if current.isSelected() and not previous.isSelected():
                     item = list_widget.takeItem(row)
-                    list_widget.insertItem(target, item)
+                    list_widget.insertItem(row - 1, item)
                     item.setSelected(True)
         else:
-            for row in reversed(rows):
-                target = row + offset
-                if target < list_widget.count():
+            for row in range(list_widget.count() - 2, -1, -1):
+                current = list_widget.item(row)
+                following = list_widget.item(row + 1)
+                if current.isSelected() and not following.isSelected():
                     item = list_widget.takeItem(row)
-                    list_widget.insertItem(target, item)
+                    list_widget.insertItem(row + 1, item)
                     item.setSelected(True)
 
     def _create_pdf_from_images(self) -> None:
-        sources = self._selected_paths(self.image_list)
+        sources = self._all_paths(self.image_list)
         if not sources:
             QMessageBox.information(self, "Adicionar imagens", "Adicione pelo menos uma imagem primeiro.")
             return
-        output = self._require_output_pdf("imagens.pdf")
+        output = self._require_output_pdf("imagens.pdf", source_paths=sources)
         if not output:
             return
         self._run_task(
             "Criando PDF a partir das imagens…",
             lambda: f"PDF criado: {images_to_pdf(sources, output)}",
+            output_location=output,
         )
 
     def _build_merge_tab(self) -> QWidget:
@@ -536,12 +646,13 @@ class DocumentToolsWindow(QMainWindow):
         if len(sources) < 2:
             QMessageBox.information(self, "Unir PDFs", "Adicione pelo menos dois PDFs.")
             return
-        output = self._require_output_pdf("documentos-unidos.pdf")
+        output = self._require_output_pdf("documentos-unidos.pdf", source_paths=sources)
         if not output:
             return
         self._run_task(
             "Unindo os PDFs…",
             lambda: f"PDFs unidos: {merge_pdfs(sources, output)}",
+            output_location=output,
         )
 
     def _build_extract_tab(self) -> QWidget:
@@ -564,6 +675,8 @@ class DocumentToolsWindow(QMainWindow):
         self.extract_ranges = QLineEdit("1-3")
         self.extract_ranges.setPlaceholderText("Ex.: 1-3, 5, 8-10")
         form.addRow("Páginas", self.extract_ranges)
+        self.extract_allow_duplicates = QCheckBox("Permitir repetir páginas no PDF resultante")
+        form.addRow("", self.extract_allow_duplicates)
         helper = QLabel("A ordem informada será mantida. Intervalos inválidos ou páginas repetidas são recusados.")
         helper.setObjectName("muted")
         helper.setWordWrap(True)
@@ -591,12 +704,14 @@ class DocumentToolsWindow(QMainWindow):
         if not source:
             QMessageBox.information(self, "Escolher PDF", "Escolha o PDF de origem.")
             return
-        output = self._require_output_pdf(f"{Path(source).stem}-paginas.pdf")
+        output = self._require_output_pdf(f"{Path(source).stem}-paginas.pdf", source_paths=[source])
         if not output:
             return
+        allow_duplicates = self.extract_allow_duplicates.isChecked()
         self._run_task(
             "Extraindo páginas…",
-            lambda: f"Páginas extraídas: {extract_pages(source, ranges, output)}",
+            lambda: f"Páginas extraídas: {extract_pages(source, ranges, output, allow_duplicates=allow_duplicates)}",
+            output_location=output,
         )
 
     def _build_rotate_tab(self) -> QWidget:
@@ -651,12 +766,13 @@ class DocumentToolsWindow(QMainWindow):
             return
         angle = (90, 180, 270)[self.rotate_angle.currentIndex()]
         ranges = self.rotate_ranges.text().strip() or None
-        output = self._require_output_pdf(f"{Path(source).stem}-rotacionado.pdf")
+        output = self._require_output_pdf(f"{Path(source).stem}-rotacionado.pdf", source_paths=[source])
         if not output:
             return
         self._run_task(
             "Girando páginas…",
             lambda: f"PDF rotacionado: {rotate_pdf(source, output, angle, ranges)}",
+            output_location=output,
         )
 
     def _build_split_tab(self) -> QWidget:
@@ -667,6 +783,7 @@ class DocumentToolsWindow(QMainWindow):
         form = QFormLayout()
         self.split_path = QLineEdit()
         self.split_path.setReadOnly(True)
+        self._split_custom_directory = False
         browse_pdf = QPushButton("Escolher PDF")
         browse_pdf.clicked.connect(self._select_split_pdf)
         source_row = QHBoxLayout()
@@ -702,13 +819,14 @@ class DocumentToolsWindow(QMainWindow):
         path = self._choose_pdf("Escolher PDF para dividir")
         if path:
             self.split_path.setText(path)
-            if not self.split_directory.text().strip():
+            if not self._split_custom_directory:
                 self.split_directory.setText(str(Path(path).parent / f"{Path(path).stem}-paginas"))
 
     def _select_split_directory(self) -> None:
         path = self._choose_directory("Escolher pasta de saída")
         if path:
             self.split_directory.setText(path)
+            self._split_custom_directory = True
 
     def _split_pdf(self) -> None:
         source = self.split_path.text().strip()
@@ -716,14 +834,10 @@ class DocumentToolsWindow(QMainWindow):
         if not source or not directory:
             QMessageBox.information(self, "Dividir PDF", "Escolha o PDF e uma pasta de saída.")
             return
-        if not Path(directory).is_dir():
-            QMessageBox.information(
-                self, "Pasta de saída", "A pasta precisa existir. Escolha uma pasta já criada no computador."
-            )
-            return
         self._run_task(
             "Dividindo PDF em arquivos de página única…",
             lambda: f"{len(split_pdf(source, directory))} páginas salvas em: {directory}",
+            output_location=directory,
         )
 
     def _build_convert_tab(self) -> QWidget:
@@ -853,7 +967,7 @@ class DocumentToolsWindow(QMainWindow):
                 raise RuntimeError(summary)
             return summary
 
-        self._run_task("Convertendo imagens…", task)
+        self._run_task("Convertendo imagens…", task, output_location=directory)
 
 
 def main() -> int:
