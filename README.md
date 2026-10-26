@@ -1,93 +1,116 @@
 # Ferramentas de Arquivo
 
-Aplicativo desktop para trabalhar com PDFs e imagens localmente, com uma interface moderna em português brasileiro. O projeto agora usa **Python, PySide6, pypdf e Pillow**.
+Aplicativo desktop para trabalhar com PDFs e imagens localmente, com interface moderna em português brasileiro. A implementação é em **Python, PySide6, pypdf e Pillow**.
 
-## O que já funciona
+## Funcionalidades
 
 ### PDFs
-- **Unir PDFs:** combina vários arquivos na ordem escolhida.
-- **Extrair páginas:** seleciona páginas e intervalos, como `1-3, 5, 8-10`, preservando a ordem informada.
+- **Imagens para PDF:** converte JPG, JPEG, PNG, BMP, WEBP e TIFF em páginas A4, ajustando automaticamente a orientação e preservando as proporções. Imagens transparentes são compostas sobre branco.
+- **Unir PDFs:** combina vários arquivos na ordem escolhida e tenta preservar os marcadores importados.
+- **Extrair páginas:** salva páginas específicas ou intervalos como `1-3, 5, 8-10`. Há uma opção para repetir páginas no documento de saída.
 - **Girar páginas:** rotação em 90°, 180° ou 270°, em todas as páginas ou somente nas selecionadas.
-- **Dividir PDF:** cria um arquivo PDF individual para cada página. A função se recusa a sobrescrever nomes que já existam na pasta de destino.
-- **Imagens para PDF:** cada imagem vira uma página A4; orientação e proporção são preservadas, com margens configuráveis no código.
+- **Dividir PDF:** cria um arquivo PDF individual para cada página, criando a pasta de saída caso necessário. Nomes de destino existentes são preservados; se houver conflito, a operação é interrompida.
+- **Proteção de saída:** o diálogo acrescenta a extensão PDF, verifica se o destino é um dos arquivos de origem e pede confirmação antes de substituir um arquivo existente.
 
 ### Imagens
-- **Converter e redimensionar em lote:** JPEG, PNG, WEBP, BMP e TIFF.
-- **Limitar dimensões:** define largura e altura máximas em pixels, preservando a proporção e sem ampliar imagens menores.
-- **Qualidade:** controle para formatos com compressão com perdas, como JPEG e WEBP.
+- **Converter em lote:** JPEG, PNG, WEBP, BMP e TIFF.
+- **Redimensionar:** limites opcionais de largura e altura em pixels, preservando a proporção e sem ampliar imagens pequenas.
+- **Qualidade:** controle JPEG/WEBP e preservação de perfis ICC quando compatíveis com o modo de cor de destino.
+- **CMYK e transparência:** modos que não são aceitos pelo formato de destino são convertidos para formatos compatíveis; a transparência para JPEG/BMP é composta sobre fundo branco.
 
-### Experiência e segurança
-- Interface desktop com abas, listas organizáveis, mensagens de status e indicador de processamento.
-- Operações longas executadas fora da thread principal da interface.
-- Processamento local; os documentos não são enviados a serviços externos.
-- Arquivos de origem protegidos contra substituição acidental.
-- Arquivos intermediários temporários e gravação atômica para operações PDF.
-- Testes automatizados executados no GitHub Actions antes da geração do executável portátil.
+### Usabilidade, privacidade e robustez
+- Interface desktop com abas, ordenação por botões ou arrastar e soltar, duplicação intencional de itens, mensagens em português e indicador de processamento.
+- Opções de resolução (DPI) e margem na conversão de imagens para PDF.
+- Operações demoradas fora da thread principal; a janela não fecha enquanto uma operação está ativa.
+- Botão para abrir a pasta de saída depois de concluir a operação.
+- Processamento local: os documentos não são enviados a serviços externos.
+- Os arquivos originais não são substituídos pelas operações.
+- Gravação temporária/atômica para operações PDF; a divisão interrompe conflitos sem substituir arquivos preexistentes.
+- Testes automatizados e auditoria de dependências executados no GitHub Actions. O pipeline também faz um teste de fumaça no executável Windows e publica um checksum SHA-256.
 
-PDFs danificados ou protegidos por senha podem ser recusados. A conversão de imagens depende dos formatos suportados pela versão instalada do Pillow.
+## Limitações conhecidas
+
+- PDFs que exigem senha continuam pedindo que a proteção seja removida ou que o documento seja salvo sem senha antes de processar. PDFs criptografados com senha de usuário vazia podem ser abertos. O suporte a AES usa a dependência `cryptography`.
+- Na união, extração ou divisão, marcadores podem ser mantidos quando a biblioteca consegue importá-los, mas formulários, links internos e destinos que apontam para páginas removidas não são garantidos. Confira documentos com formulários complexos ou navegação interna.
+- A conversão de imagens usa o primeiro quadro de arquivos animados ou TIFF multipágina; para preservar páginas de TIFF multipágina, converta o arquivo por um fluxo específico para TIFF.
+- A aplicação aceita Python 3.11 ou superior, mas o executável portátil distribuído é feito para Windows x64. O executável ainda não é assinado digitalmente; o SmartScreen pode mostrar um aviso ao baixá-lo.
+- Em Linux/macOS, os arquivos PDF temporários/resultantes podem manter permissões restritas ao proprietário para reduzir a exposição de documentos locais. Ajuste as permissões manualmente se precisar compartilhá-los com outros usuários do sistema.
 
 ## Usar no Windows sem instalar Python
 
-O fluxo **Python CI and package** gera o executável portátil para Windows x64.
+O fluxo **Python CI, security and package** gera um executável portátil para Windows x64 e um checksum SHA-256.
 
 1. Abra a aba [Actions](https://github.com/pablopcdossantos2-sys/img-to-pdf-portable/actions).
-2. Entre na execução mais recente com o nome **Python CI and package** e confirme que ela terminou com sucesso.
+2. Entre na execução mais recente chamada **Python CI, security and package** e confirme que terminou com sucesso.
 3. Na seção **Artifacts**, baixe `DocumentTools-Portable-win-x64`.
-4. Extraia o arquivo ZIP e execute `DocumentTools.exe`.
+4. Extraia o ZIP e execute `DocumentTools.exe`.
+5. O arquivo `DocumentTools.exe.sha256` contém o hash para conferir a integridade do executável.
 
-O executável contém o runtime necessário e não requer uma instalação separada do Python. O Windows pode mostrar um aviso de segurança para arquivos baixados; confira a origem antes de executar.
+O artefato contém o runtime necessário e não exige instalação separada do Python. O Windows pode apresentar um aviso de segurança para arquivos baixados; confirme a origem antes de executar.
 
-> O artefato de Actions é temporário e tem prazo de expiração definido pelo GitHub. Um release permanente poderá ser publicado separadamente depois de validar o pacote em uso real no Windows.
+> O artefato de Actions é temporário e tem prazo de expiração definido pelo GitHub. Um release permanente poderá ser publicado separadamente depois de validar o pacote em uso real.
 
 ## Executar a partir do código-fonte
 
-Requisitos: Windows, macOS ou Linux e Python 3.13 recomendado (Python 3.11 ou superior é declarado no projeto).
+Requisitos: Windows, macOS ou Linux e Python 3.11 ou superior.
 
-No Windows, se você já instalou o Python 3.13, pode dar duplo clique em `instalar-e-iniciar.bat`. Ele prepara o ambiente isolado, instala as dependências e abre a aplicação. Nas próximas vezes, use `executar-aplicativo.bat`. O primeiro uso precisa de internet para baixar os pacotes Python.
+A forma mais simples no Windows, após instalar Python 3.11 ou superior, é dar duplo clique em `instalar-e-iniciar.bat`. O script cria o ambiente isolado, instala as dependências e abre o aplicativo. Nas próximas execuções, use `executar-aplicativo.bat`. Na primeira instalação, é necessária uma conexão com a internet.
 
-Na pasta do repositório, execute:
+Também é possível executar manualmente:
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python main.py
+py -3 -m venv .venv
+.venv\Scripts\python.exe -m pip install --upgrade pip
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe main.py
 ```
 
-No macOS ou Linux, a ativação do ambiente virtual usa:
+O ambiente virtual `.venv` não deve ser copiado para outra pasta ou computador. Se o projeto for movido e o ambiente deixar de funcionar, apague a pasta `.venv` e execute novamente `instalar-e-iniciar.bat`.
 
-```bash
-source .venv/bin/activate
+Se preferir ativar o ambiente virtual no PowerShell e a política de execução bloquear `Activate.ps1`, use apenas na sessão atual:
+
+```powershell
+Set-ExecutionPolicy -Scope Process RemoteSigned
+.\.venv\Scripts\Activate.ps1
 ```
 
-### Testes e compilação do executável
+No macOS ou Linux, use `python3 -m venv .venv`, `source .venv/bin/activate` e depois `python -m pip install -r requirements.txt`.
 
-Instale as dependências de desenvolvimento e execute os testes:
+## Testes e criação do executável
+
+Instale as dependências de desenvolvimento e rode os testes e a auditoria:
 
 ```powershell
 python -m pip install -r requirements-dev.txt
 python -m pytest -q
+python -m pip_audit --local
 ```
 
-Para gerar o executável localmente no Windows:
+Para gerar o executável no Windows, use o mesmo comando do CI:
 
 ```powershell
-python -m PyInstaller --noconfirm --clean --onefile --windowed --name DocumentTools --collect-all PySide6 --collect-all shiboken6 main.py
+python -m PyInstaller --noconfirm --clean --onefile --windowed --name DocumentTools main.py
 ```
 
-O executável será criado em `dist/DocumentTools.exe`.
+O executável será criado em `dist/DocumentTools.exe`. Para verificar se o pacote inicializa a interface e carrega as dependências Qt, execute:
 
-## Estrutura principal
+```powershell
+.\dist\DocumentTools.exe --selftest
+```
 
-- `main.py`: ponto de entrada da aplicação.
+A opção `--selftest` cria a interface em modo sem janela visível e encerra com código de sucesso se a inicialização funcionar.
+
+## Estrutura do projeto
+
+- `main.py`: ponto de entrada e teste de fumaça do executável.
 - `document_tools/gui.py`: interface PySide6.
-- `document_tools/pdf_ops.py`: operações PDF e imagem.
-- `tests/`: testes automatizados.
-- `requirements.txt`: dependências de execução.
-- `requirements-dev.txt`: testes e empacotamento.
-- `.github/workflows/build.yml`: testes e geração do executável Windows.
+- `document_tools/pdf_ops.py`: processamento PDF e imagem.
+- `tests/`: testes de regressão, inclusive para a lista visual.
+- `pyproject.toml`: fonte central das versões e metadados das dependências.
+- `requirements.txt` / `requirements-dev.txt`: atalhos para instalar dependências de execução ou desenvolvimento.
+- `.github/workflows/build.yml`: testes em Python 3.11–3.14, auditoria de dependências e pacote Windows.
+- `.github/dependabot.yml`: verificações periódicas de atualizações de dependências.
 
 ## Licença
 
-O projeto usa a GNU AGPL v3, conforme o arquivo `LICENSE`. As dependências têm seus próprios termos: consulte [LICENSES-THIRD-PARTY.md](LICENSES-THIRD-PARTY.md), em especial as condições aplicáveis às bibliotecas Qt incluídas no executável.
+O projeto usa a GNU AGPL v3, conforme o arquivo `LICENSE`. As dependências possuem licenças próprias; consulte [LICENSES-THIRD-PARTY.md](LICENSES-THIRD-PARTY.md), especialmente as condições de redistribuição das bibliotecas Qt incluídas no executável.
