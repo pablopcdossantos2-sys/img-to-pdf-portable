@@ -30,18 +30,6 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, com interface m
 - Gravação temporária/atômica para operações PDF; a divisão interrompe conflitos sem substituir arquivos preexistentes.
 - Testes automatizados e auditoria de dependências executados no GitHub Actions. O pipeline também faz um teste de fumaça no executável Windows e publica um checksum SHA-256.
 
-## ROADMAP
-
-Este plano reúne melhorias possíveis para orientar as próximas etapas. A ordem indica prioridades relativas, não prazos garantidos.
-
-### Prioridades
-
-- [ ] **Abrir PDFs protegidos por senha:** adicionar um campo de senha com tratamento seguro, sem registrar a senha em logs nem armazená-la desnecessariamente.
-- [ ] **Preservar recursos avançados de PDF:** melhorar a manutenção de marcadores, metadados, formulários, links internos e destinos ao unir, extrair, girar ou dividir documentos.
-- [ ] **Controlar páginas de imagens multipágina e animadas:** permitir escolher entre importar apenas o primeiro quadro ou gerar páginas para quadros/páginas adicionais de TIFF e formatos animados compatíveis.
-- [ ] **Publicar releases permanentes e versionados:** automatizar releases do GitHub com executável, checksum SHA-256 e notas de versão, para que o download não dependa de artefatos temporários do Actions.
-- [ ] **Distribuir pacotes para outros sistemas:** avaliar builds portáteis para macOS e Linux, além do executável Windows x64 atual.
-- [ ] **Oferecer opções de permissões de saída:** documentar e, se fizer sentido, permitir configurar as permissões de arquivos gerados em Linux/macOS, que hoje podem ficar restritas ao usuário atual.
 
 ## Usar no Windows sem instalar Python
 
@@ -107,3 +95,15 @@ O executável será criado em `dist/FerramentasDeArquivo.exe`. Para verificar se
 
 A opção `--selftest` cria a interface em modo sem janela visível e encerra com código de sucesso se a inicialização funcionar.
 
+## ROADMAP
+
+Este plano reúne melhorias possíveis para orientar as próximas etapas. A ordem indica prioridades relativas, não prazos garantidos.
+
+### Prioridades
+
+- [ ] **Abrir PDFs protegidos por senha:** adicionar um campo de senha com tratamento seguro, sem registrar a senha em logs nem armazená-la desnecessariamente.
+- [ ] **Preservar recursos avançados de PDF:** melhorar a manutenção de marcadores, metadados, formulários, links internos e destinos ao unir, extrair, girar ou dividir documentos.
+- [ ] **Controlar páginas de imagens multipágina e animadas:** permitir escolher entre importar apenas o primeiro quadro ou gerar páginas para quadros/páginas adicionais de TIFF e formatos animados compatíveis.
+- [ ] **Publicar releases permanentes e versionados:** automatizar releases do GitHub com executável, checksum SHA-256 e notas de versão, para que o download não dependa de artefatos temporários do Actions.
+- [ ] **Distribuir pacotes para outros sistemas:** avaliar builds portáteis para macOS e Linux, além do executável Windows x64 atual.
+- [ ] **Oferecer opções de permissões de saída:** documentar e, se fizer sentido, permitir configurar as permissões de arquivos gerados em Linux/macOS, que hoje podem ficar restritas ao usuário atual.
