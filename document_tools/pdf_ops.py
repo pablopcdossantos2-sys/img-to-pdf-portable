@@ -11,7 +11,7 @@ from PIL import Image, ImageOps
 from pypdf import PdfReader, PdfWriter
 
 
-SUPPORTED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
+SUPPORTED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff", ".gif"}
 SUPPORTED_OUTPUT_FORMATS = {"JPEG", "PNG", "WEBP", "BMP", "TIFF"}
 ALPHA_MODES = {"RGBA", "LA", "PA"}
 
@@ -72,14 +72,21 @@ def _normalise_pdf_paths(
     return sources, output
 
 
+def _validate_file_mode(file_mode: int) -> None:
+    if file_mode not in (0o600, 0o644):
+        raise ValueError("As permissões de saída devem ser 0600 (somente usuário) ou 0644 (compartilhadas).")
+
+
 def _atomic_pdf_save(
     output: Path,
     write_document: Callable[[Path], None],
     *,
     overwrite: bool = True,
+    file_mode: int = 0o600,
 ) -> None:
+    _validate_file_mode(file_mode)
     descriptor, temporary_name = tempfile.mkstemp(
-        prefix=".document-tools-", suffix=".pdf", dir=str(output.parent)
+        prefix=".pdf-hub-", suffix=".pdf", dir=str(output.parent)
     )
     os.close(descriptor)
     temporary = Path(temporary_name)
@@ -87,6 +94,8 @@ def _atomic_pdf_save(
         write_document(temporary)
         if not temporary.is_file() or temporary.stat().st_size == 0:
             raise OSError("O arquivo PDF temporário ficou vazio.")
+        if os.name != "nt":
+            os.chmod(temporary, file_mode)
         if overwrite:
             os.replace(temporary, output)
         else:
@@ -96,24 +105,35 @@ def _atomic_pdf_save(
         temporary.unlink(missing_ok=True)
 
 
-def _open_reader(path: Path, stream):
+def _open_reader(path: Path, stream, password: str | None = None):
     reader = PdfReader(stream, strict=False)
     if reader.is_encrypted:
         try:
-            decrypted = reader.decrypt("")
+            decrypted = reader.decrypt(password if password is not None else "")
         except Exception as error:
-            raise ValueError(
-                f"Não foi possível abrir o PDF criptografado '{path.name}'. "
-                "Esta versão não permite digitar uma senha de usuário. Salve uma cópia sem senha para continuar."
-            ) from error
+            if password is not None:
+                raise ValueError(f"A senha informada para o PDF '{path.name}' está incorreta ou não pôde ser usada.") from error
+            raise ValueError(f"O PDF '{path.name}' exige uma senha. Informe-a para continuar.") from error
         if not decrypted:
-            raise ValueError(
-                f"O PDF '{path.name}' exige uma senha de usuário. "
-                "Esta versão ainda não permite digitá-la; salve uma cópia sem senha antes de continuar."
-            )
+            if password is not None:
+                raise ValueError(f"A senha informada para o PDF '{path.name}' está incorreta.")
+            raise ValueError(f"O PDF '{path.name}' exige uma senha. Informe-a para continuar.")
     if len(reader.pages) < 1:
         raise ValueError(f"O PDF '{path.name}' não contém páginas.")
     return reader
+
+
+def pdf_requires_user_password(path: str | Path) -> bool:
+    """Return whether an encrypted PDF cannot be opened with an empty password."""
+    source = Path(path).expanduser().resolve()
+    with source.open("rb") as stream:
+        reader = PdfReader(stream, strict=False)
+        if not reader.is_encrypted:
+            return False
+        try:
+            return not bool(reader.decrypt(""))
+        except Exception:
+            return True
 
 
 def _copy_metadata(reader: PdfReader, writer: PdfWriter) -> None:
@@ -168,14 +188,17 @@ def images_to_pdf(
     *,
     dpi: int = 150,
     margin_mm: float = 10,
+    all_frames: bool = True,
+    file_mode: int = 0o600,
 ) -> Path:
-    """Create an A4 PDF using one image at a time to limit peak memory consumption."""
+    """Create an A4 PDF, optionally importing all frames/pages from multipage images."""
     if not image_paths:
         raise ValueError("Adicione pelo menos uma imagem.")
     if dpi < 72 or dpi > 600:
         raise ValueError("A resolução precisa ficar entre 72 e 600 DPI.")
     if margin_mm < 0 or margin_mm > 40:
         raise ValueError("A margem precisa ficar entre 0 e 40 mm.")
+    _validate_file_mode(file_mode)
     sources = [Path(path).expanduser().resolve() for path in image_paths]
     output = Path(output_path).expanduser().resolve()
     if output.suffix.lower() != ".pdf":
@@ -192,52 +215,67 @@ def images_to_pdf(
 
     def write(temporary: Path) -> None:
         writer = PdfWriter()
-        with tempfile.TemporaryDirectory(prefix="document-tools-pages-") as temp_dir:
+        page_number = 0
+        with tempfile.TemporaryDirectory(prefix="pdf-hub-pages-") as temp_dir:
             page_directory = Path(temp_dir)
-            for index, source in enumerate(sources, start=1):
-                page_pdf = page_directory / f"page-{index:06d}.pdf"
+            for source in sources:
                 with Image.open(source) as opened:
-                    oriented = ImageOps.exif_transpose(opened)
-                    try:
-                        image = _flatten_to_rgb(oriented)
-                    finally:
-                        if oriented is not opened:
-                            oriented.close()
-                try:
-                    canvas = _resize_to_a4(image, dpi=dpi, margin_mm=margin_mm)
-                finally:
-                    image.close()
-                try:
-                    canvas.save(page_pdf, format="PDF", resolution=dpi, quality=95)
-                finally:
-                    canvas.close()
-                with page_pdf.open("rb") as page_stream:
-                    page_reader = PdfReader(page_stream, strict=False)
-                    writer.add_page(page_reader.pages[0])
+                    frame_count = max(1, int(getattr(opened, "n_frames", 1)))
+                    frame_indexes = range(frame_count) if all_frames else range(1)
+                    for frame_index in frame_indexes:
+                        opened.seek(frame_index)
+                        oriented = ImageOps.exif_transpose(opened)
+                        try:
+                            image = _flatten_to_rgb(oriented)
+                        finally:
+                            if oriented is not opened:
+                                oriented.close()
+                        try:
+                            canvas = _resize_to_a4(image, dpi=dpi, margin_mm=margin_mm)
+                        finally:
+                            image.close()
+                        page_number += 1
+                        page_pdf = page_directory / f"page-{page_number:06d}.pdf"
+                        try:
+                            canvas.save(page_pdf, format="PDF", resolution=dpi, quality=95)
+                        finally:
+                            canvas.close()
+                        with page_pdf.open("rb") as page_stream:
+                            page_reader = PdfReader(page_stream, strict=False)
+                            writer.add_page(page_reader.pages[0])
         writer.write(temporary)
 
-    _atomic_pdf_save(output, write)
+    _atomic_pdf_save(output, write, file_mode=file_mode)
     return output
 
 
-def merge_pdfs(pdf_paths: Sequence[str | Path], output_path: str | Path) -> Path:
-    """Join PDF files in the supplied order and retain imported outlines where possible."""
+def merge_pdfs(
+    pdf_paths: Sequence[str | Path],
+    output_path: str | Path,
+    *,
+    passwords: Sequence[str | None] | None = None,
+    file_mode: int = 0o600,
+) -> Path:
+    """Join PDFs, optionally using a per-document password, and import bookmarks where possible."""
     if len(pdf_paths) < 2:
         raise ValueError("Selecione pelo menos dois PDFs para unir.")
+    if passwords is not None and len(passwords) != len(pdf_paths):
+        raise ValueError("Informe uma senha por PDF ou deixe a senha como None.")
+    _validate_file_mode(file_mode)
     sources, output = _normalise_pdf_paths(pdf_paths, output_path)
 
     def write(temporary: Path) -> None:
         writer = PdfWriter()
-        first_reader: PdfReader | None = None
         for index, source in enumerate(sources):
+            password = passwords[index] if passwords is not None else None
             with source.open("rb") as stream:
-                reader = _open_reader(source, stream)
+                reader = _open_reader(source, stream, password=password)
+                writer.append(reader, import_outline=True)
                 if index == 0:
                     _copy_metadata(reader, writer)
-                writer.append(reader, import_outline=True)
         writer.write(temporary)
 
-    _atomic_pdf_save(output, write)
+    _atomic_pdf_save(output, write, file_mode=file_mode)
     return output
 
 
@@ -247,24 +285,26 @@ def extract_pages(
     output_path: str | Path,
     *,
     allow_duplicates: bool = False,
+    password: str | None = None,
+    file_mode: int = 0o600,
 ) -> Path:
-    """Save requested pages, optionally allowing a source page more than once."""
+    """Save selected pages and preserve related PDF structures where pypdf supports it."""
     sources, output = _normalise_pdf_paths([input_path], output_path)
     source = sources[0]
+    _validate_file_mode(file_mode)
 
     def write(temporary: Path) -> None:
         with source.open("rb") as stream:
-            reader = _open_reader(source, stream)
+            reader = _open_reader(source, stream, password=password)
             indexes = parse_page_ranges(
                 page_ranges, len(reader.pages), allow_duplicates=allow_duplicates
             )
             writer = PdfWriter()
+            writer.append(reader, pages=indexes, import_outline=True)
             _copy_metadata(reader, writer)
-            for index in indexes:
-                writer.add_page(reader.pages[index])
             writer.write(temporary)
 
-    _atomic_pdf_save(output, write)
+    _atomic_pdf_save(output, write, file_mode=file_mode)
     return output
 
 
@@ -273,37 +313,47 @@ def rotate_pdf(
     output_path: str | Path,
     angle: int,
     page_ranges: str | None = None,
+    *,
+    password: str | None = None,
+    file_mode: int = 0o600,
 ) -> Path:
-    """Rotate every page or the selected pages clockwise by 90, 180, or 270 degrees."""
+    """Rotate pages while retaining document-level structures where pypdf supports it."""
     if angle not in (90, 180, 270):
         raise ValueError("Escolha uma rotação de 90, 180 ou 270 graus.")
     sources, output = _normalise_pdf_paths([input_path], output_path)
     source = sources[0]
+    _validate_file_mode(file_mode)
 
     def write(temporary: Path) -> None:
         with source.open("rb") as stream:
-            reader = _open_reader(source, stream)
+            reader = _open_reader(source, stream, password=password)
             indexes = (
                 set(range(len(reader.pages)))
                 if page_ranges is None or not page_ranges.strip()
                 else set(parse_page_ranges(page_ranges, len(reader.pages), allow_duplicates=True))
             )
             writer = PdfWriter()
+            writer.append(reader, import_outline=True)
             _copy_metadata(reader, writer)
-            for index, page in enumerate(reader.pages):
-                copied = writer.add_page(page)
-                if index in indexes:
-                    copied.rotate(angle)
+            for index in indexes:
+                writer.pages[index].rotate(angle)
             writer.write(temporary)
 
-    _atomic_pdf_save(output, write)
+    _atomic_pdf_save(output, write, file_mode=file_mode)
     return output
 
 
-def split_pdf(input_path: str | Path, output_directory: str | Path) -> list[Path]:
-    """Split a PDF into one output PDF per page, creating the destination directory."""
+def split_pdf(
+    input_path: str | Path,
+    output_directory: str | Path,
+    *,
+    password: str | None = None,
+    file_mode: int = 0o600,
+) -> list[Path]:
+    """Split a PDF while preserving page annotations/bookmarks where supported."""
     source = Path(input_path).expanduser().resolve()
     directory = Path(output_directory).expanduser().resolve()
+    _validate_file_mode(file_mode)
     if not source.is_file():
         raise FileNotFoundError(f"PDF não encontrado: {source}")
     if source.suffix.lower() != ".pdf":
@@ -314,7 +364,7 @@ def split_pdf(input_path: str | Path, output_directory: str | Path) -> list[Path
 
     created: list[Path] = []
     with source.open("rb") as stream:
-        reader = _open_reader(source, stream)
+        reader = _open_reader(source, stream, password=password)
         width = max(3, len(str(len(reader.pages))))
         outputs = [
             directory / f"{source.stem}-pagina-{index + 1:0{width}d}.pdf"
@@ -328,12 +378,13 @@ def split_pdf(input_path: str | Path, output_directory: str | Path) -> list[Path
         try:
             for index, target in enumerate(outputs):
                 writer = PdfWriter()
-                writer.add_page(reader.pages[index])
+                writer.append(reader, pages=[index], import_outline=True)
                 _copy_metadata(reader, writer)
                 _atomic_pdf_save(
                     target,
                     lambda temporary, current_writer=writer: current_writer.write(temporary),
                     overwrite=False,
+                    file_mode=file_mode,
                 )
                 created.append(target)
         except Exception:
@@ -368,6 +419,7 @@ def convert_image(
     max_width: int | None = None,
     max_height: int | None = None,
     quality: int = 90,
+    file_mode: int = 0o600,
 ) -> Path:
     """Convert or resize an image, preserving compatible embedded ICC profiles."""
     source = Path(input_path).expanduser().resolve()
@@ -396,9 +448,10 @@ def convert_image(
         raise ValueError("A altura máxima precisa ser maior que zero.")
     if not 1 <= quality <= 100:
         raise ValueError("A qualidade precisa ficar entre 1 e 100.")
+    _validate_file_mode(file_mode)
 
     descriptor, temporary_name = tempfile.mkstemp(
-        prefix=".document-tools-", suffix=output.suffix or ".tmp", dir=str(output.parent)
+        prefix=".pdf-hub-", suffix=output.suffix or ".tmp", dir=str(output.parent)
     )
     os.close(descriptor)
     temporary = Path(temporary_name)
@@ -438,6 +491,8 @@ def convert_image(
 
         if not temporary.is_file() or temporary.stat().st_size == 0:
             raise OSError("O arquivo de imagem temporário ficou vazio.")
+        if os.name != "nt":
+            os.chmod(temporary, file_mode)
         os.replace(temporary, output)
         return output
     finally:
