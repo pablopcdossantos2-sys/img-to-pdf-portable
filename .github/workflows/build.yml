@@ -51,8 +51,6 @@ jobs:
           --onefile
           --windowed
           --name DocumentTools
-          --collect-all PySide6
-          --collect-all shiboken6
           main.py
 
       - name: Upload portable executable
