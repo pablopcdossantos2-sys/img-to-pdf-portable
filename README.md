@@ -36,6 +36,7 @@ Na pasta do repositório, execute:
 ```powershell
 dotnet restore DocumentTools.slnx
 dotnet build DocumentTools.slnx --configuration Release
+dotnet test DocumentTools.slnx --configuration Release
 ```
 
 Para gerar uma publicação portátil para Windows x64:
@@ -44,10 +45,12 @@ Para gerar uma publicação portátil para Windows x64:
 dotnet publish Application/DocumentTools.Desktop.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true --output artifacts/DocumentTools-Portable-win-x64
 ```
 
+Os testes automatizados cobrem a validação e a ordem dos intervalos de páginas, a criação de PDF a partir de imagens, a união de arquivos e a extração de páginas. O GitHub Actions executa esses testes antes de publicar o pacote portátil.
+
 ## Próximas etapas
 
 Funcionalidades que podem ser adicionadas nas próximas versões: girar e reordenar páginas de PDF, converter PDF para imagens, redimensionar/comprimir imagens, dividir um documento em vários arquivos e adicionar processamento em lote com progresso detalhado.
 
 ## Licença
 
-Este repositório inclui um arquivo `LICENSE`. Verifique os termos dessa licença e das dependências antes de redistribuir versões modificadas.
+O projeto está sob a licença GNU AGPL v3, conforme o arquivo `LICENSE`. A dependência PDFsharp 6.2.4 tem licença MIT. Confira os termos de todas as dependências antes de redistribuir versões modificadas.
