@@ -1013,7 +1013,7 @@ class DocumentToolsWindow(QMainWindow):
 def main() -> int:
     application = QApplication(sys.argv)
     application.setApplicationName(APP_NAME)
-    application.setOrganizationName("DocumentTools")
+    application.setOrganizationName("FerramentasDeArquivo")
     application.setFont(QFont("Segoe UI", 10))
     window = DocumentToolsWindow()
     window.show()
