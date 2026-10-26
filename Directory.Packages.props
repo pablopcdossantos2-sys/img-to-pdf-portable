@@ -5,13 +5,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />
     <PackageVersion Include="Avalonia" Version="11.3.12" />
     <PackageVersion Include="Avalonia.Desktop" Version="11.3.12" />
     <PackageVersion Include="Avalonia.Themes.Fluent" Version="11.3.12" />
     <PackageVersion Include="Avalonia.Fonts.Inter" Version="11.3.12" />
     <PackageVersion Include="Avalonia.Diagnostics" Version="11.3.12" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.2.1" />
+    <PackageVersion Include="PdfSharp" Version="6.2.4" />
   </ItemGroup>
-
 </Project>
