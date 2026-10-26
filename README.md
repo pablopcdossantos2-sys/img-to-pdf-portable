@@ -42,9 +42,9 @@ O fluxo **Python CI, security and package** gera um executável portátil para W
 
 1. Abra a aba [Actions](https://github.com/pablopcdossantos2-sys/img-to-pdf-portable/actions).
 2. Entre na execução mais recente chamada **Python CI, security and package** e confirme que terminou com sucesso.
-3. Na seção **Artifacts**, baixe `DocumentTools-Portable-win-x64`.
-4. Extraia o ZIP e execute `DocumentTools.exe`.
-5. O arquivo `DocumentTools.exe.sha256` contém o hash para conferir a integridade do executável.
+3. Na seção **Artifacts**, baixe `Ferramentas-de-Arquivo-Portable-win-x64`.
+4. Extraia o ZIP e execute `FerramentasDeArquivo.exe`.
+5. O arquivo `FerramentasDeArquivo.exe.sha256` contém o hash para conferir a integridade do executável.
 
 O artefato contém o runtime necessário e não exige instalação separada do Python. O Windows pode apresentar um aviso de segurança para arquivos baixados; confirme a origem antes de executar.
 
@@ -89,13 +89,13 @@ python -m pip_audit --local
 Para gerar o executável no Windows, use o mesmo comando do CI:
 
 ```powershell
-python -m PyInstaller --noconfirm --clean --onefile --windowed --name DocumentTools main.py
+python -m PyInstaller --noconfirm --clean --onefile --windowed --name FerramentasDeArquivo main.py
 ```
 
-O executável será criado em `dist/DocumentTools.exe`. Para verificar se o pacote inicializa a interface e carrega as dependências Qt, execute:
+O executável será criado em `dist/FerramentasDeArquivo.exe`. Para verificar se o pacote inicializa a interface e carrega as dependências Qt, execute:
 
 ```powershell
-.\dist\DocumentTools.exe --selftest
+.\dist\FerramentasDeArquivo.exe --selftest
 ```
 
 A opção `--selftest` cria a interface em modo sem janela visível e encerra com código de sucesso se a inicialização funcionar.
