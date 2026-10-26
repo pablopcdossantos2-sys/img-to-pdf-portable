@@ -1,10 +1,10 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Ferramentas de Arquivo - Instalacao
+title PDF Hub - Instalacao
 
 echo ================================================
-echo       Ferramentas de Arquivo
+echo       PDF Hub
 echo       Preparando a primeira execucao
 echo ================================================
 echo.
