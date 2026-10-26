@@ -103,13 +103,13 @@ jobs:
         shell: pwsh
         run: |
           $hash = (Get-FileHash .\dist\FerramentasDeArquivo.exe -Algorithm SHA256).Hash.ToLower()
-          "$hash  DocumentTools.exe" | Set-Content .\dist\FerramentasDeArquivo.exe.sha256 -NoNewline
+          "$hash  FerramentasDeArquivo.exe" | Set-Content .\dist\FerramentasDeArquivo.exe.sha256 -NoNewline
 
       - name: Upload portable executable and checksum
         uses: actions/upload-artifact@v4
         with:
           name: Ferramentas-de-Arquivo-Portable-win-x64
           path: |
-            dist/DocumentTools.exe
-            dist/DocumentTools.exe.sha256
+            dist/FerramentasDeArquivo.exe
+            dist/FerramentasDeArquivo.exe.sha256
           if-no-files-found: error
