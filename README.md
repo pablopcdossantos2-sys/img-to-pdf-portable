@@ -30,7 +30,7 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, com interface m
 
 ## Limitações conhecidas
 
-- PDFs que exigem senha continuam pedindo que a proteção seja removida ou que o documento seja salvo sem senha antes de processar. PDFs criptografados com senha de usuário vazia podem ser abertos. O suporte a AES usa a dependência `cryptography`.
+- PDFs que exigem senha de usuário ainda não podem ser abertos pela interface, pois esta versão não tem campo para digitar senha. PDFs criptografados que podem ser abertos com senha vazia (por exemplo, alguns arquivos com restrições do proprietário) podem ser processados. Para um PDF que pede senha, abra-o em um leitor de PDF, salve uma cópia sem senha e processe essa cópia. O suporte a AES usa a dependência `cryptography`.
 - Na união, o programa tenta importar os marcadores dos documentos. A extração e a divisão não prometem preservar marcadores ou destinos que apontem para páginas removidas. Formulários, links internos e campos interativos podem não ser mantidos; confira documentos com formulários complexos ou navegação interna.
 - A conversão de imagens usa o primeiro quadro de arquivos animados ou TIFF multipágina; para preservar páginas de TIFF multipágina, converta o arquivo por um fluxo específico para TIFF.
 - A aplicação aceita Python 3.11 ou superior, mas o executável portátil distribuído é feito para Windows x64. O executável ainda não é assinado digitalmente; o SmartScreen pode mostrar um aviso ao baixá-lo.
