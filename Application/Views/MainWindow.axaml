@@ -83,8 +83,7 @@
                                     <ListBox ItemsSource="{Binding Images}"
                                              SelectedItem="{Binding SelectedImage, Mode=TwoWay}"
                                              Background="Transparent"
-                                             BorderThickness="0"
->
+                                             BorderThickness="0">
                                         <ListBox.ItemTemplate>
                                             <DataTemplate x:DataType="vm:FileEntry">
                                                 <StackPanel Margin="7,5" Spacing="3">
@@ -132,7 +131,7 @@
                                     <ListBox ItemsSource="{Binding Pdfs}"
                                              SelectedItem="{Binding SelectedPdf, Mode=TwoWay}"
                                              Background="Transparent"
-                                             BorderThickness="0"
+                                             BorderThickness="0">
                                         <ListBox.ItemTemplate>
                                             <DataTemplate x:DataType="vm:FileEntry">
                                                 <StackPanel Margin="7,5" Spacing="3">
