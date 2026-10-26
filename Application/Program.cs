@@ -1,7 +1,6 @@
-﻿using System;
 using Avalonia;
 
-namespace Ypdf.Desktop;
+namespace DocumentTools.Desktop;
 
 internal sealed class Program
 {
