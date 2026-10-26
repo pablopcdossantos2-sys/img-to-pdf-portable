@@ -13,10 +13,16 @@ from pypdf import PdfReader, PdfWriter
 
 SUPPORTED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
 SUPPORTED_OUTPUT_FORMATS = {"JPEG", "PNG", "WEBP", "BMP", "TIFF"}
+ALPHA_MODES = {"RGBA", "LA", "PA"}
 
 
-def parse_page_ranges(specification: str, page_count: int) -> list[int]:
-    """Convert a human-readable page list to zero-based indexes in the requested order."""
+def parse_page_ranges(
+    specification: str,
+    page_count: int,
+    *,
+    allow_duplicates: bool = False,
+) -> list[int]:
+    """Convert page numbers and ranges to zero-based indexes in the supplied order."""
     if page_count < 1:
         raise ValueError("O PDF não possui páginas.")
     if not specification or not specification.strip():
@@ -38,7 +44,7 @@ def parse_page_ranges(specification: str, page_count: int) -> list[int]:
             raise ValueError(f"O intervalo '{segment}' precisa estar entre 1 e {page_count}.")
 
         for page_number in range(start, end + 1):
-            if page_number in seen:
+            if page_number in seen and not allow_duplicates:
                 raise ValueError(f"A página {page_number} foi informada mais de uma vez.")
             seen.add(page_number)
             indexes.append(page_number - 1)
@@ -46,10 +52,12 @@ def parse_page_ranges(specification: str, page_count: int) -> list[int]:
     return indexes
 
 
-def _normalise_pdf_paths(source_paths: Sequence[str | Path], output_path: str | Path) -> tuple[list[Path], Path]:
+def _normalise_pdf_paths(
+    source_paths: Sequence[str | Path],
+    output_path: str | Path,
+) -> tuple[list[Path], Path]:
     if not source_paths:
         raise ValueError("Selecione pelo menos um arquivo de origem.")
-
     sources = [Path(path).expanduser().resolve() for path in source_paths]
     output = Path(output_path).expanduser().resolve()
     if output.suffix.lower() != ".pdf":
@@ -58,14 +66,18 @@ def _normalise_pdf_paths(source_paths: Sequence[str | Path], output_path: str | 
         raise FileNotFoundError("A pasta de destino não existe.")
     if output in sources:
         raise ValueError("O arquivo de saída não pode substituir um arquivo de origem.")
-
     missing = [str(path) for path in sources if not path.is_file()]
     if missing:
         raise FileNotFoundError(f"Arquivo não encontrado: {missing[0]}")
     return sources, output
 
 
-def _atomic_pdf_save(output: Path, write_document: Callable[[Path], None]) -> None:
+def _atomic_pdf_save(
+    output: Path,
+    write_document: Callable[[Path], None],
+    *,
+    overwrite: bool = True,
+) -> None:
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=".document-tools-", suffix=".pdf", dir=str(output.parent)
     )
@@ -75,7 +87,11 @@ def _atomic_pdf_save(output: Path, write_document: Callable[[Path], None]) -> No
         write_document(temporary)
         if not temporary.is_file() or temporary.stat().st_size == 0:
             raise OSError("O arquivo PDF temporário ficou vazio.")
-        os.replace(temporary, output)
+        if overwrite:
+            os.replace(temporary, output)
+        else:
+            os.link(temporary, output)
+            temporary.unlink()
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -83,9 +99,18 @@ def _atomic_pdf_save(output: Path, write_document: Callable[[Path], None]) -> No
 def _open_reader(path: Path, stream):
     reader = PdfReader(stream, strict=False)
     if reader.is_encrypted:
-        raise ValueError(
-            f"O PDF '{path.name}' está protegido por senha. Remova a proteção antes de continuar."
-        )
+        try:
+            decrypted = reader.decrypt("")
+        except Exception as error:
+            raise ValueError(
+                f"Não foi possível abrir o PDF criptografado '{path.name}'. "
+                "Se ele exigir uma senha, informe uma senha válida ou remova a proteção."
+            ) from error
+        if not decrypted:
+            raise ValueError(
+                f"O PDF '{path.name}' exige uma senha para ser aberto. "
+                "Informe a senha ou remova a proteção antes de continuar."
+            )
     if len(reader.pages) < 1:
         raise ValueError(f"O PDF '{path.name}' não contém páginas.")
     return reader
@@ -103,6 +128,40 @@ def _copy_metadata(reader: PdfReader, writer: PdfWriter) -> None:
             writer.add_metadata(safe_metadata)
 
 
+def _flatten_to_rgb(image: Image.Image) -> Image.Image:
+    """Composite transparency over white and return an independent RGB image."""
+    rgba = image.convert("RGBA")
+    flattened = Image.new("RGB", rgba.size, "white")
+    try:
+        flattened.paste(rgba, (0, 0), rgba.getchannel("A"))
+    except Exception:
+        flattened.close()
+        raise
+    finally:
+        rgba.close()
+    return flattened
+
+
+def _resize_to_a4(image: Image.Image, *, dpi: int, margin_mm: float) -> Image.Image:
+    portrait_width = round(210 / 25.4 * dpi)
+    portrait_height = round(297 / 25.4 * dpi)
+    if image.width > image.height:
+        page_width, page_height = portrait_height, portrait_width
+    else:
+        page_width, page_height = portrait_width, portrait_height
+    margin_pixels = round(margin_mm * dpi / 25.4)
+    available = (page_width - (2 * margin_pixels), page_height - (2 * margin_pixels))
+    if min(available) < 1:
+        raise ValueError("As margens não deixam espaço suficiente na página.")
+    image.thumbnail(available, Image.Resampling.LANCZOS)
+    canvas = Image.new("RGB", (page_width, page_height), "white")
+    canvas.paste(
+        image,
+        ((page_width - image.width) // 2, (page_height - image.height) // 2),
+    )
+    return canvas
+
+
 def images_to_pdf(
     image_paths: Sequence[str | Path],
     output_path: str | Path,
@@ -110,14 +169,13 @@ def images_to_pdf(
     dpi: int = 150,
     margin_mm: float = 10,
 ) -> Path:
-    """Create an A4 PDF, one image per page, automatically orienting each page."""
+    """Create an A4 PDF using one image at a time to limit peak memory consumption."""
     if not image_paths:
         raise ValueError("Adicione pelo menos uma imagem.")
     if dpi < 72 or dpi > 600:
         raise ValueError("A resolução precisa ficar entre 72 e 600 DPI.")
     if margin_mm < 0 or margin_mm > 40:
         raise ValueError("A margem precisa ficar entre 0 e 40 mm.")
-
     sources = [Path(path).expanduser().resolve() for path in image_paths]
     output = Path(output_path).expanduser().resolve()
     if output.suffix.lower() != ".pdf":
@@ -126,73 +184,60 @@ def images_to_pdf(
         raise FileNotFoundError("A pasta de destino não existe.")
     if output in sources:
         raise ValueError("O arquivo de saída não pode substituir uma imagem de origem.")
+    for source in sources:
+        if not source.is_file():
+            raise FileNotFoundError(f"Imagem não encontrada: {source}")
+        if source.suffix.lower() not in SUPPORTED_IMAGE_SUFFIXES:
+            raise ValueError(f"Formato de imagem não suportado: {source.name}")
 
-    pages: list[Image.Image] = []
-    try:
-        margin_pixels = round(margin_mm * dpi / 25.4)
-        for source in sources:
-            if not source.is_file():
-                raise FileNotFoundError(f"Imagem não encontrada: {source}")
-            if source.suffix.lower() not in SUPPORTED_IMAGE_SUFFIXES:
-                raise ValueError(f"Formato de imagem não suportado: {source.name}")
+    def write(temporary: Path) -> None:
+        writer = PdfWriter()
+        with tempfile.TemporaryDirectory(prefix="document-tools-pages-") as temp_dir:
+            page_directory = Path(temp_dir)
+            for index, source in enumerate(sources, start=1):
+                page_pdf = page_directory / f"page-{index:06d}.pdf"
+                with Image.open(source) as opened:
+                    oriented = ImageOps.exif_transpose(opened)
+                    try:
+                        image = _flatten_to_rgb(oriented)
+                    finally:
+                        if oriented is not opened:
+                            oriented.close()
+                try:
+                    canvas = _resize_to_a4(image, dpi=dpi, margin_mm=margin_mm)
+                finally:
+                    image.close()
+                try:
+                    canvas.save(page_pdf, format="PDF", resolution=dpi, quality=95)
+                finally:
+                    canvas.close()
+                with page_pdf.open("rb") as page_stream:
+                    page_reader = PdfReader(page_stream, strict=False)
+                    writer.add_page(page_reader.pages[0])
+        writer.write(temporary)
 
-            with Image.open(source) as opened:
-                image = ImageOps.exif_transpose(opened).convert("RGB")
-            portrait_width = round(210 / 25.4 * dpi)
-            portrait_height = round(297 / 25.4 * dpi)
-            if image.width > image.height:
-                page_width, page_height = portrait_height, portrait_width
-            else:
-                page_width, page_height = portrait_width, portrait_height
-
-            available = (
-                page_width - (2 * margin_pixels),
-                page_height - (2 * margin_pixels),
-            )
-            image.thumbnail(available, Image.Resampling.LANCZOS)
-            canvas = Image.new("RGB", (page_width, page_height), "white")
-            canvas.paste(
-                image,
-                ((page_width - image.width) // 2, (page_height - image.height) // 2),
-            )
-            pages.append(canvas)
-
-        def write(temporary: Path) -> None:
-            pages[0].save(
-                temporary,
-                format="PDF",
-                resolution=dpi,
-                save_all=True,
-                append_images=pages[1:],
-            )
-
-        _atomic_pdf_save(output, write)
-        return output
-    finally:
-        for page in pages:
-            page.close()
+    _atomic_pdf_save(output, write)
+    return output
 
 
 def merge_pdfs(pdf_paths: Sequence[str | Path], output_path: str | Path) -> Path:
-    """Join multiple PDF files in the supplied order."""
+    """Join PDF files in the supplied order and retain imported outlines where possible."""
     if len(pdf_paths) < 2:
         raise ValueError("Selecione pelo menos dois PDFs para unir.")
     sources, output = _normalise_pdf_paths(pdf_paths, output_path)
 
     def write(temporary: Path) -> None:
         writer = PdfWriter()
-        streams = []
-        try:
-            for source in sources:
-                stream = source.open("rb")
-                streams.append(stream)
+        first_reader: PdfReader | None = None
+        for index, source in enumerate(sources):
+            with source.open("rb") as stream:
                 reader = _open_reader(source, stream)
-                for page in reader.pages:
-                    writer.add_page(page)
-            writer.write(temporary)
-        finally:
-            for stream in streams:
-                stream.close()
+                writer.append(reader, import_outline=True)
+                if index == 0:
+                    first_reader = reader
+        if first_reader is not None:
+            _copy_metadata(first_reader, writer)
+        writer.write(temporary)
 
     _atomic_pdf_save(output, write)
     return output
@@ -202,15 +247,19 @@ def extract_pages(
     input_path: str | Path,
     page_ranges: str,
     output_path: str | Path,
+    *,
+    allow_duplicates: bool = False,
 ) -> Path:
-    """Save the requested pages in the order supplied by the user."""
+    """Save requested pages, optionally allowing a source page more than once."""
     sources, output = _normalise_pdf_paths([input_path], output_path)
     source = sources[0]
 
     def write(temporary: Path) -> None:
         with source.open("rb") as stream:
             reader = _open_reader(source, stream)
-            indexes = parse_page_ranges(page_ranges, len(reader.pages))
+            indexes = parse_page_ranges(
+                page_ranges, len(reader.pages), allow_duplicates=allow_duplicates
+            )
             writer = PdfWriter()
             _copy_metadata(reader, writer)
             for index in indexes:
@@ -239,7 +288,7 @@ def rotate_pdf(
             indexes = (
                 set(range(len(reader.pages)))
                 if page_ranges is None or not page_ranges.strip()
-                else set(parse_page_ranges(page_ranges, len(reader.pages)))
+                else set(parse_page_ranges(page_ranges, len(reader.pages), allow_duplicates=True))
             )
             writer = PdfWriter()
             _copy_metadata(reader, writer)
@@ -254,23 +303,23 @@ def rotate_pdf(
 
 
 def split_pdf(input_path: str | Path, output_directory: str | Path) -> list[Path]:
-    """Split a PDF into one output PDF per page without overwriting existing files."""
+    """Split a PDF into one output PDF per page, creating the destination directory."""
     source = Path(input_path).expanduser().resolve()
     directory = Path(output_directory).expanduser().resolve()
     if not source.is_file():
         raise FileNotFoundError(f"PDF não encontrado: {source}")
-    if not directory.is_dir():
-        raise FileNotFoundError("A pasta de destino não existe.")
     if source.suffix.lower() != ".pdf":
         raise ValueError("O arquivo de origem precisa ser PDF.")
+    directory.mkdir(parents=True, exist_ok=True)
+    if not directory.is_dir():
+        raise FileNotFoundError("Não foi possível criar a pasta de destino.")
 
-    outputs: list[Path] = []
     created: list[Path] = []
     with source.open("rb") as stream:
         reader = _open_reader(source, stream)
-        stem = source.stem
+        width = max(3, len(str(len(reader.pages))))
         outputs = [
-            directory / f"{stem}-pagina-{index + 1:03d}.pdf"
+            directory / f"{source.stem}-pagina-{index + 1:0{width}d}.pdf"
             for index in range(len(reader.pages))
         ]
         conflicts = [path.name for path in outputs if path.exists()]
@@ -278,20 +327,37 @@ def split_pdf(input_path: str | Path, output_directory: str | Path) -> list[Path
             raise FileExistsError(
                 f"A pasta já contém '{conflicts[0]}'. Escolha outra pasta ou remova os arquivos conflitantes."
             )
-
         try:
             for index, target in enumerate(outputs):
                 writer = PdfWriter()
                 writer.add_page(reader.pages[index])
                 _copy_metadata(reader, writer)
-                _atomic_pdf_save(target, lambda temporary, w=writer: w.write(temporary))
+                _atomic_pdf_save(
+                    target,
+                    lambda temporary, current_writer=writer: current_writer.write(temporary),
+                    overwrite=False,
+                )
                 created.append(target)
         except Exception:
             for path in created:
                 path.unlink(missing_ok=True)
             raise
-
     return outputs
+
+
+def _format_image_for_output(image: Image.Image, image_format: str) -> Image.Image:
+    """Return a copy with a pixel mode supported by the requested output format."""
+    has_transparency = image.mode in ALPHA_MODES or "transparency" in image.info
+    if image_format in {"JPEG", "BMP"} and has_transparency:
+        return _flatten_to_rgb(image)
+    if image_format == "JPEG":
+        return image.copy() if image.mode in {"RGB", "L"} else image.convert("RGB")
+    if image_format == "BMP":
+        return image.copy() if image.mode in {"RGB", "L"} else image.convert("RGB")
+    if image_format in {"PNG", "WEBP"}:
+        if image.mode == "CMYK" or (image_format == "WEBP" and image.mode not in {"RGB", "RGBA", "L"}):
+            return image.convert("RGB")
+    return image.copy()
 
 
 def convert_image(
@@ -303,7 +369,7 @@ def convert_image(
     max_height: int | None = None,
     quality: int = 90,
 ) -> Path:
-    """Convert or resize a single image and save it without altering its source."""
+    """Convert or resize an image, preserving compatible embedded ICC profiles."""
     source = Path(input_path).expanduser().resolve()
     output = Path(output_path).expanduser().resolve()
     image_format = output_format.upper().strip()
@@ -327,37 +393,47 @@ def convert_image(
     )
     os.close(descriptor)
     temporary = Path(temporary_name)
+    image: Image.Image | None = None
+    final_image: Image.Image | None = None
     try:
         with Image.open(source) as opened:
+            original_mode = opened.mode
+            icc_profile = opened.info.get("icc_profile")
             image = ImageOps.exif_transpose(opened)
             image.load()
             if max_width or max_height:
-                bounds = (
-                    max_width or image.width,
-                    max_height or image.height,
-                )
+                bounds = (max_width or image.width, max_height or image.height)
                 image.thumbnail(bounds, Image.Resampling.LANCZOS)
 
+            final_image = _format_image_for_output(image, image_format)
             save_options: dict[str, object] = {}
-            if image_format == "JPEG":
-                if image.mode in ("RGBA", "LA") or "transparency" in image.info:
-                    rgba = image.convert("RGBA")
-                    background = Image.new("RGB", rgba.size, "white")
-                    background.paste(rgba, mask=rgba.getchannel("A"))
-                    rgba.close()
-                    image = background
+            if image_format in {"JPEG", "WEBP"}:
+                save_options["quality"] = quality
+                if image_format == "JPEG":
+                    save_options["optimize"] = True
                 else:
-                    image = image.convert("RGB")
-                save_options = {"quality": quality, "optimize": True}
-            elif image_format == "WEBP":
-                save_options = {"quality": quality, "method": 6}
-            elif image_format == "BMP":
-                image = image.convert("RGB") if image.mode not in ("RGB", "L") else image
-            image.save(temporary, format=image_format, **save_options)
+                    save_options["method"] = 6
+
+            profile_compatible = (
+                image_format != "BMP"
+                and bool(icc_profile)
+                and (
+                    original_mode == final_image.mode
+                    or (original_mode in {"RGB", "RGBA"} and final_image.mode == "RGB")
+                )
+            )
+            if profile_compatible:
+                save_options["icc_profile"] = icc_profile
+
+            final_image.save(temporary, format=image_format, **save_options)
 
         if not temporary.is_file() or temporary.stat().st_size == 0:
             raise OSError("O arquivo de imagem temporário ficou vazio.")
         os.replace(temporary, output)
         return output
     finally:
+        if final_image is not None:
+            final_image.close()
+        if image is not None and image is not final_image:
+            image.close()
         temporary.unlink(missing_ok=True)
