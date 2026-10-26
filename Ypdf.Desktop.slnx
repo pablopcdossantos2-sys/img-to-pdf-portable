@@ -1,10 +1,5 @@
 <Solution>
   <Folder Name="/Application/">
-    <Project Path="Application/Ypdf.Desktop/Ypdf.Desktop.csproj" />
-  </Folder>
-  <Folder Name="/Core/" />
-  <Folder Name="/Core/Ypdf.Core/" />
-  <Folder Name="/Core/Ypdf.Core/Core/">
-    <Project Path="Core/Ypdf.Core/Core/Ypdf.Core/Ypdf.Core.csproj" />
+    <Project Path="Application/Ypdf.Desktop.csproj" />
   </Folder>
 </Solution>
