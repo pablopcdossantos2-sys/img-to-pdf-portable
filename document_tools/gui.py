@@ -6,7 +6,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QThread, Signal, Qt, QUrl
+from PySide6.QtCore import QSettings, QThread, Signal, Qt, QUrl
 from PySide6.QtGui import QCloseEvent, QDesktopServices, QFont
 from PySide6.QtWidgets import (
     QApplication,
@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
+    QInputDialog,
     QProgressBar,
     QPushButton,
     QSpinBox,
@@ -40,11 +41,12 @@ from document_tools.pdf_ops import (
     merge_pdfs,
     rotate_pdf,
     split_pdf,
+    pdf_requires_user_password,
 )
 
 
-APP_NAME = "Ferramentas de Arquivo"
-IMAGE_FILTER = "Imagens (*.jpg *.jpeg *.png *.bmp *.webp *.tif *.tiff)"
+APP_NAME = "PDF Hub"
+IMAGE_FILTER = "Imagens (*.jpg *.jpeg *.png *.bmp *.webp *.tif *.tiff *.gif)"
 PDF_FILTER = "Documentos PDF (*.pdf)"
 FORMAT_EXTENSIONS = {
     "JPEG": ".jpg",
@@ -93,6 +95,7 @@ class DocumentToolsWindow(QMainWindow):
         self.setWindowTitle(APP_NAME)
         self.setMinimumSize(920, 650)
         self.resize(1160, 810)
+        self.settings = QSettings("PDFHub", "PDF Hub")
         self._worker: OperationWorker | None = None
         self._pending_output_directory: Path | None = None
         self._split_custom_directory = False
@@ -108,7 +111,7 @@ class DocumentToolsWindow(QMainWindow):
         header_layout.setContentsMargins(22, 18, 22, 18)
         header_layout.setSpacing(14)
 
-        brand_mark = QLabel("F")
+        brand_mark = QLabel("H")
         brand_mark.setObjectName("brandMark")
         brand_mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
         brand_mark.setFixedSize(48, 48)
@@ -123,7 +126,7 @@ class DocumentToolsWindow(QMainWindow):
         brand_text.addWidget(subtitle)
         header_layout.addLayout(brand_text, 1)
 
-        local_badge = QLabel("●  PROCESSAMENTO LOCAL")
+        local_badge = QLabel("●  PDF HUB • PROCESSAMENTO LOCAL")
         local_badge.setObjectName("localBadge")
         local_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header_layout.addWidget(local_badge)
@@ -138,6 +141,26 @@ class DocumentToolsWindow(QMainWindow):
         )
         intro.setObjectName("intro")
         central_layout.addWidget(intro)
+
+        permission_row = QHBoxLayout()
+        permission_label = QLabel("Permissões de saída (Linux/macOS)")
+        permission_label.setObjectName("muted")
+        permission_label.setToolTip("No Windows, o sistema de permissões é gerenciado pelo próprio sistema operacional.")
+        self.output_permissions = QComboBox()
+        self.output_permissions.addItem("Somente usuário (0600)", 0o600)
+        self.output_permissions.addItem("Compartilhado (0644)", 0o644)
+        try:
+            saved_mode = int(self.settings.value("output_file_mode", 0o600))
+        except (TypeError, ValueError):
+            saved_mode = 0o600
+        saved_index = self.output_permissions.findData(saved_mode)
+        self.output_permissions.setCurrentIndex(saved_index if saved_index >= 0 else 0)
+        self.output_permissions.setToolTip("0600: somente o usuário atual. 0644: outros usuários do sistema podem ler os arquivos.")
+        self.output_permissions.currentIndexChanged.connect(self._save_output_permissions)
+        permission_row.addWidget(permission_label)
+        permission_row.addWidget(self.output_permissions)
+        permission_row.addStretch(1)
+        central_layout.addLayout(permission_row)
 
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
@@ -516,6 +539,12 @@ class DocumentToolsWindow(QMainWindow):
     ) -> str | None:
         return self._choose_output_pdf(suggested_name, source_paths=source_paths)
 
+    def _save_output_permissions(self) -> None:
+        self.settings.setValue("output_file_mode", int(self.output_permissions.currentData()))
+
+    def _output_file_mode(self) -> int:
+        return int(self.output_permissions.currentData())
+
     def _build_image_pdf_tab(self) -> QWidget:
         page, layout = self._new_page(
             "Transformar imagens em um documento",
@@ -563,8 +592,13 @@ class DocumentToolsWindow(QMainWindow):
         options.addStretch(1)
         layout.addLayout(options)
 
+        self.image_all_frames = QCheckBox("Incluir todas as páginas/quadros de imagens multipágina ou animadas")
+        self.image_all_frames.setChecked(True)
+        self.image_all_frames.setToolTip("Quando desmarcado, usa somente a primeira página ou o primeiro quadro de cada arquivo.")
+        layout.addWidget(self.image_all_frames)
+
         bottom = QHBoxLayout()
-        hint = QLabel("Formatos: JPG, PNG, BMP, WEBP e TIFF.")
+        hint = QLabel("Formatos: JPG, PNG, BMP, WEBP, TIFF e GIF.")
         hint.setObjectName("muted")
         make_pdf = QPushButton("Criar PDF")
         make_pdf.setObjectName("primaryButton")
@@ -631,9 +665,11 @@ class DocumentToolsWindow(QMainWindow):
             return
         dpi = self.image_dpi.value()
         margin_mm = self.image_margin.value()
+        all_frames = self.image_all_frames.isChecked()
+        file_mode = self._output_file_mode()
         self._run_task(
             "Criando PDF a partir das imagens…",
-            lambda: f"PDF criado: {images_to_pdf(sources, output, dpi=dpi, margin_mm=margin_mm)}",
+            lambda: f"PDF criado: {images_to_pdf(sources, output, dpi=dpi, margin_mm=margin_mm, all_frames=all_frames, file_mode=file_mode)}",
             output_location=output,
         )
 
@@ -689,9 +725,29 @@ class DocumentToolsWindow(QMainWindow):
         output = self._require_output_pdf("documentos-unidos.pdf", source_paths=sources)
         if not output:
             return
+        passwords: list[str | None] = [None] * len(sources)
+        try:
+            for index, source in enumerate(sources):
+                if pdf_requires_user_password(source):
+                    password, accepted = QInputDialog.getText(
+                        self,
+                        "Senha do PDF",
+                        f"O arquivo '{Path(source).name}' está protegido. Digite a senha:",
+                        QLineEdit.EchoMode.Password,
+                    )
+                    if not accepted:
+                        return
+                    if not password:
+                        QMessageBox.information(self, "Senha necessária", "Informe uma senha não vazia para continuar.")
+                        return
+                    passwords[index] = password
+        except Exception as error:
+            QMessageBox.warning(self, "Não foi possível verificar o PDF", str(error))
+            return
+        file_mode = self._output_file_mode()
         self._run_task(
             "Unindo os PDFs…",
-            lambda: f"PDFs unidos: {merge_pdfs(sources, output)}",
+            lambda: f"PDFs unidos: {merge_pdfs(sources, output, passwords=passwords, file_mode=file_mode)}",
             output_location=output,
         )
 
@@ -715,6 +771,10 @@ class DocumentToolsWindow(QMainWindow):
         self.extract_ranges = QLineEdit("1-3")
         self.extract_ranges.setPlaceholderText("Ex.: 1-3, 5, 8-10")
         form.addRow("Páginas", self.extract_ranges)
+        self.extract_password = QLineEdit()
+        self.extract_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.extract_password.setPlaceholderText("Opcional; não é armazenada")
+        form.addRow("Senha do PDF (opcional)", self.extract_password)
         self.extract_allow_duplicates = QCheckBox("Permitir repetir páginas no PDF resultante")
         form.addRow("", self.extract_allow_duplicates)
         helper = QLabel("A ordem informada será mantida. Intervalos inválidos ou páginas repetidas são recusados.")
@@ -748,9 +808,12 @@ class DocumentToolsWindow(QMainWindow):
         if not output:
             return
         allow_duplicates = self.extract_allow_duplicates.isChecked()
+        password = self.extract_password.text() or None
+        self.extract_password.clear()
+        file_mode = self._output_file_mode()
         self._run_task(
             "Extraindo páginas…",
-            lambda: f"Páginas extraídas: {extract_pages(source, ranges, output, allow_duplicates=allow_duplicates)}",
+            lambda: f"Páginas extraídas: {extract_pages(source, ranges, output, allow_duplicates=allow_duplicates, password=password, file_mode=file_mode)}",
             output_location=output,
         )
 
@@ -778,6 +841,10 @@ class DocumentToolsWindow(QMainWindow):
         self.rotate_ranges = QLineEdit()
         self.rotate_ranges.setPlaceholderText("Deixe vazio para girar todas as páginas")
         form.addRow("Páginas (opcional)", self.rotate_ranges)
+        self.rotate_password = QLineEdit()
+        self.rotate_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.rotate_password.setPlaceholderText("Opcional; não é armazenada")
+        form.addRow("Senha do PDF (opcional)", self.rotate_password)
         layout.addLayout(form)
         note = QLabel("Exemplo: 1-2, 5. As páginas não selecionadas permanecem sem rotação.")
         note.setObjectName("muted")
@@ -809,9 +876,12 @@ class DocumentToolsWindow(QMainWindow):
         output = self._require_output_pdf(f"{Path(source).stem}-rotacionado.pdf", source_paths=[source])
         if not output:
             return
+        password = self.rotate_password.text() or None
+        self.rotate_password.clear()
+        file_mode = self._output_file_mode()
         self._run_task(
             "Girando páginas…",
-            lambda: f"PDF rotacionado: {rotate_pdf(source, output, angle, ranges)}",
+            lambda: f"PDF rotacionado: {rotate_pdf(source, output, angle, ranges, password=password, file_mode=file_mode)}",
             output_location=output,
         )
 
@@ -843,6 +913,10 @@ class DocumentToolsWindow(QMainWindow):
         directory_container = QWidget()
         directory_container.setLayout(directory_row)
         form.addRow("Pasta de saída", directory_container)
+        self.split_password = QLineEdit()
+        self.split_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.split_password.setPlaceholderText("Opcional; não é armazenada")
+        form.addRow("Senha do PDF (opcional)", self.split_password)
         layout.addLayout(form)
         layout.addStretch(1)
 
@@ -874,9 +948,12 @@ class DocumentToolsWindow(QMainWindow):
         if not source or not directory:
             QMessageBox.information(self, "Dividir PDF", "Escolha o PDF e uma pasta de saída.")
             return
+        password = self.split_password.text() or None
+        self.split_password.clear()
+        file_mode = self._output_file_mode()
         self._run_task(
             "Dividindo PDF em arquivos de página única…",
-            lambda: f"{len(split_pdf(source, directory))} páginas salvas em: {directory}",
+            lambda: f"{len(split_pdf(source, directory, password=password, file_mode=file_mode))} páginas salvas em: {directory}",
             output_location=directory,
         )
 
@@ -974,6 +1051,7 @@ class DocumentToolsWindow(QMainWindow):
         max_width = self.convert_width.value() or None
         max_height = self.convert_height.value() or None
         quality = self.convert_quality.value()
+        file_mode = self._output_file_mode()
         directory = Path(directory_text)
 
         def task() -> str:
@@ -995,6 +1073,7 @@ class DocumentToolsWindow(QMainWindow):
                             max_width=max_width,
                             max_height=max_height,
                             quality=quality,
+                            file_mode=file_mode,
                         )
                     )
                 except Exception as error:
@@ -1013,7 +1092,7 @@ class DocumentToolsWindow(QMainWindow):
 def main() -> int:
     application = QApplication(sys.argv)
     application.setApplicationName(APP_NAME)
-    application.setOrganizationName("FerramentasDeArquivo")
+    application.setOrganizationName("PDFHub")
     application.setFont(QFont("Segoe UI", 10))
     window = DocumentToolsWindow()
     window.show()
