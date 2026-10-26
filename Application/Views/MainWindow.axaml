@@ -1,17 +1,226 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:Ypdf.Desktop.ViewModels"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
-        x:Class="Ypdf.Desktop.Views.MainWindow"
+        xmlns:vm="using:DocumentTools.Desktop.ViewModels"
+        x:Class="DocumentTools.Desktop.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="Ypdf.Desktop">
+        Title="Ferramentas de Arquivo"
+        Width="1100"
+        Height="760"
+        MinWidth="900"
+        MinHeight="650"
+        Background="#F3F6FB"
+        WindowStartupLocation="CenterScreen">
 
-    <Design.DataContext>
-        <vm:MainWindowViewModel/>
-    </Design.DataContext>
+    <Window.Styles>
+        <Style Selector="Button.primary">
+            <Setter Property="Background" Value="#4263EB" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="CornerRadius" Value="9" />
+            <Setter Property="Padding" Value="16,10" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="Button.secondary">
+            <Setter Property="Background" Value="#EEF2FF" />
+            <Setter Property="Foreground" Value="#3346A8" />
+            <Setter Property="CornerRadius" Value="9" />
+            <Setter Property="Padding" Value="12,9" />
+        </Style>
+        <Style Selector="Button.quiet">
+            <Setter Property="Background" Value="#F1F4F9" />
+            <Setter Property="Foreground" Value="#344054" />
+            <Setter Property="CornerRadius" Value="9" />
+            <Setter Property="Padding" Value="12,9" />
+        </Style>
+        <Style Selector="Border.panel">
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="#E2E8F0" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="16" />
+        </Style>
+    </Window.Styles>
 
-    <TextBlock Text="{Binding Greeting}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+    <Grid RowDefinitions="76,*,48">
+        <Border Grid.Row="0" Background="#172B4D" Padding="28,0">
+            <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                <Border Width="42" Height="42" CornerRadius="12" Background="#4263EB" VerticalAlignment="Center">
+                    <TextBlock Text="F" FontSize="23" FontWeight="Bold" Foreground="White"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock Text="Ferramentas de Arquivo" FontSize="20" FontWeight="SemiBold" Foreground="#FFFFFF" />
+                    <TextBlock Text="PDF e imagens · simples, seguro e local" FontSize="12" Foreground="#C8D5E8" />
+                </StackPanel>
+                <Border Grid.Column="2" Background="#223B60" CornerRadius="18" Padding="12,7" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <Ellipse Width="7" Height="7" Fill="#65D6A4" VerticalAlignment="Center" />
+                        <TextBlock Text="Processamento local" FontSize="11" Foreground="#E6F0FF" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
 
+        <Grid Grid.Row="1" Margin="28,24" RowDefinitions="Auto,*">
+            <StackPanel Spacing="5">
+                <TextBlock Text="O que vamos organizar hoje?" FontSize="25" FontWeight="Bold" Foreground="#172B4D" />
+                <TextBlock Text="Escolha uma ferramenta. Seus arquivos originais não serão alterados."
+                           FontSize="13" Foreground="#61718A" />
+            </StackPanel>
+
+            <Border Grid.Row="1" Classes="panel" Padding="18" Margin="0,18,0,0">
+                <TabControl>
+                    <TabItem Header="Imagens para PDF">
+                        <Grid Margin="8,18,8,8" RowDefinitions="Auto,*,Auto">
+                            <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Transformar imagens em um documento" FontSize="18" FontWeight="SemiBold" Foreground="#172B4D" />
+                                    <TextBlock Text="{Binding ImagesSummary}" FontSize="12" Foreground="#718096" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Classes="secondary" Content="+ Adicionar imagens" Click="OnAddImagesClick" />
+                            </Grid>
+
+                            <Grid Grid.Row="1" Margin="0,14,0,14" ColumnDefinitions="*,178">
+                                <Border Classes="panel" CornerRadius="11" Padding="6">
+                                    <ListBox ItemsSource="{Binding Images}"
+                                             SelectedItem="{Binding SelectedImage, Mode=TwoWay}"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             HorizontalContentAlignment="Stretch">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:FileEntry">
+                                                <StackPanel Margin="7,5" Spacing="3">
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#24344D"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Folder}" FontSize="11" Foreground="#8492A6"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </Border>
+
+                                <StackPanel Grid.Column="1" Margin="14,0,0,0" Spacing="8">
+                                    <TextBlock Text="Organizar lista" FontSize="12" FontWeight="SemiBold" Foreground="#64748B" Margin="0,0,0,2" />
+                                    <Button Classes="quiet" Content="↑  Mover para cima" Click="OnMoveImageUpClick" />
+                                    <Button Classes="quiet" Content="↓  Mover para baixo" Click="OnMoveImageDownClick" />
+                                    <Button Classes="quiet" Content="Remover da lista" Click="OnRemoveImageClick" />
+                                    <Border Height="1" Background="#E7ECF3" Margin="0,7" />
+                                    <TextBlock Text="Formatos aceitos: JPG, PNG e BMP." FontSize="11" Foreground="#718096" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Grid.Row="2" ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                                <TextBlock Text="Cada imagem vira uma página A4, ajustada sem distorcer a proporção."
+                                           FontSize="11" Foreground="#718096" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                <Button Grid.Column="1" Classes="primary" Content="Criar PDF" Click="OnCreatePdfClick"
+                                        IsEnabled="{Binding CanStartOperation}" MinWidth="142" />
+                            </Grid>
+                        </Grid>
+                    </TabItem>
+
+                    <TabItem Header="Unir PDFs">
+                        <Grid Margin="8,18,8,8" RowDefinitions="Auto,*,Auto">
+                            <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Reunir documentos em um único arquivo" FontSize="18" FontWeight="SemiBold" Foreground="#172B4D" />
+                                    <TextBlock Text="{Binding PdfsSummary}" FontSize="12" Foreground="#718096" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Classes="secondary" Content="+ Adicionar PDFs" Click="OnAddPdfsClick" />
+                            </Grid>
+
+                            <Grid Grid.Row="1" Margin="0,14,0,14" ColumnDefinitions="*,178">
+                                <Border Classes="panel" CornerRadius="11" Padding="6">
+                                    <ListBox ItemsSource="{Binding Pdfs}"
+                                             SelectedItem="{Binding SelectedPdf, Mode=TwoWay}"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             HorizontalContentAlignment="Stretch">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:FileEntry">
+                                                <StackPanel Margin="7,5" Spacing="3">
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#24344D"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Folder}" FontSize="11" Foreground="#8492A6"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </Border>
+
+                                <StackPanel Grid.Column="1" Margin="14,0,0,0" Spacing="8">
+                                    <TextBlock Text="Ordem final" FontSize="12" FontWeight="SemiBold" Foreground="#64748B" Margin="0,0,0,2" />
+                                    <Button Classes="quiet" Content="↑  Mover para cima" Click="OnMovePdfUpClick" />
+                                    <Button Classes="quiet" Content="↓  Mover para baixo" Click="OnMovePdfDownClick" />
+                                    <Button Classes="quiet" Content="Remover da lista" Click="OnRemovePdfClick" />
+                                    <Border Height="1" Background="#E7ECF3" Margin="0,7" />
+                                    <TextBlock Text="As páginas serão mantidas na ordem em que aparecem nos documentos."
+                                               FontSize="11" Foreground="#718096" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Grid.Row="2" ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                                <TextBlock Text="Selecione pelo menos dois PDFs. Os documentos originais serão preservados."
+                                           FontSize="11" Foreground="#718096" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                <Button Grid.Column="1" Classes="primary" Content="Unir PDFs" Click="OnMergePdfsClick"
+                                        IsEnabled="{Binding CanStartOperation}" MinWidth="142" />
+                            </Grid>
+                        </Grid>
+                    </TabItem>
+
+                    <TabItem Header="Extrair páginas">
+                        <Grid Margin="8,18,8,8" RowDefinitions="Auto,*,Auto">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Salvar somente as páginas necessárias" FontSize="18" FontWeight="SemiBold" Foreground="#172B4D" />
+                                <TextBlock Text="Escolha um PDF e informe as páginas ou intervalos que deseja manter."
+                                           FontSize="12" Foreground="#718096" />
+                            </StackPanel>
+
+                            <Border Grid.Row="1" Classes="panel" CornerRadius="12" Padding="22" Margin="0,18,0,18">
+                                <StackPanel Spacing="15" MaxWidth="680" HorizontalAlignment="Left">
+                                    <TextBlock Text="1. Arquivo de origem" FontWeight="SemiBold" Foreground="#334155" />
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <Border Background="#F5F7FB" BorderBrush="#E2E8F0" BorderThickness="1"
+                                                CornerRadius="9" Padding="13,12">
+                                            <TextBlock Text="{Binding ExtractSourceName}" Foreground="#475569"
+                                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                        </Border>
+                                        <Button Grid.Column="1" Classes="secondary" Margin="10,0,0,0"
+                                                Content="Escolher PDF" Click="OnChooseExtractPdfClick" />
+                                    </Grid>
+
+                                    <TextBlock Text="2. Páginas a extrair" FontWeight="SemiBold" Foreground="#334155" />
+                                    <TextBox Text="{Binding PageRanges, Mode=TwoWay}"
+                                             Watermark="Ex.: 1-3, 5, 8-10"
+                                             MinWidth="300"
+                                             MaxWidth="430" />
+                                    <TextBlock Text="Use números separados por vírgula e intervalos com hífen. Exemplo: 1-3, 5, 8-10."
+                                               FontSize="12" Foreground="#718096" TextWrapping="Wrap" />
+                                    <Border Background="#EFF6FF" CornerRadius="9" Padding="13">
+                                        <TextBlock Text="As páginas serão copiadas na ordem informada. Intervalos inválidos ou páginas repetidas serão sinalizados."
+                                                   FontSize="12" Foreground="#31558A" TextWrapping="Wrap" />
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+
+                            <Grid Grid.Row="2" ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                                <TextBlock Text="O PDF original não será modificado."
+                                           FontSize="11" Foreground="#718096" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Classes="primary" Content="Extrair páginas"
+                                        Click="OnExtractPagesClick" IsEnabled="{Binding CanStartOperation}" MinWidth="158" />
+                            </Grid>
+                        </Grid>
+                    </TabItem>
+                </TabControl>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="2" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="0,1,0,0" Padding="28,0">
+            <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center">
+                <Ellipse Width="7" Height="7" Fill="#4263EB" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{Binding StatusMessage}" Margin="9,0,0,0"
+                           FontSize="11" Foreground="#58677D" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" />
+            </Grid>
+        </Border>
+    </Grid>
 </Window>
