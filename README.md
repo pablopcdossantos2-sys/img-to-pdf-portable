@@ -1,5 +1,7 @@
 # Ferramentas de Arquivo
 
+**Idiomas:** Português (Brasil) · [English](README.en.md) · [Español](README.es.md)
+
 Aplicativo desktop para trabalhar com PDFs e imagens localmente, com interface moderna em português brasileiro. A implementação é em **Python, PySide6, pypdf e Pillow**.
 
 ## Funcionalidades
@@ -28,13 +30,18 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, com interface m
 - Gravação temporária/atômica para operações PDF; a divisão interrompe conflitos sem substituir arquivos preexistentes.
 - Testes automatizados e auditoria de dependências executados no GitHub Actions. O pipeline também faz um teste de fumaça no executável Windows e publica um checksum SHA-256.
 
-## Limitações conhecidas
+## ROADMAP
 
-- PDFs que exigem senha de usuário ainda não podem ser abertos pela interface, pois esta versão não tem campo para digitar senha. PDFs criptografados que podem ser abertos com senha vazia (por exemplo, alguns arquivos com restrições do proprietário) podem ser processados. Para um PDF que pede senha, abra-o em um leitor de PDF, salve uma cópia sem senha e processe essa cópia. O suporte a AES usa a dependência `cryptography`.
-- Na união, o programa tenta importar os marcadores dos documentos. A extração e a divisão não prometem preservar marcadores ou destinos que apontem para páginas removidas. Formulários, links internos e campos interativos podem não ser mantidos; confira documentos com formulários complexos ou navegação interna.
-- A conversão de imagens usa o primeiro quadro de arquivos animados ou TIFF multipágina; para preservar páginas de TIFF multipágina, converta o arquivo por um fluxo específico para TIFF.
-- A aplicação aceita Python 3.11 ou superior, mas o executável portátil distribuído é feito para Windows x64. O executável ainda não é assinado digitalmente; o SmartScreen pode mostrar um aviso ao baixá-lo.
-- Em Linux/macOS, os arquivos produzidos a partir de temporários seguros podem ficar com permissões restritas ao proprietário (normalmente modo 0600), incluindo PDFs e imagens convertidas. Isso reduz a exposição de documentos locais; ajuste as permissões manualmente se precisar compartilhá-los com outros usuários do sistema.
+Este plano reúne melhorias possíveis para orientar as próximas etapas. A ordem indica prioridades relativas, não prazos garantidos.
+
+### Prioridades
+
+- [ ] **Abrir PDFs protegidos por senha:** adicionar um campo de senha com tratamento seguro, sem registrar a senha em logs nem armazená-la desnecessariamente.
+- [ ] **Preservar recursos avançados de PDF:** melhorar a manutenção de marcadores, metadados, formulários, links internos e destinos ao unir, extrair, girar ou dividir documentos.
+- [ ] **Controlar páginas de imagens multipágina e animadas:** permitir escolher entre importar apenas o primeiro quadro ou gerar páginas para quadros/páginas adicionais de TIFF e formatos animados compatíveis.
+- [ ] **Publicar releases permanentes e versionados:** automatizar releases do GitHub com executável, checksum SHA-256 e notas de versão, para que o download não dependa de artefatos temporários do Actions.
+- [ ] **Distribuir pacotes para outros sistemas:** avaliar builds portáteis para macOS e Linux, além do executável Windows x64 atual.
+- [ ] **Oferecer opções de permissões de saída:** documentar e, se fizer sentido, permitir configurar as permissões de arquivos gerados em Linux/macOS, que hoje podem ficar restritas ao usuário atual.
 
 ## Usar no Windows sem instalar Python
 
@@ -100,17 +107,3 @@ O executável será criado em `dist/FerramentasDeArquivo.exe`. Para verificar se
 
 A opção `--selftest` cria a interface em modo sem janela visível e encerra com código de sucesso se a inicialização funcionar.
 
-## Estrutura do projeto
-
-- `main.py`: ponto de entrada e teste de fumaça do executável.
-- `document_tools/gui.py`: interface PySide6.
-- `document_tools/pdf_ops.py`: processamento PDF e imagem.
-- `tests/`: testes de regressão, inclusive para a lista visual.
-- `pyproject.toml`: fonte central das versões e metadados das dependências.
-- `requirements.txt` / `requirements-dev.txt`: atalhos para instalar dependências de execução ou desenvolvimento.
-- `.github/workflows/build.yml`: testes em Python 3.11–3.14, auditoria de dependências e pacote Windows.
-- `.github/dependabot.yml`: verificações periódicas de atualizações de dependências.
-
-## Licença
-
-O projeto usa a GNU AGPL v3, conforme o arquivo `LICENSE`. As dependências possuem licenças próprias; consulte [LICENSES-THIRD-PARTY.md](LICENSES-THIRD-PARTY.md), especialmente as condições de redistribuição das bibliotecas Qt incluídas no executável.
