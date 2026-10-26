@@ -14,6 +14,7 @@ from document_tools.pdf_ops import (
     images_to_pdf,
     merge_pdfs,
     parse_page_ranges,
+    pdf_requires_user_password,
     rotate_pdf,
     split_pdf,
 )
@@ -176,12 +177,12 @@ def test_split_pdf_rolls_back_partial_outputs_on_failure(
     original_save = pdf_ops._atomic_pdf_save
     calls = 0
 
-    def fail_second_save(output: Path, write_document, *, overwrite: bool = True) -> None:
+    def fail_second_save(output: Path, write_document, *, overwrite: bool = True, file_mode: int = 0o600) -> None:
         nonlocal calls
         calls += 1
         if calls == 2:
             raise OSError("simulated failure")
-        original_save(output, write_document, overwrite=overwrite)
+        original_save(output, write_document, overwrite=overwrite, file_mode=file_mode)
 
     monkeypatch.setattr(pdf_ops, "_atomic_pdf_save", fail_second_save)
     with pytest.raises(OSError, match="simulated failure"):
@@ -198,13 +199,112 @@ def test_empty_password_encrypted_pdf_can_be_processed(tmp_path: Path) -> None:
     assert len(read_pdf(output).pages) == 1
 
 
-def test_password_protected_pdf_gives_clear_error(tmp_path: Path) -> None:
+def test_password_protected_pdf_accepts_correct_password(tmp_path: Path) -> None:
     source = create_pdf(tmp_path / "locked.pdf", [120], password="secret")
     output = tmp_path / "out.pdf"
 
-    with pytest.raises(ValueError, match="exige uma senha"):
-        extract_pages(source, "1", output)
+    assert pdf_requires_user_password(source) is True
+    extract_pages(source, "1", output, password="secret")
+
+    assert len(read_pdf(output).pages) == 1
+
+
+def test_password_protected_pdf_rejects_wrong_password(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "locked.pdf", [120], password="secret")
+    output = tmp_path / "out.pdf"
+
+    with pytest.raises(ValueError, match="senha informada.*incorreta"):
+        extract_pages(source, "1", output, password="wrong")
     assert not output.exists()
+
+
+def test_merge_pdfs_accepts_individual_passwords(tmp_path: Path) -> None:
+    first = create_pdf(tmp_path / "locked.pdf", [120], password="secret")
+    second = create_pdf(tmp_path / "plain.pdf", [130])
+    output = tmp_path / "merged.pdf"
+
+    merge_pdfs([first, second], output, passwords=["secret", None])
+
+    assert [round(float(page.mediabox.width)) for page in read_pdf(output).pages] == [120, 130]
+
+
+def test_split_pdf_accepts_password(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "locked.pdf", [120, 130], password="secret")
+    outputs = split_pdf(source, tmp_path / "split", password="secret")
+
+    assert len(outputs) == 2
+    assert all(len(read_pdf(path).pages) == 1 for path in outputs)
+
+
+def test_rotate_pdf_accepts_password(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "locked.pdf", [120], password="secret")
+    output = tmp_path / "rotated.pdf"
+
+    rotate_pdf(source, output, 90, password="secret")
+
+    assert int(read_pdf(output).pages[0].get("/Rotate", 0)) == 90
+
+
+def test_images_to_pdf_imports_all_frames_from_multipage_tiff(tmp_path: Path) -> None:
+    source = tmp_path / "multipage.tiff"
+    output = tmp_path / "all-frames.pdf"
+    first = Image.new("RGB", (24, 16), "red")
+    second = Image.new("RGB", (32, 20), "blue")
+    try:
+        first.save(source, format="TIFF", save_all=True, append_images=[second])
+    finally:
+        first.close()
+        second.close()
+
+    images_to_pdf([source], output, all_frames=True)
+
+    assert len(read_pdf(output).pages) == 2
+
+
+def test_images_to_pdf_can_use_only_first_frame(tmp_path: Path) -> None:
+    source = tmp_path / "multipage.tiff"
+    output = tmp_path / "first-frame.pdf"
+    first = Image.new("RGB", (24, 16), "red")
+    second = Image.new("RGB", (32, 20), "blue")
+    try:
+        first.save(source, format="TIFF", save_all=True, append_images=[second])
+    finally:
+        first.close()
+        second.close()
+
+    images_to_pdf([source], output, all_frames=False)
+
+    assert len(read_pdf(output).pages) == 1
+
+
+def test_extract_pages_preserves_metadata_and_bookmarks(tmp_path: Path) -> None:
+    source = tmp_path / "with-outline.pdf"
+    writer = PdfWriter()
+    writer.add_blank_page(width=110, height=300)
+    writer.add_blank_page(width=120, height=300)
+    writer.add_blank_page(width=130, height=300)
+    writer.add_metadata({"/Title": "PDF Hub test"})
+    writer.add_outline_item("Second page", 1)
+    writer.add_outline_item("Third page", 2)
+    with source.open("wb") as stream:
+        writer.write(stream)
+    output = tmp_path / "extract.pdf"
+
+    extract_pages(source, "2-3", output)
+
+    reader = read_pdf(output)
+    assert reader.metadata.title == "PDF Hub test"
+    assert reader.outline
+
+
+@pytest.mark.skipif(__import__("os").name == "nt", reason="POSIX permission bits are not portable to Windows")
+def test_pdf_output_permissions_can_be_shared(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [120])
+    output = tmp_path / "shared.pdf"
+
+    extract_pages(source, "1", output, file_mode=0o644)
+
+    assert output.stat().st_mode & 0o777 == 0o644
 
 
 def test_convert_image_resizes_and_converts_to_jpeg(tmp_path: Path) -> None:
