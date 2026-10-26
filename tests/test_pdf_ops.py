@@ -227,6 +227,30 @@ def test_convert_image_resizes_and_converts_to_jpeg(tmp_path: Path) -> None:
         assert converted.mode == "RGB"
 
 
+@pytest.mark.parametrize(
+    ("output_format", "extension"),
+    [
+        ("JPEG", ".jpg"),
+        ("PNG", ".png"),
+        ("WEBP", ".webp"),
+        ("BMP", ".bmp"),
+        ("TIFF", ".tif"),
+    ],
+)
+def test_convert_image_supports_each_output_format(
+    tmp_path: Path, output_format: str, extension: str
+) -> None:
+    source = tmp_path / "source.png"
+    output = tmp_path / f"converted{extension}"
+    Image.new("RGBA", (40, 20), (20, 100, 220, 90)).save(source)
+
+    convert_image(source, output, output_format)
+
+    with Image.open(output) as converted:
+        assert converted.format == output_format
+        assert converted.size == (40, 20)
+
+
 @pytest.mark.parametrize("output_format", ["PNG", "WEBP"])
 def test_cmyk_image_can_convert_to_rgb_only_formats(
     tmp_path: Path, output_format: str
@@ -261,3 +285,20 @@ def test_operations_never_overwrite_their_source(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="não pode substituir"):
         extract_pages(source, "1", source)
     assert source.read_bytes() == original
+
+
+def test_atomic_pdf_save_preserves_existing_destination_when_writer_fails(
+    tmp_path: Path,
+) -> None:
+    destination = tmp_path / "existing.pdf"
+    original_content = b"pre-existing file"
+    destination.write_bytes(original_content)
+
+    def fail_write(_temporary: Path) -> None:
+        raise OSError("simulated write error")
+
+    with pytest.raises(OSError, match="simulated write error"):
+        pdf_ops._atomic_pdf_save(destination, fail_write)
+
+    assert destination.read_bytes() == original_content
+    assert list(tmp_path.glob(".document-tools-*.pdf")) == []
