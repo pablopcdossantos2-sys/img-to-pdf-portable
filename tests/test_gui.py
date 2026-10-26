@@ -33,7 +33,11 @@ def names(widget: QListWidget) -> list[str]:
 
 
 def selected_names(widget: QListWidget) -> list[str]:
-    return [item.text() for item in widget.selectedItems()]
+    return [
+        widget.item(index).text()
+        for index in range(widget.count())
+        if widget.item(index).isSelected()
+    ]
 
 
 def test_move_selected_up_does_not_reorder_block_at_top(qt_app: QApplication) -> None:
