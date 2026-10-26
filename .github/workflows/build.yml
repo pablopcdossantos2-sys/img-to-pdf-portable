@@ -1,4 +1,4 @@
-name: Build
+name: Build and package
 
 on:
   push:
@@ -17,23 +17,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET
+      - name: Set up .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
 
-      - name: Restore
-        run: dotnet restore Ypdf.Desktop.slnx
+      - name: Restore dependencies
+        run: dotnet restore DocumentTools.slnx
 
       - name: Build
-        run: dotnet build Ypdf.Desktop.slnx --configuration Release --no-restore
+        run: dotnet build DocumentTools.slnx --configuration Release --no-restore
 
       - name: Publish portable Windows x64
-        run: dotnet publish Application/Ypdf.Desktop.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true --output artifacts/Ypdf-Portable-win-x64
+        run: dotnet publish Application/DocumentTools.Desktop.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true --output artifacts/DocumentTools-Portable-win-x64
 
-      - name: Upload publish artifact
+      - name: Upload portable artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Ypdf-Portable-win-x64
-          path: artifacts/Ypdf-Portable-win-x64/
+          name: DocumentTools-Portable-win-x64
+          path: artifacts/DocumentTools-Portable-win-x64/
           if-no-files-found: error
