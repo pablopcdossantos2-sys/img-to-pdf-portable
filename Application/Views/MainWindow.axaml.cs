@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Platform.Storage;
 using DocumentTools.Desktop.Services;
 using DocumentTools.Desktop.ViewModels;
