@@ -1,4 +1,4 @@
-# Ferramentas de Arquivo
+# PDF Hub
 
 **Idiomas:** Português (Brasil) · [English](README.en.md) · [Español](README.es.md)
 
@@ -7,11 +7,11 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, com interface m
 ## Funcionalidades
 
 ### PDFs
-- **Imagens para PDF:** converte JPG, JPEG, PNG, BMP, WEBP e TIFF em páginas A4, ajustando automaticamente a orientação e preservando as proporções. Imagens transparentes são compostas sobre branco.
-- **Unir PDFs:** combina vários arquivos na ordem escolhida e tenta preservar os marcadores importados.
-- **Extrair páginas:** salva páginas específicas ou intervalos como `1-3, 5, 8-10`. Há uma opção para repetir páginas no documento de saída.
-- **Girar páginas:** rotação em 90°, 180° ou 270°, em todas as páginas ou somente nas selecionadas.
-- **Dividir PDF:** cria um arquivo PDF individual para cada página, criando a pasta de saída caso necessário. Nomes de destino existentes são preservados; se houver conflito, a operação é interrompida.
+- **Imagens para PDF:** converte JPG, JPEG, PNG, BMP, WEBP, TIFF e GIF em páginas A4, ajustando automaticamente a orientação e preservando as proporções. Por padrão, importa todas as páginas/quadros dos arquivos multipágina ou animados, com opção para usar apenas o primeiro. Imagens transparentes são compostas sobre branco.
+- **Unir PDFs:** combina arquivos na ordem escolhida, solicita senhas para PDFs protegidos e tenta preservar marcadores, metadados e referências internas compatíveis.
+- **Extrair páginas:** salva páginas específicas ou intervalos como `1-3, 5, 8-10`, permite repetir páginas e aceita senha. A estrutura de navegação e as anotações são preservadas na medida do possível, com remapeamento para as páginas mantidas.
+- **Girar páginas:** rotação em 90°, 180° ou 270°, em todas as páginas ou somente nas selecionadas, inclusive em PDFs protegidos por senha.
+- **Dividir PDF:** cria um arquivo PDF individual para cada página, criando a pasta de saída caso necessário. Aceita senha e tenta conservar metadados, marcadores e anotações associados à página. Nomes de destino existentes são preservados; se houver conflito, a operação é interrompida.
 - **Proteção de saída:** o diálogo acrescenta a extensão PDF, verifica se o destino é um dos arquivos de origem e pede confirmação antes de substituir um arquivo existente.
 
 ### Imagens
@@ -21,29 +21,30 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, com interface m
 - **CMYK e transparência:** modos que não são aceitos pelo formato de destino são convertidos para formatos compatíveis; a transparência para JPEG/BMP é composta sobre fundo branco.
 
 ### Usabilidade, privacidade e robustez
-- Interface desktop com abas, ordenação por botões ou arrastar e soltar, duplicação intencional de itens, mensagens em português e indicador de processamento.
+- Interface desktop com abas, ordenação por botões ou arrastar e soltar, duplicação intencional de itens, mensagens em português e indicador de processamento. As senhas são digitadas em campos protegidos, não são salvas nas preferências e os campos são limpos ao iniciar a operação.
 - Opções de resolução (DPI) e margem na conversão de imagens para PDF.
 - Operações demoradas fora da thread principal; a janela não fecha enquanto uma operação está ativa.
 - Botão para abrir a pasta de saída depois de concluir a operação.
 - Processamento local: os documentos não são enviados a serviços externos.
 - Os arquivos originais não são substituídos pelas operações.
 - Gravação temporária/atômica para operações PDF; a divisão interrompe conflitos sem substituir arquivos preexistentes.
+- Preferência persistente para arquivos gerados em Linux/macOS: somente o usuário (0600, padrão recomendado) ou leitura compartilhada (0644). No Windows, as permissões seguem as regras do sistema.
 - Testes automatizados e auditoria de dependências executados no GitHub Actions. O pipeline também faz um teste de fumaça no executável Windows e publica um checksum SHA-256.
 
 
 ## Usar no Windows sem instalar Python
 
-O fluxo **Python CI, security and package** gera um executável portátil para Windows x64 e um checksum SHA-256.
+O fluxo **PDF Hub CI, security and packages** testa o projeto e gera pacotes portáteis para Windows x64, Linux x64 e macOS Apple Silicon. Em pushes para `main`, consulte [Actions](https://github.com/pablopcdossantos2-sys/img-to-pdf-portable/actions) para baixar artefatos de validação; releases permanentes são geradas a partir de tags `v*`.
 
-1. Abra a aba [Actions](https://github.com/pablopcdossantos2-sys/img-to-pdf-portable/actions).
-2. Entre na execução mais recente chamada **Python CI, security and package** e confirme que terminou com sucesso.
-3. Na seção **Artifacts**, baixe `Ferramentas-de-Arquivo-Portable-win-x64`.
-4. Extraia o ZIP e execute `FerramentasDeArquivo.exe`.
-5. O arquivo `FerramentasDeArquivo.exe.sha256` contém o hash para conferir a integridade do executável.
+1. Para um download duradouro, abra a seção [Releases](https://github.com/pablopcdossantos2-sys/img-to-pdf-portable/releases) e baixe o pacote do seu sistema operacional.
+2. Antes de uma release estar disponível, abra [Actions](https://github.com/pablopcdossantos2-sys/img-to-pdf-portable/actions), entre na execução mais recente chamada **PDF Hub CI, security and packages** e confirme que terminou com sucesso.
+3. Na seção **Artifacts**, baixe o pacote da plataforma desejada: Windows x64, Linux x64 ou macOS Apple Silicon.
+4. Extraia o arquivo. No Windows, execute `PDFHub.exe`; no Linux, execute `PDFHub`; no macOS, abra `PDF Hub.app`.
+5. Os arquivos `.sha256` permitem verificar o checksum do pacote. Nas releases, compare o checksum com o mesmo pacote baixado da fonte oficial.
 
 O artefato contém o runtime necessário e não exige instalação separada do Python. O Windows pode apresentar um aviso de segurança para arquivos baixados; confirme a origem antes de executar.
 
-> O artefato de Actions é temporário e tem prazo de expiração definido pelo GitHub. Um release permanente poderá ser publicado separadamente depois de validar o pacote em uso real.
+> Os artefatos de Actions são temporários e expiram conforme a retenção configurada no GitHub. Releases versionadas são criadas quando uma tag como `v0.3.0` é enviada ao repositório. Os executáveis não são assinados/notarizados digitalmente; Windows SmartScreen e macOS Gatekeeper podem exibir avisos.
 
 ## Executar a partir do código-fonte
 
@@ -84,26 +85,31 @@ python -m pip_audit --local
 Para gerar o executável no Windows, use o mesmo comando do CI:
 
 ```powershell
-python -m PyInstaller --noconfirm --clean --onefile --windowed --name FerramentasDeArquivo main.py
+python -m PyInstaller --noconfirm --clean --onefile --windowed --name PDFHub main.py
 ```
 
-O executável será criado em `dist/FerramentasDeArquivo.exe`. Para verificar se o pacote inicializa a interface e carrega as dependências Qt, execute:
+O executável será criado em `dist/PDFHub.exe`. Para verificar se o pacote inicializa a interface e carrega as dependências Qt, execute:
 
 ```powershell
-.\dist\FerramentasDeArquivo.exe --selftest
+.\dist\PDFHub.exe --selftest
 ```
 
 A opção `--selftest` cria a interface em modo sem janela visível e encerra com código de sucesso se a inicialização funcionar.
 
 ## ROADMAP
 
-Este plano reúne melhorias possíveis para orientar as próximas etapas. A ordem indica prioridades relativas, não prazos garantidos.
+### Concluído nesta versão 0.3.0
 
-### Prioridades
+- [x] **PDFs protegidos por senha:** campos protegidos para extração, rotação e divisão; solicitação pontual da senha para cada PDF protegido durante a união. As senhas não são salvas nas preferências.
+- [x] **Preservação de recursos PDF:** utilização de cópia de documento/páginas do pypdf para tentar preservar marcadores, metadados, anotações e links internos. A preservação depende da estrutura do PDF; formulários complexos e links para páginas removidas ainda exigem conferência.
+- [x] **Imagens multipágina e animadas:** escolha entre importar todas as páginas/quadros ou apenas o primeiro ao criar PDF, incluindo TIFF e formatos animados aceitos pelo Pillow, como GIF e WEBP.
+- [x] **Releases permanentes:** o fluxo de CI foi preparado para gerar uma release no GitHub ao enviar uma tag `v*`, com pacotes e checksums das plataformas suportadas.
+- [x] **Pacotes multiplataforma:** builds de Windows x64, Linux x64 e macOS Apple Silicon configurados no GitHub Actions.
+- [x] **Permissões de saída:** preferência persistente para arquivos gerados em Linux/macOS: 0600 (somente usuário, padrão) ou 0644 (leitura compartilhada).
 
-- [ ] **Abrir PDFs protegidos por senha:** adicionar um campo de senha com tratamento seguro, sem registrar a senha em logs nem armazená-la desnecessariamente.
-- [ ] **Preservar recursos avançados de PDF:** melhorar a manutenção de marcadores, metadados, formulários, links internos e destinos ao unir, extrair, girar ou dividir documentos.
-- [ ] **Controlar páginas de imagens multipágina e animadas:** permitir escolher entre importar apenas o primeiro quadro ou gerar páginas para quadros/páginas adicionais de TIFF e formatos animados compatíveis.
-- [ ] **Publicar releases permanentes e versionados:** automatizar releases do GitHub com executável, checksum SHA-256 e notas de versão, para que o download não dependa de artefatos temporários do Actions.
-- [ ] **Distribuir pacotes para outros sistemas:** avaliar builds portáteis para macOS e Linux, além do executável Windows x64 atual.
-- [ ] **Oferecer opções de permissões de saída:** documentar e, se fizer sentido, permitir configurar as permissões de arquivos gerados em Linux/macOS, que hoje podem ficar restritas ao usuário atual.
+### Próximas melhorias possíveis
+
+- [ ] Interface traduzida para inglês e espanhol, além do português brasileiro.
+- [ ] Ferramenta de reorganização visual de páginas por arrastar e soltar antes de salvar.
+- [ ] Compressão/otimização de PDF com escolha explícita entre tamanho e qualidade.
+- [ ] Marca d'água, numeração de páginas e carimbos.
