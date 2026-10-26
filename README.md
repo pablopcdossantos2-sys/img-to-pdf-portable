@@ -43,6 +43,8 @@ O executável contém o runtime necessário e não requer uma instalação separ
 
 Requisitos: Windows, macOS ou Linux e Python 3.13 recomendado (Python 3.11 ou superior é declarado no projeto).
 
+No Windows, se você já instalou o Python 3.13, pode dar duplo clique em `instalar-e-iniciar.bat`. Ele prepara o ambiente isolado, instala as dependências e abre a aplicação. Nas próximas vezes, use `executar-aplicativo.bat`. O primeiro uso precisa de internet para baixar os pacotes Python.
+
 Na pasta do repositório, execute:
 
 ```powershell
