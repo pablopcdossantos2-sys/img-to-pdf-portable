@@ -1,11 +1,9 @@
 <Project>
   <PropertyGroup>
-    <TargetFrameworks>
-        net6.0;net7.0;net8.0;
-    </TargetFrameworks>
+    <TargetFramework>net8.0</TargetFramework>
     <LangVersion>12.0</LangVersion>
-    <CheckEolTargetFramework>false</CheckEolTargetFramework>
-    <ImplicitUsings>disable</ImplicitUsings>
+    <CheckEolTargetFramework>true</CheckEolTargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
@@ -14,22 +12,15 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <CodeAnalysisTreatWarningsAsErrors>true</CodeAnalysisTreatWarningsAsErrors>
-    <CodeAnalysisRuleSet>../../.ruleset</CodeAnalysisRuleSet>
-    <AnalysisMode>All</AnalysisMode>
-    <ErrorLog>compiler-diagnostics.sarif</ErrorLog>
+    <AnalysisMode>Recommended</AnalysisMode>
   </PropertyGroup>
 
   <ItemGroup>
-    <AdditionalFiles Include="../../stylecop.json" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)stylecop.json"
+                     Condition="Exists('$(MSBuildThisFileDirectory)stylecop.json')" />
     <PackageReference Include="StyleCop.Analyzers">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
   </ItemGroup>
-
-  <!-- Make project internals visible to test projects with same name
-  <ItemGroup>
-    <InternalsVisibleTo Include="$(AssemblyName).Tests" />
-  </ItemGroup>
-  -->
 </Project>
