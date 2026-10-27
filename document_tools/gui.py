@@ -325,6 +325,9 @@ TRANSLATIONS = {
         "Escolher pasta de origem": "Choose source folder",
         "Escolher pasta de saída": "Choose output folder",
         "Incluir subpastas": "Include subfolders",
+        "Retomar lote interrompido, se aplicável": "Resume an interrupted batch when possible",
+        "Usa resultados salvos somente quando a origem, o destino, o perfil e a lista de PDFs não mudaram. Desmarque para iniciar do zero.": "Reuse saved results only when the source, destination, profile, and PDF list are unchanged. Uncheck to start from scratch.",
+        "Concluído antes da interrupção; resultado reutilizado.": "Completed before the interruption; reusing this result.",
         "Processar PDFs de uma pasta": "Process PDFs in a folder",
         "Selecione a pasta de origem e o destino, depois escolha um perfil salvo. Os arquivos originais serão preservados; PDFs com erro não interrompem os demais.": "Choose a source folder and destination, then select a saved profile. Originals are preserved; a failed PDF will not stop the others.",
         "Sufixo usado nos nomes dos PDFs de saída ao processar uma pasta com este perfil.": "Suffix used in output PDF filenames when processing a folder with this profile.",
@@ -584,6 +587,9 @@ TRANSLATIONS = {
         "Escolher pasta de origem": "Elegir carpeta de origen",
         "Escolher pasta de saída": "Elegir carpeta de salida",
         "Incluir subpastas": "Incluir subcarpetas",
+        "Retomar lote interrompido, se aplicável": "Reanudar un lote interrumpido cuando sea posible",
+        "Usa resultados salvos somente quando a origem, o destino, o perfil e a lista de PDFs não mudaram. Desmarque para iniciar do zero.": "Reutiliza resultados guardados solo si no cambiaron el origen, el destino, el perfil ni la lista de PDF. Desmarca para empezar desde cero.",
+        "Concluído antes da interrupção; resultado reutilizado.": "Completado antes de la interrupción; se reutiliza este resultado.",
         "Processar PDFs de uma pasta": "Procesar PDFs de una carpeta",
         "Selecione a pasta de origem e o destino, depois escolha um perfil salvo. Os arquivos originais serão preservados; PDFs com erro não interrompem os demais.": "Elige una carpeta de origen y un destino, y después selecciona un perfil guardado. Se conservan los originales; un PDF con errores no detendrá los demás.",
         "Sufixo usado nos nomes dos PDFs de saída ao processar uma pasta com este perfil.": "Sufijo usado en los nombres de los PDF de salida al procesar una carpeta con este perfil.",
@@ -706,13 +712,14 @@ class BatchFolderWorker(QThread):
     failed = Signal(str)
 
     def __init__(self, source_directory: str, output_directory: str, profile: dict[str, object],
-                 *, recursive: bool, file_mode: int) -> None:
+                 *, recursive: bool, file_mode: int, resume: bool) -> None:
         super().__init__()
         self._source_directory = source_directory
         self._output_directory = output_directory
         self._profile = profile
         self._recursive = recursive
         self._file_mode = file_mode
+        self._resume = resume
 
     def run(self) -> None:
         try:
@@ -720,6 +727,7 @@ class BatchFolderWorker(QThread):
                 self._source_directory, self._output_directory, self._profile,
                 recursive=self._recursive, file_mode=self._file_mode,
                 progress_callback=lambda done, total, name: self.progress.emit(done, total, name),
+                resume=self._resume,
             )
         except Exception as error:
             self.failed.emit(friendly_error_message(error))
@@ -2676,6 +2684,12 @@ class DocumentToolsWindow(QMainWindow):
         self.batch_include_subfolders.setChecked(False)
         self.batch_include_subfolders.setToolTip("Quando ativado, preserva a estrutura de subpastas no destino.")
         form.addRow("", self.batch_include_subfolders)
+        self.batch_resume_checkbox = QCheckBox("Retomar lote interrompido, se aplicável")
+        self.batch_resume_checkbox.setChecked(True)
+        self.batch_resume_checkbox.setToolTip(
+            "Usa resultados salvos somente quando a origem, o destino, o perfil e a lista de PDFs não mudaram. Desmarque para iniciar do zero."
+        )
+        form.addRow("", self.batch_resume_checkbox)
         layout.addLayout(form)
         note = QLabel(
             "O perfil também define o sufixo dos arquivos de saída. PDFs que exigem senha serão registrados como falha, sem interromper o lote."
@@ -2751,6 +2765,7 @@ class DocumentToolsWindow(QMainWindow):
             source, output, profiles[name],
             recursive=self.batch_include_subfolders.isChecked(),
             file_mode=self._output_file_mode(),
+            resume=self.batch_resume_checkbox.isChecked(),
         )
         self._worker = worker
         self._pending_output_directory = Path(output).expanduser().resolve()
