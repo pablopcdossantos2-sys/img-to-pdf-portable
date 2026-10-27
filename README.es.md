@@ -38,7 +38,7 @@ Aplicación de escritorio para trabajar localmente con archivos PDF e imágenes,
 - **Nota sobre calidad:** la optimización equilibrada puede reducir la calidad de imagen y no garantiza que todos los PDFs sean más pequeños; conserva el original y compara los resultados. Las marcas de agua usan la fuente Helvetica integrada y pueden no admitir todos los caracteres Unicode.
 - Las pruebas automatizadas y la auditoría de dependencias se ejecutan en GitHub Actions. El flujo valida los paquetes de Windows, Linux y macOS y genera checksums SHA-256.
 
-## Usar en Windows sin instalar Python
+## Descargar paquetes portátiles
 
 El flujo **PDF Hub CI, security and packages** prueba la aplicación y genera paquetes portátiles para Windows x64, Linux x64 y macOS Apple Silicon. En los envíos a `main`, se pueden descargar artefactos temporales desde [Actions](https://github.com/pablopcdossantos2-sys/img-to-pdf-portable/actions); las versiones permanentes se generan a partir de etiquetas `v*`.
 
@@ -50,7 +50,7 @@ El flujo **PDF Hub CI, security and packages** prueba la aplicación y genera pa
 
 El artefacto incluye el entorno de ejecución y no requiere instalar Python por separado. Windows puede mostrar una advertencia de seguridad para archivos descargados; verifica el origen antes de ejecutar la aplicación.
 
-> Los artefactos de GitHub Actions son temporales y caducan según el periodo de retención configurado. Las versiones permanentes se generan al enviar una etiqueta como `v0.3.0`. Los ejecutables no tienen firma digital/notarización; Windows SmartScreen o macOS Gatekeeper pueden mostrar una advertencia.
+> Los artefactos de GitHub Actions son temporales y caducan según el periodo de retención configurado. Las versiones permanentes se generan al enviar una etiqueta como `v0.4.0`. Los ejecutables no tienen firma digital/notarización; Windows SmartScreen o macOS Gatekeeper pueden mostrar una advertencia.
 
 ## Ejecutar desde el código fuente
 
