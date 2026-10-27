@@ -48,6 +48,7 @@ from document_tools.pdf_ops import (
     rotate_pdf,
     split_pdf,
     pdf_requires_user_password,
+    process_pdf_pipeline,
 )
 
 
@@ -250,6 +251,19 @@ TRANSLATIONS = {
         "A senha informada para o PDF '{name}' está incorreta ou não pôde ser usada.": "The password for PDF '{name}' is incorrect or could not be used.",
         "O PDF '{name}' exige uma senha. Informe-a para continuar.": "PDF '{name}' requires a password. Enter it to continue.",
         "A pasta já contém '{name}'. Escolha outra pasta ou remova os arquivos conflitantes.": "The folder already contains '{name}'. Choose another folder or remove conflicting files.",
+        "Fluxo em lote": "Batch workflow",
+        "Processar um PDF em várias etapas": "Process one PDF in multiple steps",
+        "Etapas executadas nesta ordem: rotação, marca d'água/numeração e otimização. O arquivo original é preservado.": "Steps run in this order: rotation, watermark/page numbering, and optimization. The original file is preserved.",
+        "Escolher PDF para fluxo em lote": "Choose PDF for batch workflow",
+        "Aplicar rotação": "Apply rotation",
+        "Aplicar otimização": "Apply optimization",
+        "Executar fluxo em lote": "Run batch workflow",
+        "Executando fluxo em lote…": "Running batch workflow…",
+        "Fluxo em lote concluído: {path}": "Batch workflow completed: {path}",
+        "Selecione pelo menos uma etapa do fluxo.": "Select at least one workflow step.",
+        "A etapa de marca d'água precisa de um texto ou da numeração ativada.": "The watermark step needs text or page numbering enabled.",
+        "Qualquer etapa selecionada será executada na sequência indicada acima.": "Selected steps will run in the order shown above.",
+        "Texto da marca d'água (opcional)": "Watermark text (optional)",
     },
     "es": {
         "PDF e imagens • v{version} • organizado, seguro e local": "PDF e imágenes • v{version} • organizado, seguro y local",
@@ -421,6 +435,19 @@ TRANSLATIONS = {
         "A senha informada para o PDF '{name}' está incorreta ou não pôde ser usada.": "La contraseña del PDF '{name}' es incorrecta o no se pudo usar.",
         "O PDF '{name}' exige uma senha. Informe-a para continuar.": "El PDF '{name}' requiere una contraseña. Introdúcela para continuar.",
         "A pasta já contém '{name}'. Escolha outra pasta ou remova os arquivos conflitantes.": "La carpeta ya contiene '{name}'. Elige otra carpeta o elimina los archivos en conflicto.",
+        "Fluxo em lote": "Flujo por lotes",
+        "Processar um PDF em várias etapas": "Procesar un PDF en varias etapas",
+        "Etapas executadas nesta ordem: rotação, marca d'água/numeração e otimização. O arquivo original é preservado.": "Las etapas se ejecutan en este orden: rotación, marca de agua/numeración y optimización. El archivo original se conserva.",
+        "Escolher PDF para fluxo em lote": "Elegir PDF para el flujo por lotes",
+        "Aplicar rotação": "Aplicar rotación",
+        "Aplicar otimização": "Aplicar optimización",
+        "Executar fluxo em lote": "Ejecutar flujo por lotes",
+        "Executando fluxo em lote…": "Ejecutando flujo por lotes…",
+        "Fluxo em lote concluído: {path}": "Flujo por lotes completado: {path}",
+        "Selecione pelo menos uma etapa do fluxo.": "Selecciona al menos una etapa del flujo.",
+        "A etapa de marca d'água precisa de um texto ou da numeração ativada.": "La etapa de marca de agua necesita texto o que actives la numeración.",
+        "Qualquer etapa selecionada será executada na sequência indicada acima.": "Las etapas seleccionadas se ejecutan en el orden indicado arriba.",
+        "Texto da marca d'água (opcional)": "Texto de marca de agua (opcional)",
     }
 }
 
@@ -554,6 +581,7 @@ class DocumentToolsWindow(QMainWindow):
         self.tabs.addTab(self._build_reorder_tab(), "  Reordenar páginas  ")
         self.tabs.addTab(self._build_stamp_tab(), "  Marca d'água e numeração  ")
         self.tabs.addTab(self._build_optimize_tab(), "  Otimizar PDF  ")
+        self.tabs.addTab(self._build_pipeline_tab(), "  Fluxo em lote  ")
         self.tabs.addTab(self._build_convert_tab(), "  Converter imagens  ")
         central_layout.addWidget(self.tabs, 1)
 
@@ -1851,6 +1879,167 @@ class DocumentToolsWindow(QMainWindow):
             ) + " — " + self._t(template)
 
         self._run_task(self._t("Reduzir tamanho do PDF"), task, output_location=output)
+
+    def _build_pipeline_tab(self) -> QWidget:
+        page, layout = self._new_page(
+            "Processar um PDF em várias etapas",
+            "Etapas executadas nesta ordem: rotação, marca d'água/numeração e otimização. O arquivo original é preservado.",
+        )
+        form = QFormLayout()
+        self.pipeline_path = QLineEdit()
+        self.pipeline_path.setReadOnly(True)
+        browse = QPushButton("Escolher PDF")
+        browse.clicked.connect(self._select_pipeline_pdf)
+        file_row = QHBoxLayout()
+        file_row.addWidget(self.pipeline_path, 1)
+        file_row.addWidget(browse)
+        file_container = QWidget()
+        file_container.setLayout(file_row)
+        form.addRow("PDF de origem", file_container)
+
+        self.pipeline_password = QLineEdit()
+        self.pipeline_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.pipeline_password.setPlaceholderText("Opcional; não é armazenada")
+        form.addRow("Senha do PDF (opcional)", self.pipeline_password)
+
+        self.pipeline_rotate_enabled = QCheckBox("Aplicar rotação")
+        form.addRow("", self.pipeline_rotate_enabled)
+        self.pipeline_rotate_angle = QComboBox()
+        self.pipeline_rotate_angle.addItem("90° no sentido horário", 90)
+        self.pipeline_rotate_angle.addItem("180°", 180)
+        self.pipeline_rotate_angle.addItem("270° no sentido horário", 270)
+        form.addRow("Rotação", self.pipeline_rotate_angle)
+        self.pipeline_rotate_ranges = QLineEdit()
+        self.pipeline_rotate_ranges.setPlaceholderText("Deixe vazio para girar todas as páginas")
+        form.addRow("Páginas (opcional)", self.pipeline_rotate_ranges)
+
+        self.pipeline_stamp_enabled = QCheckBox("Aplicar marca d'água/numeração")
+        form.addRow("", self.pipeline_stamp_enabled)
+        self.pipeline_stamp_text = QLineEdit()
+        self.pipeline_stamp_text.setPlaceholderText("Ex.: CONFIDENCIAL")
+        form.addRow("Texto da marca d'água (opcional)", self.pipeline_stamp_text)
+        self.pipeline_numbering = QCheckBox("Adicionar numeração de páginas")
+        form.addRow("", self.pipeline_numbering)
+        self.pipeline_stamp_ranges = QLineEdit()
+        self.pipeline_stamp_ranges.setPlaceholderText("Deixe vazio para aplicar em todas as páginas")
+        self.pipeline_stamp_ranges.setToolTip(
+            "O texto e a numeração serão aplicados apenas às páginas selecionadas. A numeração conserva o número original da página."
+        )
+        form.addRow("Páginas (opcional)", self.pipeline_stamp_ranges)
+
+        self.pipeline_optimize_enabled = QCheckBox("Aplicar otimização")
+        form.addRow("", self.pipeline_optimize_enabled)
+        self.pipeline_optimize_mode = QComboBox()
+        self.pipeline_optimize_mode.addItem("Sem perdas (mais conservador)", "lossless")
+        self.pipeline_optimize_mode.addItem("Equilibrada (recomprimir imagens)", "balanced")
+        form.addRow("Modo de otimização", self.pipeline_optimize_mode)
+        self.pipeline_optimize_quality = QSpinBox()
+        self.pipeline_optimize_quality.setRange(50, 95)
+        self.pipeline_optimize_quality.setValue(82)
+        self.pipeline_optimize_quality.setSuffix(" / 100")
+        form.addRow("Qualidade das imagens", self.pipeline_optimize_quality)
+
+        layout.addLayout(form)
+        note = QLabel("Qualquer etapa selecionada será executada na sequência indicada acima.")
+        note.setObjectName("muted")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        actions = QHBoxLayout()
+        actions.addStretch(1)
+        run_button = QPushButton("Executar fluxo em lote")
+        run_button.setObjectName("primaryButton")
+        run_button.clicked.connect(self._run_pipeline)
+        actions.addWidget(run_button)
+        layout.addLayout(actions)
+
+        self.pipeline_rotate_enabled.toggled.connect(self._update_pipeline_controls)
+        self.pipeline_stamp_enabled.toggled.connect(self._update_pipeline_controls)
+        self.pipeline_optimize_enabled.toggled.connect(self._update_pipeline_controls)
+        self.pipeline_optimize_mode.currentIndexChanged.connect(self._update_pipeline_controls)
+        self._update_pipeline_controls()
+        return page
+
+    def _update_pipeline_controls(self) -> None:
+        rotate_enabled = self.pipeline_rotate_enabled.isChecked()
+        self.pipeline_rotate_angle.setEnabled(rotate_enabled)
+        self.pipeline_rotate_ranges.setEnabled(rotate_enabled)
+        stamp_enabled = self.pipeline_stamp_enabled.isChecked()
+        self.pipeline_stamp_text.setEnabled(stamp_enabled)
+        self.pipeline_numbering.setEnabled(stamp_enabled)
+        self.pipeline_stamp_ranges.setEnabled(stamp_enabled)
+        optimize_enabled = self.pipeline_optimize_enabled.isChecked()
+        self.pipeline_optimize_mode.setEnabled(optimize_enabled)
+        self.pipeline_optimize_quality.setEnabled(
+            optimize_enabled and self.pipeline_optimize_mode.currentData() == "balanced"
+        )
+
+    def _select_pipeline_pdf(self) -> None:
+        path = self._choose_pdf("Escolher PDF para fluxo em lote")
+        if path:
+            self.pipeline_path.setText(path)
+
+    def _run_pipeline(self) -> None:
+        source = self.pipeline_path.text().strip()
+        if not source:
+            QMessageBox.information(
+                self, self._t("Fluxo em lote"), self._t("Escolha o PDF de origem.")
+            )
+            return
+        rotate_enabled = self.pipeline_rotate_enabled.isChecked()
+        stamp_enabled = self.pipeline_stamp_enabled.isChecked()
+        optimize_enabled = self.pipeline_optimize_enabled.isChecked()
+        if not (rotate_enabled or stamp_enabled or optimize_enabled):
+            QMessageBox.information(
+                self, self._t("Fluxo em lote"), self._t("Selecione pelo menos uma etapa do fluxo.")
+            )
+            return
+        watermark_text = self.pipeline_stamp_text.text().strip()
+        page_numbering = self.pipeline_numbering.isChecked()
+        if stamp_enabled and not watermark_text and not page_numbering:
+            QMessageBox.information(
+                self,
+                self._t("Fluxo em lote"),
+                self._t("A etapa de marca d'água precisa de um texto ou da numeração ativada."),
+            )
+            return
+
+        output = self._require_output_pdf(
+            f"{Path(source).stem}-processado.pdf", source_paths=[source]
+        )
+        if not output:
+            return
+
+        password = self.pipeline_password.text() or None
+        self.pipeline_password.clear()
+        file_mode = self._output_file_mode()
+        rotate_angle = int(self.pipeline_rotate_angle.currentData()) if rotate_enabled else None
+        rotate_ranges = self.pipeline_rotate_ranges.text().strip() or None
+        stamp_ranges = self.pipeline_stamp_ranges.text().strip() or None
+        optimize_mode = str(self.pipeline_optimize_mode.currentData()) if optimize_enabled else None
+        quality = self.pipeline_optimize_quality.value()
+        if not stamp_enabled:
+            watermark_text = ""
+            page_numbering = False
+            stamp_ranges = None
+
+        def task() -> str:
+            result = process_pdf_pipeline(
+                source, output,
+                rotate_angle=rotate_angle,
+                rotate_ranges=rotate_ranges,
+                watermark_text=watermark_text or None,
+                page_numbering=page_numbering,
+                stamp_ranges=stamp_ranges,
+                optimize_mode=optimize_mode,
+                quality=quality,
+                password=password,
+                file_mode=file_mode,
+            )
+            return self._t("Fluxo em lote concluído: {path}").format(path=result)
+
+        self._run_task(
+            self._t("Executando fluxo em lote…"), task, output_location=output
+        )
 
     def _build_convert_tab(self) -> QWidget:
         page, layout = self._new_page(
