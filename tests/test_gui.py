@@ -9,7 +9,7 @@ import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtPdf import QPdfDocument
 from pypdf import PdfWriter
-from PySide6.QtWidgets import QApplication, QAbstractItemView, QLineEdit, QListWidget, QListWidgetItem
+from PySide6.QtWidgets import QApplication, QAbstractItemView, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton
 
 from document_tools.gui import APP_NAME, DocumentToolsWindow, PageThumbnailWorker
 
@@ -105,7 +105,7 @@ def test_language_selector_translates_tabs_into_english_and_spanish(qt_app: QApp
         assert "Watermark and page numbers" in english_tabs
         assert "Optimize PDF" in english_tabs
         assert "Batch workflow" in english_tabs
-        english_buttons = [button.text() for button in window.findChildren(__import__("PySide6").QtWidgets.QPushButton)]
+        english_buttons = [button.text() for button in window.findChildren(QPushButton)]
         assert "Save profile" in english_buttons
         assert "Load profile" in english_buttons
         assert "Delete profile" in english_buttons
@@ -275,7 +275,6 @@ def test_reorder_grid_renders_page_thumbnails(qt_app: QApplication, tmp_path) ->
             item.setData(Qt.ItemDataRole.UserRole, page_number)
             window.reorder_list.addItem(item)
             window._reorder_items_by_page[page_number] = item
-            from PySide6.QtGui import QImage
             image = QImage(width, height, QImage.Format.Format_RGB32)
             image.fill(0xFFFFFFFF)
             window._set_reorder_thumbnail(page_number, image)
@@ -339,7 +338,6 @@ def test_pipeline_profile_saves_loads_and_deletes_options_without_paths_or_passw
         assert window._capture_pipeline_profile() == expected
         assert window.pipeline_password.text() == ""
 
-        from PySide6.QtWidgets import QMessageBox
         monkeypatch.setattr(
             "document_tools.gui.QMessageBox.question",
             lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
