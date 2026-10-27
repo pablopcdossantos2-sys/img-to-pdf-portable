@@ -328,6 +328,8 @@ TRANSLATIONS = {
         "Retomar lote interrompido, se aplicável": "Resume an interrupted batch when possible",
         "Usa resultados salvos somente quando a origem, o destino, o perfil e a lista de PDFs não mudaram. Desmarque para iniciar do zero.": "Reuse saved results only when the source, destination, profile, and PDF list are unchanged. Uncheck to start from scratch.",
         "Concluído antes da interrupção; resultado reutilizado.": "Completed before the interruption; reusing this result.",
+        "Reprocessar apenas falhas": "Retry failed PDFs only",
+        "Não há PDFs com falha para reprocessar.": "There are no failed PDFs to retry.",
         "Pausar lote": "Pause batch",
         "Retomar lote": "Resume batch",
         "Cancelar lote": "Cancel batch",
@@ -597,6 +599,8 @@ TRANSLATIONS = {
         "Retomar lote interrompido, se aplicável": "Reanudar un lote interrumpido cuando sea posible",
         "Usa resultados salvos somente quando a origem, o destino, o perfil e a lista de PDFs não mudaram. Desmarque para iniciar do zero.": "Reutiliza resultados guardados solo si no cambiaron el origen, el destino, el perfil ni la lista de PDF. Desmarca para empezar desde cero.",
         "Concluído antes da interrupção; resultado reutilizado.": "Completado antes de la interrupción; se reutiliza este resultado.",
+        "Reprocessar apenas falhas": "Reprocesar solo los PDF fallidos",
+        "Não há PDFs com falha para reprocessar.": "No hay PDF fallidos para volver a procesar.",
         "Pausar lote": "Pausar lote",
         "Retomar lote": "Reanudar lote",
         "Cancelar lote": "Cancelar lote",
@@ -720,13 +724,17 @@ class OperationWorker(QThread):
 
 
 class BatchFolderWorker(QThread):
-    """Process a directory in the background, reporting progress and item results."""
+    """Process a folder in the background with retryable per-file results."""
     progress = Signal(int, int, str)
     succeeded = Signal(object, bool)
     failed = Signal(str)
 
-    def __init__(self, source_directory: str, output_directory: str, profile: dict[str, object],
-                 *, recursive: bool, file_mode: int, resume: bool, control: BatchControl) -> None:
+    def __init__(
+        self, source_directory: str, output_directory: str, profile: dict[str, object],
+        *, recursive: bool, file_mode: int, resume: bool, control: BatchControl,
+        only_sources: list[str] | None = None,
+        initial_results: list[BatchFileResult] | None = None,
+    ) -> None:
         super().__init__()
         self._source_directory = source_directory
         self._output_directory = output_directory
@@ -735,6 +743,8 @@ class BatchFolderWorker(QThread):
         self._file_mode = file_mode
         self._resume = resume
         self._control = control
+        self._only_sources = only_sources
+        self._initial_results = initial_results
 
     def run(self) -> None:
         try:
@@ -744,6 +754,8 @@ class BatchFolderWorker(QThread):
                 progress_callback=lambda done, total, name: self.progress.emit(done, total, name),
                 resume=self._resume,
                 control=self._control,
+                only_sources=self._only_sources,
+                initial_results=self._initial_results,
             )
         except Exception as error:
             self.failed.emit(friendly_error_message(error))
@@ -768,6 +780,11 @@ class DocumentToolsWindow(QMainWindow):
         self._batch_control: BatchControl | None = None
         self._folder_batch_running = False
         self._folder_batch_tab_index = -1
+        self._last_batch_profile: dict[str, object] | None = None
+        self._last_batch_source_directory: str | None = None
+        self._last_batch_output_directory: str | None = None
+        self._last_batch_recursive = False
+        self._last_batch_file_mode = 0o600
         self._pending_output_directory: Path | None = None
         self._split_custom_directory = False
         self.reorder_thumbnail_worker: PageThumbnailWorker | None = None
@@ -1350,6 +1367,10 @@ class DocumentToolsWindow(QMainWindow):
             self.batch_pause_button.setText(self._t("Pausar lote"))
             self.batch_pause_button.setEnabled(False)
             self.batch_cancel_button.setEnabled(False)
+            self.batch_reprocess_failures_button.setEnabled(
+                any(not item.success for item in self.batch_results)
+                and self._last_batch_profile is not None
+            )
             self._folder_batch_running = False
             self._batch_control = None
         else:
@@ -2736,6 +2757,10 @@ class DocumentToolsWindow(QMainWindow):
         self.batch_run_button.setObjectName("primaryButton")
         self.batch_run_button.clicked.connect(self._run_pipeline_folder)
         actions.addWidget(self.batch_run_button)
+        self.batch_reprocess_failures_button = QPushButton("Reprocessar apenas falhas")
+        self.batch_reprocess_failures_button.setEnabled(False)
+        self.batch_reprocess_failures_button.clicked.connect(self._rerun_failed_batch_files)
+        actions.addWidget(self.batch_reprocess_failures_button)
         self.batch_pause_button = QPushButton("Pausar lote")
         self.batch_pause_button.setEnabled(False)
         self.batch_pause_button.clicked.connect(self._toggle_batch_pause)
@@ -2802,13 +2827,73 @@ class DocumentToolsWindow(QMainWindow):
         )
         if not accepted or name not in profiles:
             return
+
+        self._last_batch_profile = dict(profiles[name])
+        self._last_batch_source_directory = str(Path(source).expanduser().resolve())
+        self._last_batch_output_directory = str(Path(output).expanduser().resolve())
+        self._last_batch_recursive = self.batch_include_subfolders.isChecked()
+        self._last_batch_file_mode = self._output_file_mode()
+        self._start_folder_batch(
+            self._last_batch_source_directory,
+            self._last_batch_output_directory,
+            self._last_batch_profile,
+            recursive=self._last_batch_recursive,
+            file_mode=self._last_batch_file_mode,
+            resume=self.batch_resume_checkbox.isChecked(),
+        )
+
+    def _rerun_failed_batch_files(self) -> None:
+        failed_sources = [item.source_path for item in self.batch_results if not item.success]
+        if not failed_sources:
+            QMessageBox.information(
+                self, self._t("Reprocessar apenas falhas"),
+                self._t("Não há PDFs com falha para reprocessar."),
+            )
+            return
+        if (
+            self._last_batch_profile is None
+            or self._last_batch_source_directory is None
+            or self._last_batch_output_directory is None
+            or not Path(self._last_batch_source_directory).is_dir()
+            or not Path(self._last_batch_output_directory).is_dir()
+        ):
+            QMessageBox.warning(
+                self, self._t("Reprocessar apenas falhas"),
+                self._t("A pasta original ou de saída não está disponível. Selecione as pastas e execute o lote novamente."),
+            )
+            return
+        self._start_folder_batch(
+            self._last_batch_source_directory,
+            self._last_batch_output_directory,
+            dict(self._last_batch_profile),
+            recursive=self._last_batch_recursive,
+            file_mode=self._last_batch_file_mode,
+            resume=True,
+            only_sources=failed_sources,
+            initial_results=list(self.batch_results),
+        )
+
+    def _start_folder_batch(
+        self,
+        source: str,
+        output: str,
+        profile: dict[str, object],
+        *,
+        recursive: bool,
+        file_mode: int,
+        resume: bool,
+        only_sources: list[str] | None = None,
+        initial_results: list[BatchFileResult] | None = None,
+    ) -> None:
         self._batch_control = BatchControl()
         worker = BatchFolderWorker(
-            source, output, profiles[name],
-            recursive=self.batch_include_subfolders.isChecked(),
-            file_mode=self._output_file_mode(),
-            resume=self.batch_resume_checkbox.isChecked(),
+            source, output, profile,
+            recursive=recursive,
+            file_mode=file_mode,
+            resume=resume,
             control=self._batch_control,
+            only_sources=only_sources,
+            initial_results=initial_results,
         )
         self._worker = worker
         self._folder_batch_running = True
@@ -2820,6 +2905,7 @@ class DocumentToolsWindow(QMainWindow):
         for tab_index in range(self.tabs.count()):
             self.tabs.setTabEnabled(tab_index, tab_index == self._folder_batch_tab_index)
         self.batch_run_button.setEnabled(False)
+        self.batch_reprocess_failures_button.setEnabled(False)
         self.batch_choose_source_button.setEnabled(False)
         self.batch_choose_output_button.setEnabled(False)
         self.batch_include_subfolders.setEnabled(False)
@@ -2888,6 +2974,9 @@ class DocumentToolsWindow(QMainWindow):
             successes += int(result.success)
             failures += int(not result.success)
         self.batch_report_button.setEnabled(bool(results))
+        self.batch_reprocess_failures_button.setEnabled(
+            any(not item.success for item in results) and self._last_batch_profile is not None
+        )
         if cancelled:
             self.status_label.setText(self._t(
                 "Lote cancelado com segurança após {completed} arquivo(s). O progresso foi preservado; execute novamente com a retomada ativada."
