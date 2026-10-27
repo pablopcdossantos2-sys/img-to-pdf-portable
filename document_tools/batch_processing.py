@@ -1,6 +1,9 @@
-"""Process a folder of PDFs with a reusable PDF Hub workflow profile."""
+"""Process a folder of PDFs with resumable, reusable PDF Hub workflow profiles."""
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -8,6 +11,11 @@ from typing import Callable
 from document_tools.errors import friendly_error_message
 from document_tools.pdf_ops import process_pdf_pipeline
 from document_tools.profiles import migrate_local_profile
+
+
+CHECKPOINT_FILENAME = ".pdf-hub-batch-state.json"
+_CHECKPOINT_VERSION = 1
+_RESUMED_MESSAGE = "Concluído antes da interrupção; resultado reutilizado."
 
 
 @dataclass(frozen=True)
@@ -30,6 +38,116 @@ def _unique_output_path(directory: Path, stem: str, suffix: str) -> Path:
     return candidate
 
 
+def _batch_fingerprint(
+    source_root: Path,
+    output_root: Path,
+    recursive: bool,
+    settings: dict[str, object],
+    sources: list[Path],
+) -> str:
+    inventory: list[dict[str, object]] = []
+    for source in sources:
+        relative = source.relative_to(source_root).as_posix()
+        try:
+            stat = source.stat()
+            size: int | None = stat.st_size
+            modified_ns: int | None = stat.st_mtime_ns
+        except OSError:
+            size = None
+            modified_ns = None
+        inventory.append({"path": relative, "size": size, "modified_ns": modified_ns})
+    identity = {
+        "source_root": str(source_root),
+        "output_root": str(output_root),
+        "recursive": recursive,
+        "profile": settings,
+        "files": inventory,
+    }
+    encoded = json.dumps(identity, sort_keys=True, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _write_checkpoint(
+    checkpoint_path: Path,
+    fingerprint: str,
+    results: dict[str, dict[str, object]],
+    *,
+    completed: bool = False,
+) -> None:
+    """Atomically persist per-file progress so a later run can safely resume."""
+    temporary_path = checkpoint_path.with_name(checkpoint_path.name + ".tmp")
+    payload = {
+        "version": _CHECKPOINT_VERSION,
+        "fingerprint": fingerprint,
+        "completed": completed,
+        "results": results,
+    }
+    try:
+        with temporary_path.open("w", encoding="utf-8", newline="\n") as stream:
+            json.dump(payload, stream, ensure_ascii=False, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        if os.name != "nt":
+            os.chmod(temporary_path, 0o600)
+        os.replace(temporary_path, checkpoint_path)
+    finally:
+        try:
+            temporary_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _read_checkpoint(
+    checkpoint_path: Path,
+    fingerprint: str,
+    valid_relative_paths: set[str],
+    output_root: Path,
+) -> dict[str, dict[str, object]]:
+    """Read only matching, well-formed records and reuse successful existing outputs."""
+    try:
+        payload = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {}
+    if (
+        not isinstance(payload, dict)
+        or type(payload.get("version")) is not int
+        or payload.get("version") != _CHECKPOINT_VERSION
+        or payload.get("fingerprint") != fingerprint
+        or payload.get("completed") is True
+        or not isinstance(payload.get("results"), dict)
+    ):
+        return {}
+
+    reusable: dict[str, dict[str, object]] = {}
+    for relative, item in payload["results"].items():
+        if relative not in valid_relative_paths or not isinstance(item, dict):
+            continue
+        success = item.get("success")
+        message = item.get("message")
+        if not isinstance(success, bool) or not isinstance(message, str):
+            continue
+        if success:
+            raw_output_path = item.get("output_path")
+            if not isinstance(raw_output_path, str) or not raw_output_path:
+                continue
+            try:
+                output_path = Path(raw_output_path).expanduser().resolve()
+                is_safe_output = output_path.is_file() and output_root in output_path.parents
+            except (OSError, RuntimeError, ValueError):
+                is_safe_output = False
+            if not is_safe_output:
+                continue
+            reusable[relative] = {
+                "success": True,
+                "output_path": str(output_path),
+                "message": message,
+            }
+        else:
+            reusable[relative] = {"success": False, "output_path": "", "message": message}
+    return reusable
+
+
 def process_pdf_folder(
     source_directory: str | Path,
     output_directory: str | Path,
@@ -38,11 +156,14 @@ def process_pdf_folder(
     recursive: bool = False,
     file_mode: int = 0o600,
     progress_callback: ProgressCallback | None = None,
+    resume: bool = False,
 ) -> list[BatchFileResult]:
-    """Apply a profile to each PDF; failures are recorded without stopping the batch.
+    """Apply a profile to each PDF, optionally resuming an interrupted batch.
 
-    Source PDFs are never modified. Existing output files are preserved by selecting
-    a numbered alternative. Recursive runs mirror the source's relative subfolders.
+    Successful files recorded in a matching checkpoint are reused only when the
+    source/output folders, profile, recursion setting, and source-file inventory
+    still match. Failed files are retried. Originals are never modified and
+    existing output files are preserved by choosing a numbered alternative.
     """
     source_root = Path(source_directory).expanduser().resolve()
     output_root = Path(output_directory).expanduser().resolve()
@@ -73,30 +194,66 @@ def process_pdf_folder(
         raise ValueError("A pasta selecionada não contém arquivos PDF.")
 
     suffix = str(settings["output_suffix"])
+    checkpoint_path = output_root / CHECKPOINT_FILENAME
+    fingerprint = _batch_fingerprint(source_root, output_root, recursive, settings, sources)
+    relative_paths = {source.relative_to(source_root).as_posix() for source in sources}
+    previous = (
+        _read_checkpoint(checkpoint_path, fingerprint, relative_paths, output_root)
+        if resume and checkpoint_path.is_file()
+        else {}
+    )
+    # Write an initial checkpoint before opening the first PDF, then update it
+    # after every file. A mismatch intentionally starts a new batch.
+    result_state = dict(previous)
+    _write_checkpoint(checkpoint_path, fingerprint, result_state)
+
     results: list[BatchFileResult] = []
     total = len(sources)
     for completed, source in enumerate(sources, start=1):
-        try:
-            relative_parent = source.parent.relative_to(source_root) if recursive else Path()
-            target_directory = output_root / relative_parent
-            target_directory.mkdir(parents=True, exist_ok=True)
-            destination = _unique_output_path(target_directory, source.stem, suffix)
-            process_pdf_pipeline(
-                source, destination,
-                rotate_angle=int(settings["rotate_angle"]) if rotate_enabled else None,
-                rotate_ranges=(str(settings["rotate_ranges"]).strip() or None) if rotate_enabled else None,
-                watermark_text=watermark_text or None,
-                page_numbering=page_numbering,
-                stamp_ranges=(str(settings["stamp_ranges"]).strip() or None) if stamp_enabled else None,
-                optimize_mode=str(settings["optimize_mode"]) if optimize_enabled else None,
-                quality=int(settings["quality"]),
-                password=None,
-                file_mode=file_mode,
-            )
-            result = BatchFileResult(str(source), True, str(destination), "Processado com sucesso.")
-        except Exception as error:
-            result = BatchFileResult(str(source), False, "", friendly_error_message(error))
+        relative = source.relative_to(source_root).as_posix()
+        stored = previous.get(relative)
+        if stored is not None and stored.get("success") is True:
+            result = BatchFileResult(str(source), True, str(stored["output_path"]), _RESUMED_MESSAGE)
+        else:
+            try:
+                relative_parent = source.parent.relative_to(source_root) if recursive else Path()
+                target_directory = output_root / relative_parent
+                target_directory.mkdir(parents=True, exist_ok=True)
+                destination = _unique_output_path(target_directory, source.stem, suffix)
+                process_pdf_pipeline(
+                    source, destination,
+                    rotate_angle=int(settings["rotate_angle"]) if rotate_enabled else None,
+                    rotate_ranges=(str(settings["rotate_ranges"]).strip() or None) if rotate_enabled else None,
+                    watermark_text=watermark_text or None,
+                    page_numbering=page_numbering,
+                    stamp_ranges=(str(settings["stamp_ranges"]).strip() or None) if stamp_enabled else None,
+                    optimize_mode=str(settings["optimize_mode"]) if optimize_enabled else None,
+                    quality=int(settings["quality"]),
+                    password=None,
+                    file_mode=file_mode,
+                )
+                result = BatchFileResult(str(source), True, str(destination), "Processado com sucesso.")
+            except Exception as error:
+                result = BatchFileResult(str(source), False, "", friendly_error_message(error))
+
+            result_state[relative] = {
+                "success": result.success,
+                "output_path": result.output_path,
+                "message": result.message,
+            }
+            _write_checkpoint(checkpoint_path, fingerprint, result_state)
+
         results.append(result)
         if progress_callback is not None:
             progress_callback(completed, total, source.name)
+
+    # Mark completion before cleanup. If cleanup is blocked, the completed
+    # checkpoint is ignored on the next run instead of suppressing a new batch.
+    try:
+        _write_checkpoint(checkpoint_path, fingerprint, result_state, completed=True)
+    finally:
+        try:
+            checkpoint_path.unlink()
+        except OSError:
+            pass
     return results
