@@ -1,8 +1,11 @@
 from __future__ import annotations
+
 from pathlib import Path
+
 import pytest
+
 import document_tools.batch_processing as batch
-from document_tools.batch_processing import process_pdf_folder
+from document_tools.batch_processing import CHECKPOINT_FILENAME, process_pdf_folder
 
 
 def make_profile() -> dict[str, object]:
@@ -16,7 +19,8 @@ def make_profile() -> dict[str, object]:
 
 def test_folder_batch_records_per_file_failures_and_never_overwrites(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     source, output = tmp_path / "input", tmp_path / "output"
-    source.mkdir(); output.mkdir()
+    source.mkdir()
+    output.mkdir()
     for name in ("a.pdf", "b.pdf", "bad.pdf"):
         (source / name).write_bytes(b"fake pdf")
     existing = output / "a-processed.pdf"
@@ -33,7 +37,10 @@ def test_folder_batch_records_per_file_failures_and_never_overwrites(tmp_path: P
 
     monkeypatch.setattr(batch, "process_pdf_pipeline", fake_pipeline)
     progress: list[tuple[int, int, str]] = []
-    results = process_pdf_folder(source, output, make_profile(), progress_callback=lambda done, total, name: progress.append((done, total, name)))
+    results = process_pdf_folder(
+        source, output, make_profile(),
+        progress_callback=lambda done, total, name: progress.append((done, total, name)),
+    )
     assert [Path(item.source_path).name for item in results] == ["a.pdf", "b.pdf", "bad.pdf"]
     assert [item.success for item in results] == [True, True, False]
     assert Path(results[0].output_path).name == "a-processed-2.pdf"
@@ -42,11 +49,13 @@ def test_folder_batch_records_per_file_failures_and_never_overwrites(tmp_path: P
     assert results[2].output_path == "" and "simulated malformed PDF" in results[2].message
     assert processed == ["a.pdf", "b.pdf", "bad.pdf"]
     assert [entry[0] for entry in progress] == [1, 2, 3] and all(entry[1] == 3 for entry in progress)
+    assert not (output / CHECKPOINT_FILENAME).exists()
 
 
 def test_recursive_batch_preserves_subfolder_layout_and_matches_uppercase_pdf(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     source, output = tmp_path / "input", tmp_path / "output"
-    (source / "nested").mkdir(parents=True); output.mkdir()
+    (source / "nested").mkdir(parents=True)
+    output.mkdir()
     (source / "top.PDF").write_bytes(b"fake")
     (source / "nested" / "inside.pdf").write_bytes(b"fake")
 
@@ -61,19 +70,94 @@ def test_recursive_batch_preserves_subfolder_layout_and_matches_uppercase_pdf(tm
     assert (output / "nested" / "inside-processed.pdf").exists()
 
 
+def test_folder_batch_resumes_without_reprocessing_recorded_successes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source, output = tmp_path / "input", tmp_path / "output"
+    source.mkdir()
+    output.mkdir()
+    (source / "a.pdf").write_bytes(b"fake a")
+    (source / "b.pdf").write_bytes(b"fake b")
+    processed: list[str] = []
+
+    def fake_pipeline(input_path, output_path, **kwargs):
+        processed.append(Path(input_path).name)
+        Path(output_path).write_bytes(b"processed")
+        return Path(output_path)
+
+    monkeypatch.setattr(batch, "process_pdf_pipeline", fake_pipeline)
+
+    def simulate_interruption(done: int, total: int, name: str) -> None:
+        if done == 1:
+            raise RuntimeError("simulated interruption after checkpoint")
+
+    with pytest.raises(RuntimeError, match="simulated interruption"):
+        process_pdf_folder(
+            source, output, make_profile(), resume=True,
+            progress_callback=simulate_interruption,
+        )
+    assert (output / CHECKPOINT_FILENAME).is_file()
+    assert processed == ["a.pdf"]
+
+    results = process_pdf_folder(source, output, make_profile(), resume=True)
+    assert [Path(result.source_path).name for result in results] == ["a.pdf", "b.pdf"]
+    assert all(result.success for result in results)
+    assert results[0].message == "Concluído antes da interrupção; resultado reutilizado."
+    assert processed == ["a.pdf", "b.pdf"]
+    assert not (output / CHECKPOINT_FILENAME).exists()
+
+
+def test_resume_starts_fresh_when_profile_or_inventory_changes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source, output = tmp_path / "input", tmp_path / "output"
+    source.mkdir()
+    output.mkdir()
+    (source / "a.pdf").write_bytes(b"fake a")
+    (source / "b.pdf").write_bytes(b"fake b")
+    processed: list[str] = []
+
+    def fake_pipeline(input_path, output_path, **kwargs):
+        processed.append(Path(input_path).name)
+        Path(output_path).write_bytes(b"processed")
+        return Path(output_path)
+
+    monkeypatch.setattr(batch, "process_pdf_pipeline", fake_pipeline)
+
+    def simulate_interruption(done: int, total: int, name: str) -> None:
+        if done == 1:
+            raise RuntimeError("simulated interruption after checkpoint")
+
+    original_profile = make_profile()
+    with pytest.raises(RuntimeError, match="simulated interruption"):
+        process_pdf_folder(
+            source, output, original_profile, resume=True,
+            progress_callback=simulate_interruption,
+        )
+
+    changed_profile = make_profile()
+    changed_profile["output_suffix"] = "-different"
+    results = process_pdf_folder(source, output, changed_profile, resume=True)
+    assert all(result.success for result in results)
+    assert processed == ["a.pdf", "a.pdf", "b.pdf"]
+    assert (output / "a-processed.pdf").exists()
+    assert (output / "a-different.pdf").exists()
+
+
 def test_folder_batch_rejects_output_inside_source_and_empty_folder(tmp_path: Path) -> None:
     source = tmp_path / "input"
-    source.mkdir(); (source / "subfolder").mkdir()
+    source.mkdir()
+    (source / "subfolder").mkdir()
     with pytest.raises(ValueError, match="pasta de saída"):
         process_pdf_folder(source, source / "subfolder", make_profile())
-    output = tmp_path / "output"; output.mkdir()
+    output = tmp_path / "output"
+    output.mkdir()
     with pytest.raises(ValueError, match="não contém arquivos PDF"):
-        process_pdf_folder(source, output, make_profile())
+        process_pdf_folder(source, output)
 
 
 def test_batch_requires_at_least_one_active_operation(tmp_path: Path) -> None:
     source, output = tmp_path / "input", tmp_path / "output"
-    source.mkdir(); output.mkdir(); (source / "one.pdf").write_bytes(b"fake")
-    profile = make_profile(); profile["rotate_enabled"] = False
+    source.mkdir()
+    output.mkdir()
+    (source / "one.pdf").write_bytes(b"fake")
+    profile = make_profile()
+    profile["rotate_enabled"] = False
     with pytest.raises(ValueError, match="pelo menos uma etapa"):
         process_pdf_folder(source, output, profile)
