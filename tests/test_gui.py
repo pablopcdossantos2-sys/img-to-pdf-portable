@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -497,7 +498,8 @@ def test_settings_theme_icon_and_left_navigation(qt_app: QApplication) -> None:
         assert window.tabs.tabText(window.settings_tab_index) == "Configurações"
         assert window.output_permissions.currentData() in (0o600, 0o644)
         assert window.output_permissions_info.text() == "ⓘ"
-        assert "Linux/macOS" in window.output_permissions_info.toolTip()
+        assert window.output_permissions_info.toolTip() == "Sobre permissões de saída"
+        assert window.output_permissions_info.accessibleName() == "Sobre permissões de saída"
         assert window.image_margin.value() == 0
         assert window.image_list.acceptDrops()
         labels = {label.text() for label in window.findChildren(QLabel)}
