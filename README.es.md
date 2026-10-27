@@ -6,9 +6,12 @@ Aplicación de escritorio para trabajar localmente con archivos PDF e imágenes,
 
 **Descarga:** [Descargar PDF Hub para Windows, Linux o macOS](https://github.com/pablopcdossantos2-sys/img-to-pdf-portable/releases/latest).
 
+> El enlace anterior apunta a la última versión publicada. Los cambios en la rama `main` no se incluyen en las descargas hasta que se publique una nueva versión.
+
 ## Funcionalidades
 
 ### Herramientas para PDF
+- **Interfaz y entrada rápida:** navegación lateral, temas claro/oscuro en Configuración, importación de imágenes mediante arrastrar y soltar, recomendación automática de DPI a partir de las dimensiones y margen inicial de 0 mm.
 
 - **Imágenes a PDF:** convierte imágenes JPG, JPEG, PNG, BMP, WEBP, TIFF y GIF en páginas A4, eligiendo la orientación y conservando las proporciones. Por defecto, importa todas las páginas/fotogramas de archivos multipágina o animados, con una opción para usar solo el primero. La transparencia se coloca sobre fondo blanco.
 - **Unir PDF:** combina archivos en el orden elegido, solicita contraseñas para los PDFs protegidos e intenta conservar marcadores, metadatos y referencias internas compatibles.

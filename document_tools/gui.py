@@ -386,6 +386,7 @@ TRANSLATIONS = {
         "Não foi possível gerar o relatório individual do lote.": "Could not generate the individual batch report.",
         "Configurações": "Settings",
         "Defina o idioma, o tema visual e as permissões dos arquivos gerados.": "Choose the interface language, visual theme, and permissions for generated files.",
+        "As permissões de saída se aplicam aos arquivos que o PDF Hub cria. O modo 0600 é a opção mais restritiva.": "Output permissions apply to files created by PDF Hub. Mode 0600 is the more restrictive option.",
         "Modo de aparência": "Appearance",
         "Modo claro": "Light mode",
         "Modo escuro": "Dark mode",
@@ -394,6 +395,7 @@ TRANSLATIONS = {
         "Arraste imagens para esta área ou use “Adicionar imagens”.": "Drop images here or use “Add images”.",
         "Resolução estimada automaticamente a partir das dimensões em pixels das imagens; você pode ajustá-la manualmente.": "Automatically estimated from the images' pixel dimensions; you can adjust it manually.",
         "Calculando resolução a partir das imagens.": "Estimating resolution from images.",
+        "Resolução recomendada calculada a partir das imagens.": "Recommended resolution calculated from the images.",
     },
     "es": {
         "PDF e imagens • v{version} • organizado, seguro e local": "PDF e imágenes • v{version} • organizado, seguro y local",
@@ -680,6 +682,7 @@ TRANSLATIONS = {
         "Não foi possível gerar o relatório individual do lote.": "No se pudo generar el informe individual del lote.",
         "Configurações": "Configuración",
         "Defina o idioma, o tema visual e as permissões dos arquivos gerados.": "Elige el idioma de la interfaz, el tema visual y los permisos de los archivos generados.",
+        "As permissões de saída se aplicam aos arquivos que o PDF Hub cria. O modo 0600 é a opção mais restritiva.": "Los permisos de salida se aplican a los archivos creados por PDF Hub. El modo 0600 es la opción más restrictiva.",
         "Modo de aparência": "Apariencia",
         "Modo claro": "Modo claro",
         "Modo escuro": "Modo oscuro",
@@ -688,6 +691,7 @@ TRANSLATIONS = {
         "Arraste imagens para esta área ou use “Adicionar imagens”.": "Arrastra imágenes aquí o usa «Añadir imágenes».",
         "Resolução estimada automaticamente a partir das dimensões em pixels das imagens; você pode ajustá-la manualmente.": "Resolución estimada automáticamente a partir de las dimensiones en píxeles de las imágenes; puedes ajustarla manualmente.",
         "Calculando resolução a partir das imagens.": "Calculando la resolución a partir de las imágenes.",
+        "Resolução recomendada calculada a partir das imagens.": "Resolución recomendada calculada a partir de las imágenes.",
     }
 }
 
@@ -1357,8 +1361,8 @@ class DocumentToolsWindow(QMainWindow):
     def _new_page(self, title: str, description: str) -> tuple[QWidget, QVBoxLayout]:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(13)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
         title_label = QLabel(title)
         title_label.setObjectName("sectionTitle")
         description_label = QLabel(description)
@@ -1600,10 +1604,6 @@ class DocumentToolsWindow(QMainWindow):
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         form.setHorizontalSpacing(12)
         form.setVerticalSpacing(10)
-        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
-        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        form.setHorizontalSpacing(12)
-        form.setVerticalSpacing(10)
 
         self.language_combo = QComboBox()
         self.language_combo.addItem("Português (Brasil)", "pt")
@@ -1762,7 +1762,7 @@ class DocumentToolsWindow(QMainWindow):
         recommended = recommend_dpi_from_images(sources, margin_mm=self.image_margin.value())
         if recommended is not None:
             self.image_dpi.setValue(recommended)
-            self.status_label.setText(self._t("Calculando resolução a partir das imagens."))
+            self.status_label.setText(self._t("Resolução recomendada calculada a partir das imagens."))
 
     @staticmethod
     def _remove_selected(list_widget: QListWidget) -> None:

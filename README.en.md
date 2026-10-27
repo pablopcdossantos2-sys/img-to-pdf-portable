@@ -6,9 +6,12 @@ A desktop application for working with PDF files and images locally, built with 
 
 **Download:** [Get PDF Hub for Windows, Linux, or macOS](https://github.com/pablopcdossantos2-sys/img-to-pdf-portable/releases/latest).
 
+> The link above points to the latest published version. Changes on the `main` branch are not included in downloads until a new release is published.
+
 ## Features
 
 ### PDF tools
+- **Interface and quick image input:** left-side navigation, light/dark appearance in Settings, drag-and-drop image import, automatic DPI recommendation from image dimensions, and a default 0 mm margin.
 
 - **Images to PDF:** convert JPG, JPEG, PNG, BMP, WEBP, TIFF, and GIF images into A4 pages, automatically choosing orientation and preserving aspect ratio. By default, all pages/frames in multipage or animated files are imported, with an option to use only the first. Transparency is placed on white.
 - **Merge PDFs:** combine files in the chosen order, prompt for protected PDFs' passwords, and attempt to preserve compatible bookmarks, metadata, and internal references.

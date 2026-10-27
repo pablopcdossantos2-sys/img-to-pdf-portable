@@ -11,9 +11,10 @@ from PySide6.QtPdf import QPdfDocument
 from PySide6.QtGui import QImage
 from pypdf import PdfWriter
 from pypdf.errors import PdfReadError
-from PySide6.QtWidgets import QApplication, QAbstractItemView, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton
+from PySide6.QtWidgets import QApplication, QAbstractItemView, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton
+from PIL import Image as PILImage
 
-from document_tools.gui import APP_NAME, DocumentToolsWindow, OperationWorker, PageThumbnailWorker
+from document_tools.gui import APP_NAME, DocumentToolsWindow, ImageDropList, OperationWorker, PageThumbnailWorker, SideNavigationWidget
 
 
 @pytest.fixture(scope="module")
@@ -479,6 +480,86 @@ def test_external_pdf_errors_have_translatable_user_friendly_messages(qt_app: QA
         assert window._t(message) == "El PDF contiene una estructura no compatible o está dañado. Intenta guardar una copia nueva antes de procesarlo."
     finally:
         window.language_combo.setCurrentIndex(window.language_combo.findData("pt"))
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+
+def test_settings_theme_icon_and_left_navigation(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    previous_theme = window.settings.value("theme", None)
+    previous_language = window.language_combo.currentData()
+    try:
+        assert isinstance(window.tabs, SideNavigationWidget)
+        assert not window.windowIcon().isNull()
+        assert window.tabs.tabText(window.settings_tab_index) == "Configurações"
+        assert window.output_permissions.currentData() in (0o600, 0o644)
+        assert window.output_permissions_info.text() == "ⓘ"
+        assert "Linux/macOS" in window.output_permissions_info.toolTip()
+        assert window.image_margin.value() == 0
+        assert window.image_list.acceptDrops()
+        labels = {label.text() for label in window.findChildren(QLabel)}
+        assert "O que vamos organizar hoje?" not in labels
+        assert "Escolha uma ferramenta abaixo. Os arquivos de origem são preservados." not in labels
+
+        dark_index = window.theme_combo.findData("dark")
+        assert dark_index >= 0
+        window.theme_combo.setCurrentIndex(dark_index)
+        assert window._theme == "dark"
+        assert window.settings.value("theme") == "dark"
+        assert "#111827" in window.styleSheet()
+
+        window.language_combo.setCurrentIndex(window.language_combo.findData("en"))
+        assert window.tabs.tabText(window.settings_tab_index) == "Settings"
+        window.language_combo.setCurrentIndex(window.language_combo.findData("es"))
+        assert window.tabs.tabText(window.settings_tab_index) == "Configuración"
+    finally:
+        if previous_theme is None:
+            window.settings.remove("theme")
+            window._theme = "light"
+            window.setStyleSheet(window._stylesheet("light"))
+        else:
+            previous_theme_text = str(previous_theme)
+            theme_index = window.theme_combo.findData(previous_theme_text)
+            if theme_index >= 0:
+                window.theme_combo.setCurrentIndex(theme_index)
+            window.settings.setValue("theme", previous_theme)
+        window.language_combo.setCurrentIndex(window.language_combo.findData(previous_language))
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_image_dpi_is_estimated_after_adding_a_source_image(
+    qt_app: QApplication, tmp_path: Path
+) -> None:
+    image_path = tmp_path / "a4-300dpi.png"
+    with PILImage.new("RGB", (2480, 3508), "white") as image:
+        image.save(image_path)
+
+    window = DocumentToolsWindow()
+    try:
+        assert DocumentToolsWindow._add_paths(window.image_list, [str(image_path)]) == 1
+        window._update_image_dpi_from_sources()
+        assert window.image_dpi.value() == 300
+        assert window.image_margin.value() == 0
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_desktop_is_the_default_folder_for_save_dialogs(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    try:
+        desktop = window._desktop_directory()
+        assert desktop.is_dir()
+        assert Path(window._default_save_path("sample.pdf")).parent == desktop
+    finally:
         window.close()
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)

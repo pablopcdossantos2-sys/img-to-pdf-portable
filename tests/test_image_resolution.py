@@ -29,7 +29,7 @@ def test_margin_changes_recommended_density_and_values_are_clamped(tmp_path: Pat
     image_path = create_image(tmp_path / "image.png", (2480, 3508))
     no_margin = recommend_dpi_from_images([image_path], margin_mm=0)
     margin = recommend_dpi_from_images([image_path], margin_mm=10)
-    oversized = create_image(tmp_path / "oversized.png", (12000, 17000))
+    oversized = create_image(tmp_path / "oversized.png", (5000, 7000))
     tiny = create_image(tmp_path / "tiny.png", (80, 80))
 
     assert no_margin == 300
