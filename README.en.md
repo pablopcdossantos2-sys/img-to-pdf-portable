@@ -38,7 +38,7 @@ A desktop application for working with PDF files and images locally, built with 
 - **Quality note:** balanced optimization may reduce image quality and cannot guarantee a smaller result for every PDF; keep the original and compare outputs. Watermarks use the built-in Helvetica font and may not support every Unicode character.
 - Automated tests and dependency auditing run in GitHub Actions. The workflow validates Windows, Linux, and macOS packages and generates SHA-256 checksums.
 
-## Use on Windows without installing Python
+## Download portable packages
 
 The **PDF Hub CI, security and packages** workflow tests the app and builds portable packages for Windows x64, Linux x64, and macOS Apple Silicon. On pushes to `main`, download validation artifacts from [Actions](https://github.com/pablopcdossantos2-sys/img-to-pdf-portable/actions); permanent releases are created from `v*` tags.
 
@@ -50,7 +50,7 @@ The **PDF Hub CI, security and packages** workflow tests the app and builds port
 
 The artifact includes the runtime and does not require a separate Python installation. Windows may show a security warning for downloaded files; verify the source before running the application.
 
-> GitHub Actions artifacts are temporary and expire according to the configured retention period. Versioned GitHub Releases are created when a tag such as `v0.3.0` is pushed. The executables are not digitally signed/notarized; Windows SmartScreen or macOS Gatekeeper may display a warning.
+> GitHub Actions artifacts are temporary and expire according to the configured retention period. Versioned GitHub Releases are created when a tag such as `v0.4.0` is pushed. The executables are not digitally signed/notarized; Windows SmartScreen or macOS Gatekeeper may display a warning.
 
 ## Run from source
 
