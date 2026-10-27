@@ -17,7 +17,13 @@ def selftest() -> int:
     from PySide6.QtCore import QCoreApplication, QEvent
     from PySide6.QtWidgets import QApplication
     from document_tools.gui import DocumentToolsWindow
-    from document_tools.pdf_ops import extract_pages, images_to_pdf
+    from document_tools.pdf_ops import (
+        extract_pages,
+        images_to_pdf,
+        optimize_pdf,
+        reorder_pdf_pages,
+        stamp_pdf,
+    )
 
     application = QApplication([])
     window = DocumentToolsWindow()
@@ -30,9 +36,15 @@ def selftest() -> int:
         root = Path(directory)
         image_path = root / "smoke.png"
         image_pdf = root / "image-result.pdf"
+        reordered_pdf = root / "reordered.pdf"
+        stamped_pdf = root / "stamped.pdf"
+        optimized_pdf = root / "optimized.pdf"
         with Image.new("RGBA", (24, 16), (60, 120, 200, 180)) as image:
             image.save(image_path)
         images_to_pdf([image_path], image_pdf)
+        reorder_pdf_pages(image_pdf, [1], reordered_pdf)
+        stamp_pdf(image_pdf, stamped_pdf, watermark_text="PDF Hub", page_numbering=True)
+        optimize_pdf(stamped_pdf, optimized_pdf, mode="lossless")
 
         encrypted_path = root / "encrypted.pdf"
         writer = PdfWriter()
@@ -51,6 +63,14 @@ def selftest() -> int:
             result = PdfReader(stream)
             if len(result.pages) != 1:
                 return 3
+        for generated in (reordered_pdf, stamped_pdf, optimized_pdf):
+            with generated.open("rb") as stream:
+                result = PdfReader(stream)
+                if len(result.pages) != 1:
+                    return 4
+        with optimized_pdf.open("rb") as stream:
+            if "PDF Hub" not in PdfReader(stream).pages[0].extract_text():
+                return 5
 
     return 0
 
