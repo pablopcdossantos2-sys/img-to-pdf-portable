@@ -1063,6 +1063,9 @@ class DocumentToolsWindow(QMainWindow):
             worker.wait()
             worker.deleteLater()
             self._worker = None
+        if getattr(self, "reorder_document", None) is not None:
+            self.reorder_document.close()
+            self.reorder_document = None
         event.accept()
 
     def _require_output_pdf(
@@ -1537,12 +1540,19 @@ class DocumentToolsWindow(QMainWindow):
 
     def _preview_reorder_page(self, row: int) -> None:
         document = self.reorder_document
-        if document is None or row < 0 or row >= document.pageCount():
+        item = self.reorder_list.item(row) if row >= 0 else None
+        if document is None or item is None:
             self.reorder_preview.setPixmap(QPixmap())
             self.reorder_preview.setText(self._t("Selecione uma página para visualizar."))
             return
+        original_page_number = int(item.data(Qt.ItemDataRole.UserRole))
+        page_index = original_page_number - 1
+        if page_index < 0 or page_index >= document.pageCount():
+            self.reorder_preview.setPixmap(QPixmap())
+            self.reorder_preview.setText(self._t("Não foi possível gerar a prévia desta página."))
+            return
         try:
-            point_size = document.pagePointSize(row)
+            point_size = document.pagePointSize(page_index)
             if point_size.width() <= 0 or point_size.height() <= 0:
                 raise ValueError("Page dimensions are not available")
             scale = min(320 / point_size.width(), 440 / point_size.height())
@@ -1550,7 +1560,7 @@ class DocumentToolsWindow(QMainWindow):
                 max(1, round(point_size.width() * scale)),
                 max(1, round(point_size.height() * scale)),
             )
-            page_image = document.render(row, render_size)
+            page_image = document.render(page_index, render_size)
             if page_image.isNull():
                 raise ValueError("The PDF renderer returned an empty image")
             pixmap = QPixmap.fromImage(page_image)
@@ -1563,7 +1573,7 @@ class DocumentToolsWindow(QMainWindow):
                 )
             )
             self.reorder_preview.setToolTip(
-                self._t("Página {number}").format(number=row + 1)
+                self._t("Página {number}").format(number=original_page_number)
             )
         except Exception:
             self.reorder_preview.setPixmap(QPixmap())
