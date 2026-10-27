@@ -8,6 +8,7 @@ As dependências diretas listadas em `requirements.txt` têm termos próprios. A
 - **pypdf** — BSD-3-Clause.
 - **cryptography** — Apache-2.0 OR BSD-3-Clause.
 - **Pillow** — MIT-CMU.
+- **ReportLab** — BSD License (BSD-3-Clause-style license terms; consult the version-specific license notice distributed with ReportLab).
 
 As ferramentas de desenvolvimento usadas para os testes, auditoria e empacotamento também têm suas próprias licenças, entre elas pytest (MIT), pip-audit (Apache-2.0) e PyInstaller (GPL com exceção de bootloader). Consulte a documentação oficial e os avisos incluídos nas distribuições para determinar as obrigações exatas de cada release.
 
@@ -16,4 +17,5 @@ Referências:
 - https://doc.qt.io/qtforpython-6/licenses.html
 - https://pypi.org/project/pypdf/
 - https://pypi.org/project/pillow/
+- https://pypi.org/project/reportlab/
 - https://pypi.org/project/pyinstaller/
