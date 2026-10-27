@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, QSize, QThread, Signal, Qt, QUrl
-from PySide6.QtGui import QCloseEvent, QDesktopServices, QFont, QPixmap
+from PySide6.QtGui import QCloseEvent, QDesktopServices, QFont, QIcon, QImage, QPixmap
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtWidgets import (
     QApplication,
@@ -64,7 +65,7 @@ FORMAT_EXTENSIONS = {
 }
 
 TRANSLATIONS = {
-    "en": {
+    "en": {    "en": {
         "PDF e imagens • v{version} • organizado, seguro e local": "PDFs and images • v{version} • organized, safe and local",
         "●  PDF HUB • PROCESSAMENTO LOCAL": "●  PDF HUB • LOCAL PROCESSING",
         "O que vamos organizar hoje?": "What would you like to organize today?",
@@ -264,8 +265,25 @@ TRANSLATIONS = {
         "A etapa de marca d'água precisa de um texto ou da numeração ativada.": "The watermark step needs text or page numbering enabled.",
         "Qualquer etapa selecionada será executada na sequência indicada acima.": "Selected steps will run in the order shown above.",
         "Texto da marca d'água (opcional)": "Watermark text (optional)",
+        "Arraste as miniaturas para organizar as páginas. Os números indicam as páginas originais.": "Drag the thumbnails to reorder pages. Labels show the original page numbers.",
+        "Salvar perfil": "Save profile",
+        "Carregar perfil": "Load profile",
+        "Excluir perfil": "Delete profile",
+        "Nome do perfil:": "Profile name:",
+        "Selecione um perfil:": "Select a profile:",
+        "Nenhum perfil salvo ainda.": "No saved profiles yet.",
+        "Informe um nome para o perfil.": "Enter a name for the profile.",
+        "O nome do perfil deve ter até 80 caracteres.": "Profile names must be 80 characters or fewer.",
+        "Já existe um perfil chamado '{name}'. Deseja substituí-lo?": "A profile named '{name}' already exists. Replace it?",
+        "Deseja excluir o perfil '{name}'?": "Delete the profile '{name}'?",
+        "Perfil salvo: {name}": "Profile saved: {name}",
+        "Perfil carregado: {name}": "Profile loaded: {name}",
+        "Perfil excluído: {name}": "Profile deleted: {name}",
+        "Os perfis guardam somente as opções do fluxo; não incluem caminho do PDF nem senha.": "Profiles store workflow options only; they do not include the PDF path or password.",
+        "Não foi possível gerar miniaturas do PDF.": "Could not render PDF thumbnails.",
+        "Visualize todas as páginas e arraste para definir a ordem final. Todas as páginas devem permanecer na lista.": "View all page thumbnails and drag them into the final order. Every page must remain in the list.",
     },
-    "es": {
+    "es": {    "es": {
         "PDF e imagens • v{version} • organizado, seguro e local": "PDF e imágenes • v{version} • organizado, seguro y local",
         "●  PDF HUB • PROCESSAMENTO LOCAL": "●  PDF HUB • PROCESAMIENTO LOCAL",
         "O que vamos organizar hoje?": "¿Qué quieres organizar hoy?",
@@ -448,8 +466,68 @@ TRANSLATIONS = {
         "A etapa de marca d'água precisa de um texto ou da numeração ativada.": "La etapa de marca de agua necesita texto o que actives la numeración.",
         "Qualquer etapa selecionada será executada na sequência indicada acima.": "Las etapas seleccionadas se ejecutan en el orden indicado arriba.",
         "Texto da marca d'água (opcional)": "Texto de marca de agua (opcional)",
+        "Arraste as miniaturas para organizar as páginas. Os números indicam as páginas originais.": "Arrastra las miniaturas para ordenar las páginas. Las etiquetas muestran los números originales.",
+        "Salvar perfil": "Guardar perfil",
+        "Carregar perfil": "Cargar perfil",
+        "Excluir perfil": "Eliminar perfil",
+        "Nome do perfil:": "Nombre del perfil:",
+        "Selecione um perfil:": "Selecciona un perfil:",
+        "Nenhum perfil salvo ainda.": "Aún no hay perfiles guardados.",
+        "Informe um nome para o perfil.": "Escribe un nombre para el perfil.",
+        "O nome do perfil deve ter até 80 caracteres.": "El nombre del perfil debe tener 80 caracteres o menos.",
+        "Já existe um perfil chamado '{name}'. Deseja substituí-lo?": "Ya existe un perfil llamado '{name}'. ¿Quieres reemplazarlo?",
+        "Deseja excluir o perfil '{name}'?": "¿Quieres eliminar el perfil '{name}'?",
+        "Perfil salvo: {name}": "Perfil guardado: {name}",
+        "Perfil carregado: {name}": "Perfil cargado: {name}",
+        "Perfil excluído: {name}": "Perfil eliminado: {name}",
+        "Os perfis guardam somente as opções do fluxo; não incluem caminho do PDF nem senha.": "Los perfiles solo guardan opciones del flujo; no incluyen la ruta del PDF ni la contraseña.",
+        "Não foi possível gerar miniaturas do PDF.": "No se pudieron generar las miniaturas del PDF.",
+        "Visualize todas as páginas e arraste para definir a ordem final. Todas as páginas devem permanecer na lista.": "Visualiza todas las miniaturas y arrástralas al orden final. Deben permanecer todas las páginas en la lista.",
     }
 }
+
+
+class PageThumbnailWorker(QThread):
+    """Render small page previews without blocking the GUI thread."""
+
+    thumbnail_ready = Signal(int, QImage)
+    failed = Signal(str)
+
+    def __init__(self, path: str, password: str | None = None, parent=None) -> None:
+        super().__init__(parent)
+        self._path = path
+        self._password = password
+
+    def run(self) -> None:
+        document = QPdfDocument()
+        try:
+            if self._password:
+                document.setPassword(self._password)
+            document.load(self._path)
+            count = document.pageCount()
+            if count < 1:
+                self.failed.emit("Não foi possível gerar miniaturas do PDF.")
+                return
+            for page_index in range(count):
+                if self.isInterruptionRequested():
+                    break
+                point_size = document.pagePointSize(page_index)
+                width_points = float(point_size.width())
+                height_points = float(point_size.height())
+                if width_points <= 0 or height_points <= 0:
+                    continue
+                scale = min(76 / width_points, 96 / height_points)
+                render_size = QSize(
+                    max(1, round(width_points * scale)),
+                    max(1, round(height_points * scale)),
+                )
+                image = document.render(page_index, render_size)
+                if not image.isNull():
+                    self.thumbnail_ready.emit(page_index + 1, image)
+        except Exception:
+            self.failed.emit("Não foi possível gerar miniaturas do PDF.")
+        finally:
+            document.close()
 
 
 class OperationWorker(QThread):
@@ -500,6 +578,8 @@ class DocumentToolsWindow(QMainWindow):
         self._worker: OperationWorker | None = None
         self._pending_output_directory: Path | None = None
         self._split_custom_directory = False
+        self.reorder_thumbnail_worker: PageThumbnailWorker | None = None
+        self._reorder_items_by_page: dict[int, QListWidgetItem] = {}
 
         central = QWidget()
         central_layout = QVBoxLayout(central)
@@ -1091,6 +1171,12 @@ class DocumentToolsWindow(QMainWindow):
             worker.wait()
             worker.deleteLater()
             self._worker = None
+        thumbnail_worker = self.reorder_thumbnail_worker
+        if thumbnail_worker is not None:
+            thumbnail_worker.requestInterruption()
+            thumbnail_worker.wait()
+            thumbnail_worker.deleteLater()
+            self.reorder_thumbnail_worker = None
         if getattr(self, "reorder_document", None) is not None:
             self.reorder_document.close()
             self.reorder_document = None
@@ -1546,6 +1632,13 @@ class DocumentToolsWindow(QMainWindow):
         except Exception as error:
             QMessageBox.warning(self, self._t("Não foi possível abrir o PDF"), self._t(str(error)))
             return
+        thumbnail_worker = self.reorder_thumbnail_worker
+        if thumbnail_worker is not None:
+            thumbnail_worker.requestInterruption()
+            thumbnail_worker.wait()
+            thumbnail_worker.deleteLater()
+            self.reorder_thumbnail_worker = None
+        self._reorder_items_by_page.clear()
         self.reorder_path.setText(path)
         self.reorder_password = password or None
         if self.reorder_document is not None:
@@ -1561,10 +1654,29 @@ class DocumentToolsWindow(QMainWindow):
         for page_number in range(1, count + 1):
             item = QListWidgetItem(self._t("Página {number}").format(number=page_number))
             item.setData(Qt.ItemDataRole.UserRole, page_number)
+            item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter)
+            item.setSizeHint(QSize(104, 128))
             self.reorder_list.addItem(item)
+            self._reorder_items_by_page[page_number] = item
         if count:
             self.reorder_list.setCurrentRow(0)
-        self.status_label.setText(self._t("{count} páginas carregadas. Arraste para reorganizar.").format(count=count))
+            thumbnail_worker = PageThumbnailWorker(path, password or None, self)
+            thumbnail_worker.thumbnail_ready.connect(self._set_reorder_thumbnail)
+            thumbnail_worker.failed.connect(self._thumbnail_render_failed)
+            self.reorder_thumbnail_worker = thumbnail_worker
+            thumbnail_worker.start()
+        self.status_label.setText(
+            self._t("{count} páginas carregadas. Arraste para reorganizar.").format(count=count)
+        )
+
+    def _set_reorder_thumbnail(self, page_number: int, image: QImage) -> None:
+        """Assign an asynchronously rendered thumbnail to its original-page item."""
+        item = self._reorder_items_by_page.get(page_number)
+        if item is not None:
+            item.setIcon(QIcon(QPixmap.fromImage(image)))
+
+    def _thumbnail_render_failed(self, message: str) -> None:
+        self.status_label.setText(self._t(message))
 
     def _preview_reorder_page(self, row: int) -> None:
         document = self.reorder_document
@@ -1633,7 +1745,7 @@ class DocumentToolsWindow(QMainWindow):
 
     def _build_reorder_tab(self) -> QWidget:
         page, layout = self._new_page(
-            "Visualize e arraste as páginas para definir a ordem final. Todas as páginas devem permanecer na lista.",
+            "Visualize todas as páginas e arraste para definir a ordem final. Todas as páginas devem permanecer na lista.",
             "Escolha um PDF para reorganizar suas páginas.",
         )
         path_row = QHBoxLayout()
@@ -1647,6 +1759,16 @@ class DocumentToolsWindow(QMainWindow):
         path_container.setLayout(path_row)
         layout.addWidget(path_container)
         self.reorder_list = self._new_list()
+        self.reorder_list.setViewMode(QListWidget.ViewMode.IconMode)
+        self.reorder_list.setFlow(QListWidget.Flow.LeftToRight)
+        self.reorder_list.setWrapping(True)
+        self.reorder_list.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.reorder_list.setMovement(QListWidget.Movement.Snap)
+        self.reorder_list.setLayoutMode(QListWidget.LayoutMode.Batched)
+        self.reorder_list.setBatchSize(32)
+        self.reorder_list.setIconSize(QSize(76, 96))
+        self.reorder_list.setGridSize(QSize(112, 132))
+        self.reorder_list.setUniformItemSizes(True)
         self.reorder_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.reorder_list.currentRowChanged.connect(self._preview_reorder_page)
         preview_row = QHBoxLayout()
@@ -1669,7 +1791,7 @@ class DocumentToolsWindow(QMainWindow):
         self.reorder_document: QPdfDocument | None = None
         actions = QHBoxLayout()
         self.reorder_password = None
-        note = QLabel("Arraste uma página para cima ou para baixo. A numeração indica a página original.")
+        note = QLabel("Arraste as miniaturas para organizar as páginas. Os números indicam as páginas originais.")
         note.setObjectName("muted")
         actions.addWidget(note, 1)
         save = QPushButton("Salvar PDF reordenado")
@@ -1885,6 +2007,25 @@ class DocumentToolsWindow(QMainWindow):
             "Processar um PDF em várias etapas",
             "Etapas executadas nesta ordem: rotação, marca d'água/numeração e otimização. O arquivo original é preservado.",
         )
+        profile_actions = QHBoxLayout()
+        save_profile = QPushButton("Salvar perfil")
+        save_profile.clicked.connect(self._save_pipeline_profile)
+        load_profile = QPushButton("Carregar perfil")
+        load_profile.clicked.connect(self._load_pipeline_profile)
+        delete_profile = QPushButton("Excluir perfil")
+        delete_profile.clicked.connect(self._delete_pipeline_profile)
+        profile_actions.addWidget(save_profile)
+        profile_actions.addWidget(load_profile)
+        profile_actions.addWidget(delete_profile)
+        profile_actions.addStretch(1)
+        layout.addLayout(profile_actions)
+        profile_note = QLabel(
+            "Os perfis guardam somente as opções do fluxo; não incluem caminho do PDF nem senha."
+        )
+        profile_note.setObjectName("muted")
+        profile_note.setWordWrap(True)
+        layout.addWidget(profile_note)
+
         form = QFormLayout()
         self.pipeline_path = QLineEdit()
         self.pipeline_path.setReadOnly(True)
@@ -1958,6 +2099,150 @@ class DocumentToolsWindow(QMainWindow):
         self.pipeline_optimize_mode.currentIndexChanged.connect(self._update_pipeline_controls)
         self._update_pipeline_controls()
         return page
+
+    def _read_pipeline_profiles(self) -> dict[str, dict[str, object]]:
+        raw = self.settings.value("pipeline_profiles", "{}")
+        try:
+            parsed = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            return {}
+        if not isinstance(parsed, dict):
+            return {}
+        return {
+            name: profile
+            for name, profile in parsed.items()
+            if isinstance(name, str) and name.strip() and isinstance(profile, dict)
+        }
+
+    def _capture_pipeline_profile(self) -> dict[str, object]:
+        """Capture only processing options; never store a PDF path or password."""
+        return {
+            "rotate_enabled": self.pipeline_rotate_enabled.isChecked(),
+            "rotate_angle": int(self.pipeline_rotate_angle.currentData()),
+            "rotate_ranges": self.pipeline_rotate_ranges.text(),
+            "stamp_enabled": self.pipeline_stamp_enabled.isChecked(),
+            "stamp_text": self.pipeline_stamp_text.text(),
+            "page_numbering": self.pipeline_numbering.isChecked(),
+            "stamp_ranges": self.pipeline_stamp_ranges.text(),
+            "optimize_enabled": self.pipeline_optimize_enabled.isChecked(),
+            "optimize_mode": str(self.pipeline_optimize_mode.currentData()),
+            "quality": self.pipeline_optimize_quality.value(),
+        }
+
+    def _apply_pipeline_profile(self, profile: dict[str, object]) -> None:
+        """Apply saved settings defensively, ignoring unknown or invalid values."""
+        def boolean(key: str, default: bool) -> bool:
+            value = profile.get(key, default)
+            return value if isinstance(value, bool) else default
+
+        def string(key: str, default: str = "") -> str:
+            value = profile.get(key, default)
+            return value if isinstance(value, str) else default
+
+        self.pipeline_rotate_enabled.setChecked(boolean("rotate_enabled", False))
+        rotate_angle = profile.get("rotate_angle", 90)
+        if not isinstance(rotate_angle, int) or isinstance(rotate_angle, bool):
+            rotate_angle = 90
+        angle_index = self.pipeline_rotate_angle.findData(rotate_angle)
+        self.pipeline_rotate_angle.setCurrentIndex(angle_index if angle_index >= 0 else 0)
+        self.pipeline_rotate_ranges.setText(string("rotate_ranges"))
+
+        self.pipeline_stamp_enabled.setChecked(boolean("stamp_enabled", False))
+        self.pipeline_stamp_text.setText(string("stamp_text"))
+        self.pipeline_numbering.setChecked(boolean("page_numbering", False))
+        self.pipeline_stamp_ranges.setText(string("stamp_ranges"))
+
+        self.pipeline_optimize_enabled.setChecked(boolean("optimize_enabled", False))
+        optimize_mode = string("optimize_mode", "lossless")
+        mode_index = self.pipeline_optimize_mode.findData(optimize_mode)
+        self.pipeline_optimize_mode.setCurrentIndex(mode_index if mode_index >= 0 else 0)
+        quality = profile.get("quality", 82)
+        if isinstance(quality, int) and not isinstance(quality, bool):
+            self.pipeline_optimize_quality.setValue(quality)
+        self._update_pipeline_controls()
+
+    def _save_pipeline_profile(self) -> None:
+        name, accepted = QInputDialog.getText(
+            self, self._t("Salvar perfil"), self._t("Nome do perfil:")
+        )
+        if not accepted:
+            return
+        name = name.strip()
+        if not name:
+            QMessageBox.information(
+                self, self._t("Salvar perfil"), self._t("Informe um nome para o perfil.")
+            )
+            return
+        if len(name) > 80:
+            QMessageBox.information(
+                self, self._t("Salvar perfil"), self._t("O nome do perfil deve ter até 80 caracteres.")
+            )
+            return
+        profiles = self._read_pipeline_profiles()
+        if name in profiles:
+            answer = QMessageBox.question(
+                self,
+                self._t("Salvar perfil"),
+                self._t("Já existe um perfil chamado '{name}'. Deseja substituí-lo?").format(name=name),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        profiles[name] = self._capture_pipeline_profile()
+        self.settings.setValue(
+            "pipeline_profiles", json.dumps(profiles, ensure_ascii=False, sort_keys=True)
+        )
+        self.status_label.setText(self._t("Perfil salvo: {name}").format(name=name))
+
+    def _load_pipeline_profile(self) -> None:
+        profiles = self._read_pipeline_profiles()
+        if not profiles:
+            QMessageBox.information(
+                self, self._t("Carregar perfil"), self._t("Nenhum perfil salvo ainda.")
+            )
+            return
+        names = sorted(profiles, key=str.casefold)
+        name, accepted = QInputDialog.getItem(
+            self, self._t("Carregar perfil"), self._t("Selecione um perfil:"), names, 0, False
+        )
+        if not accepted:
+            return
+        profile = profiles.get(name)
+        if profile is None:
+            return
+        self._apply_pipeline_profile(profile)
+        self.status_label.setText(self._t("Perfil carregado: {name}").format(name=name))
+
+    def _delete_pipeline_profile(self) -> None:
+        profiles = self._read_pipeline_profiles()
+        if not profiles:
+            QMessageBox.information(
+                self, self._t("Excluir perfil"), self._t("Nenhum perfil salvo ainda.")
+            )
+            return
+        names = sorted(profiles, key=str.casefold)
+        name, accepted = QInputDialog.getItem(
+            self, self._t("Excluir perfil"), self._t("Selecione um perfil:"), names, 0, False
+        )
+        if not accepted:
+            return
+        if name not in profiles:
+            return
+        answer = QMessageBox.question(
+            self,
+            self._t("Excluir perfil"),
+            self._t("Deseja excluir o perfil '{name}'?").format(name=name),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        profiles.pop(name, None)
+        self.settings.setValue(
+            "pipeline_profiles", json.dumps(profiles, ensure_ascii=False, sort_keys=True)
+        )
+        self.status_label.setText(self._t("Perfil excluído: {name}").format(name=name))
 
     def _update_pipeline_controls(self) -> None:
         rotate_enabled = self.pipeline_rotate_enabled.isChecked()
