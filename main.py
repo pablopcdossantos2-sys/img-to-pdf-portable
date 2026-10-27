@@ -16,7 +16,7 @@ def selftest() -> int:
     from pypdf import PdfReader, PdfWriter
     from PySide6.QtCore import QCoreApplication, QEvent
     from PySide6.QtWidgets import QApplication
-    from document_tools.gui import DocumentToolsWindow
+    from document_tools.gui import DocumentToolsWindow, PageThumbnailWorker
     from document_tools.pdf_ops import (
         extract_pages,
         images_to_pdf,
@@ -44,6 +44,14 @@ def selftest() -> int:
         with Image.new("RGBA", (24, 16), (60, 120, 200, 180)) as image:
             image.save(image_path)
         images_to_pdf([image_path], image_pdf)
+        thumbnail_pages: list[int] = []
+        thumbnail_worker = PageThumbnailWorker(str(image_pdf))
+        thumbnail_worker.thumbnail_ready.connect(
+            lambda page_number, _image: thumbnail_pages.append(page_number)
+        )
+        thumbnail_worker.run()
+        if thumbnail_pages != [1]:
+            return 6
         reorder_pdf_pages(image_pdf, [1], reordered_pdf)
         stamp_pdf(image_pdf, stamped_pdf, watermark_text="PDF Hub", page_numbering=True)
         optimize_pdf(stamped_pdf, optimized_pdf, mode="lossless")
