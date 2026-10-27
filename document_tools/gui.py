@@ -1246,161 +1246,113 @@ class DocumentToolsWindow(QMainWindow):
             self._refresh_batch_history_combo(selected if isinstance(selected, str) else None)
 
     @staticmethod
-    def _stylesheet() -> str:
-        return """
-        QMainWindow {
-            background: #F3F6FB;
+    def _stylesheet(theme: str = "light") -> str:
+        palettes = {
+            "light": {
+                "WINDOW": "#F3F6FB", "PANEL": "#FFFFFF", "TEXT": "#172B4D",
+                "MUTED": "#64748B", "BORDER": "#D8E0EC", "INPUT": "#FFFFFF",
+                "BUTTON": "#F1F4F9", "BUTTON_TEXT": "#344054", "HOVER": "#E6ECF5",
+                "PRESSED": "#DCE5F3", "DISABLED": "#F4F6F9", "NAV_SELECTED": "#E8EEFF",
+                "NAV_SELECTED_TEXT": "#3346A8", "LIST_SELECTED": "#E8EEFF",
+                "LIST_SELECTED_TEXT": "#263E9C", "PRIMARY": "#4263EB",
+                "PRIMARY_HOVER": "#3354DD", "SECONDARY": "#EEF2FF",
+                "SECONDARY_TEXT": "#3346A8", "PROGRESS_BG": "#E3EAF4",
+                "FOCUS": "#7C92F3", "HEADER": "#172B4D", "HEADER_TEXT": "#FFFFFF",
+                "HEADER_MUTED": "#C8D5E8", "TOOLTIP": "#172B4D", "TOOLTIP_TEXT": "#FFFFFF",
+            },
+            "dark": {
+                "WINDOW": "#111827", "PANEL": "#1F2937", "TEXT": "#E5E7EB",
+                "MUTED": "#A7B3C6", "BORDER": "#374151", "INPUT": "#111827",
+                "BUTTON": "#374151", "BUTTON_TEXT": "#E5E7EB", "HOVER": "#4B5563",
+                "PRESSED": "#596579", "DISABLED": "#252E3D", "NAV_SELECTED": "#263755",
+                "NAV_SELECTED_TEXT": "#DBEAFE", "LIST_SELECTED": "#263755",
+                "LIST_SELECTED_TEXT": "#DBEAFE", "PRIMARY": "#5477F5",
+                "PRIMARY_HOVER": "#6C89F6", "SECONDARY": "#263755",
+                "SECONDARY_TEXT": "#DBEAFE", "PROGRESS_BG": "#374151",
+                "FOCUS": "#8BA3FF", "HEADER": "#0B1220", "HEADER_TEXT": "#FFFFFF",
+                "HEADER_MUTED": "#CBD5E1", "TOOLTIP": "#263244", "TOOLTIP_TEXT": "#FFFFFF",
+            },
         }
-        QWidget {
-            color: #172B4D;
+        palette = palettes.get(theme, palettes["light"])
+        style = """
+        QMainWindow, QWidget {
+            background: $WINDOW;
+            color: $TEXT;
             font-family: "Segoe UI", "Inter", sans-serif;
             font-size: 13px;
         }
-        QLabel {
-            background: transparent;
+        QLabel { background: transparent; }
+        QFrame#headerCard { background: $HEADER; border: none; border-radius: 14px; }
+        QLabel#brandMark { background: transparent; }
+        QLabel#appTitle { color: $HEADER_TEXT; font-size: 20px; font-weight: 700; }
+        QLabel#subtitle { color: $HEADER_MUTED; font-size: 12px; }
+        QLabel#muted, QLabel#intro { color: $MUTED; }
+        QFrame#sidePanel {
+            background: $PANEL;
+            border: 1px solid $BORDER;
+            border-radius: 12px;
         }
-        QFrame#headerCard {
-            background: #172B4D;
-            border: none;
-            border-radius: 16px;
+        QScrollArea#navigationScroll, QScrollArea#contentScrollArea,
+        QStackedWidget#pageStack { background: transparent; border: none; }
+        QPushButton#navButton {
+            background: transparent; color: $MUTED; border: none;
+            border-radius: 8px; padding: 10px 12px; text-align: left; font-weight: 600;
         }
-        QLabel#brandMark {
-            background: #4263EB;
-            color: white;
-            font-size: 25px;
-            font-weight: 800;
-            border-radius: 13px;
+        QPushButton#navButton:hover:!checked { background: $BUTTON; color: $TEXT; }
+        QPushButton#navButton:checked {
+            background: $NAV_SELECTED; color: $NAV_SELECTED_TEXT; font-weight: 700;
         }
-        QLabel#appTitle {
-            color: #FFFFFF;
-            font-size: 20px;
-            font-weight: 700;
-        }
-        QLabel#subtitle {
-            color: #C8D5E8;
-            font-size: 12px;
-        }
-        QLabel#localBadge {
-            background: #223B60;
-            color: #D9FBE9;
-            padding: 9px 12px;
-            border-radius: 14px;
-            font-size: 10px;
-            font-weight: 700;
-        }
-        QLabel#pageTitle {
-            color: #172B4D;
-            font-size: 24px;
-            font-weight: 700;
-        }
-        QLabel#intro, QLabel#muted {
-            color: #718096;
-        }
-        QTabWidget::pane {
-            background: white;
-            border: 1px solid #E2E8F0;
-            border-radius: 13px;
-            top: -1px;
-        }
-        QTabBar::tab {
-            background: transparent;
-            color: #64748B;
-            border: none;
-            padding: 12px 12px;
-            margin-right: 3px;
-            font-weight: 600;
-        }
-        QTabBar::tab:selected {
-            background: #E8EEFF;
-            color: #3346A8;
-            border-radius: 8px;
-        }
-        QTabBar::tab:hover:!selected {
-            background: #EAF0F8;
-            border-radius: 8px;
-        }
-        QLabel#sectionTitle {
-            color: #172B4D;
-            font-size: 17px;
-            font-weight: 700;
-        }
+        QLabel#sectionTitle { color: $TEXT; font-size: 17px; font-weight: 700; }
         QListWidget {
-            background: #FFFFFF;
-            color: #24344D;
-            border: 1px solid #E2E8F0;
-            border-radius: 10px;
-            padding: 6px;
-            outline: none;
+            background: $INPUT; color: $TEXT; border: 1px solid $BORDER;
+            border-radius: 10px; padding: 6px; outline: none;
         }
         QListWidget::item {
-            background: transparent;
-            padding: 8px 10px;
-            margin: 2px 0;
-            border-radius: 7px;
+            background: transparent; padding: 8px 10px; margin: 2px 0; border-radius: 7px;
         }
-        QListWidget::item:selected {
-            background: #E8EEFF;
-            color: #263E9C;
-        }
-        QListWidget::item:hover:!selected {
-            background: #F3F6FB;
-        }
+        QListWidget::item:selected { background: $LIST_SELECTED; color: $LIST_SELECTED_TEXT; }
+        QListWidget::item:hover:!selected { background: $BUTTON; }
         QPushButton {
-            background: #F1F4F9;
-            color: #344054;
-            border: 1px solid #E2E8F0;
-            border-radius: 8px;
-            padding: 10px 13px;
-            font-weight: 600;
+            background: $BUTTON; color: $BUTTON_TEXT; border: 1px solid $BORDER;
+            border-radius: 8px; padding: 9px 11px; font-weight: 600;
         }
-        QPushButton:hover {
-            background: #E6ECF5;
-            border-color: #C9D4E5;
-        }
-        QPushButton:pressed { background: #DCE5F3; }
-        QPushButton:disabled { color: #9AA7B9; background: #F4F6F9; }
+        QPushButton:hover { background: $HOVER; }
+        QPushButton:pressed { background: $PRESSED; }
+        QPushButton:disabled { color: $MUTED; background: $DISABLED; }
         QPushButton#primaryButton {
-            background: #4263EB;
-            color: white;
-            border-color: #4263EB;
-            padding: 12px 18px;
-            font-weight: 700;
+            background: $PRIMARY; color: #FFFFFF; border-color: $PRIMARY;
+            padding: 11px 14px; font-weight: 700;
         }
-        QPushButton#primaryButton:hover {
-            background: #3354DD;
-            border-color: #3354DD;
-        }
+        QPushButton#primaryButton:hover { background: $PRIMARY_HOVER; border-color: $PRIMARY_HOVER; }
         QPushButton#secondaryButton {
-            background: #EEF2FF;
-            color: #3346A8;
-            border-color: #E0E7FF;
+            background: $SECONDARY; color: $SECONDARY_TEXT; border-color: $BORDER;
         }
-        QLineEdit, QComboBox, QSpinBox {
-            background: white;
-            color: #24344D;
-            border: 1px solid #D8E0EC;
-            border-radius: 8px;
-            padding: 9px 10px;
-            min-height: 18px;
+        QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+            background: $INPUT; color: $TEXT; border: 1px solid $BORDER;
+            border-radius: 8px; padding: 8px 9px; min-height: 18px;
         }
-        QLineEdit:focus, QComboBox:focus, QSpinBox:focus {
-            border-color: #7C92F3;
+        QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+            border-color: $FOCUS;
         }
-        QLabel#statusLabel {
-            color: #58677D;
-            font-size: 12px;
+        QComboBox QAbstractItemView {
+            background: $PANEL; color: $TEXT;
+            selection-background-color: $NAV_SELECTED;
+            selection-color: $NAV_SELECTED_TEXT; border: 1px solid $BORDER;
         }
-        QProgressBar {
-            border: none;
-            background: #E3EAF4;
-            border-radius: 4px;
-            height: 7px;
+        QToolButton#infoButton {
+            color: $MUTED; background: $BUTTON; border: 1px solid $BORDER;
+            border-radius: 14px; min-width: 28px; min-height: 28px; font-weight: 700;
         }
-        QProgressBar::chunk {
-            background: #4263EB;
-            border-radius: 4px;
-        }
+        QLabel#statusLabel { color: $MUTED; font-size: 12px; }
+        QProgressBar { border: none; background: $PROGRESS_BG; border-radius: 4px; height: 7px; }
+        QProgressBar::chunk { background: $PRIMARY; border-radius: 4px; }
+        QToolTip { color: $TOOLTIP_TEXT; background: $TOOLTIP; border: 1px solid $BORDER; padding: 5px; }
+        QTableWidget { background: $INPUT; color: $TEXT; gridline-color: $BORDER; border: 1px solid $BORDER; }
+        QHeaderView::section { background: $PANEL; color: $TEXT; border: 1px solid $BORDER; padding: 5px; }
         """
+        for key, value in palette.items():
+            style = style.replace("$" + key, value)
+        return style
 
     def _new_page(self, title: str, description: str) -> tuple[QWidget, QVBoxLayout]:
         page = QWidget()
