@@ -15,6 +15,7 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, desenvolvido co
 - **Reordenar páginas com prévia:** carregue um PDF, arraste as páginas e confira a página selecionada no painel de prévia. A prévia acompanha a página de origem mesmo depois de arrastar os itens; cada página precisa permanecer exatamente uma vez.
 - **Marca d'água e numeração seletivas:** adicione texto, numeração ou ambos a todas as páginas ou apenas a intervalos (por exemplo, `2-4, 7`). Ao selecionar um intervalo, a numeração continua indicando a posição original no documento. O conteúdo original não é rasterizado.
 - **Otimizar PDF:** modo sem perdas para comprimir streams e remover objetos repetidos; modo equilibrado para recomprimir imagens opacas em JPEG com qualidade ajustável. Imagens com transparência e imagens inline são mantidas sem recompressão.
+- **Fluxo em lote:** combine rotação, marca d'água/numeração e otimização em uma única operação. As etapas seguem uma ordem definida, usam temporários locais e só concluem a gravação final quando a sequência termina sem erro.
 - **Proteção de saída:** o diálogo acrescenta a extensão PDF, verifica se o destino é um dos arquivos de origem e pede confirmação antes de substituir um arquivo existente.
 
 ### Imagens
@@ -109,9 +110,9 @@ A opção `--selftest` cria a interface em modo sem janela visível e encerra co
 - [x] **Compressão/otimização:** modo sem perdas para streams e objetos duplicados, e modo equilibrado para recompressão JPEG com qualidade configurável. A recompressão pode alterar a aparência das imagens e não garante redução em todos os documentos.
 - [x] **Marca d'água e numeração por intervalo:** escolha páginas específicas ou deixe o campo vazio para aplicar ao documento inteiro; a numeração preserva a referência à página original.
 - [x] **Prévia durante a reorganização:** painel que renderiza a página selecionada e acompanha o número original da página após reordenar.
+- [x] **Fluxo em lote:** combine rotação, marca d'água/numeração e otimização sem gerar manualmente arquivos intermediários.
 
 ### Próximas melhorias possíveis
 
 - [ ] Miniaturas de todas as páginas diretamente na lista de reorganização, além da prévia da página selecionada.
-- [ ] Fluxos em lote para encadear rotação, marca d'água, numeração e otimização em uma única execução.
 - [ ] Traduções para mensagens excepcionais emitidas por bibliotecas externas e formatos PDF incomuns.
