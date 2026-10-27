@@ -6,8 +6,9 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QThread, Signal, Qt, QUrl
-from PySide6.QtGui import QCloseEvent, QDesktopServices, QFont
+from PySide6.QtCore import QSettings, QSize, QThread, Signal, Qt, QUrl
+from PySide6.QtGui import QCloseEvent, QDesktopServices, QFont, QPixmap
+from PySide6.QtPdf import QPdfDocument
 from PySide6.QtWidgets import (
     QApplication,
     QAbstractItemView,
@@ -220,11 +221,17 @@ TRANSLATIONS = {
         "Nenhum PDF novo adicionado.": "No new PDFs added.",
         "{count} imagem(ns) convertida(s) em {directory}.": "{count} image(s) converted in {directory}.",
         "Qualidade": "Quality",
-    },
         "+  Adicionar PDFs": "+  Add PDFs",
         "Remover selecionados": "Remove selected",
         "Duplicar selecionados": "Duplicate selected",
         "Rotação": "Rotation",
+        "Prévia da página selecionada": "Selected page preview",
+        "Selecione uma página para visualizar.": "Select a page to preview it.",
+        "Não foi possível gerar a prévia desta página.": "Could not render a preview for this page.",
+        "Deixe vazio para aplicar em todas as páginas": "Leave blank to apply to all pages",
+        "O texto e a numeração serão aplicados apenas às páginas selecionadas. A numeração conserva o número original da página.": "Text and numbering are applied only to selected pages. Page numbers retain the original document numbering.",
+        "Páginas marcadas: {ranges}": "Selected pages: {ranges}",
+    },
     "es": {
         "PDF e imagens • v{version} • organizado, seguro e local": "PDF e imágenes • v{version} • organizado, seguro y local",
         "●  PDF HUB • PROCESSAMENTO LOCAL": "●  PDF HUB • PROCESAMIENTO LOCAL",
@@ -364,13 +371,19 @@ TRANSLATIONS = {
         "Nenhuma imagem nova adicionada.": "No se añadieron imágenes nuevas.",
         "{added} PDF(s) adicionado(s).": "Se añadieron {added} PDF(s).",
         "Nenhum PDF novo adicionado.": "No se añadieron PDF nuevos.",
-    },        "+  Adicionar PDFs": "+  Añadir PDFs",
+        "+  Adicionar PDFs": "+  Añadir PDFs",
+        "Rotação": "Rotación",
+        "Prévia da página selecionada": "Vista previa de la página seleccionada",
+        "Selecione uma página para visualizar.": "Selecciona una página para verla.",
+        "Não foi possível gerar a prévia desta página.": "No se pudo generar una vista previa de esta página.",
+        "Deixe vazio para aplicar em todas as páginas": "Déjalo vacío para aplicar a todas las páginas",
+        "O texto e a numeração serão aplicados apenas às páginas selecionadas. A numeração conserva o número original da página.": "El texto y la numeración solo se aplican a las páginas seleccionadas. La numeración conserva el número original de la página.",
+        "Páginas marcadas: {ranges}": "Páginas seleccionadas: {ranges}",
         "Remover selecionados": "Eliminar seleccionados",
         "Duplicar selecionados": "Duplicar seleccionados",
-        "Rotação": "Rotación",
         "Selecione pelo menos dois PDFs.": "Selecciona al menos dos PDFs.",
         "Unir documentos em um único arquivo": "Unir documentos en un solo archivo",
-
+    }
 }
 
 
@@ -1423,12 +1436,59 @@ class DocumentToolsWindow(QMainWindow):
             return
         self.reorder_path.setText(path)
         self.reorder_password = password or None
+        if self.reorder_document is not None:
+            self.reorder_document.close()
+        self.reorder_document = QPdfDocument(self)
+        if password:
+            self.reorder_document.setPassword(password)
+        self.reorder_document.load(path)
+        if self.reorder_document.pageCount() != count:
+            self.reorder_document.close()
+            self.reorder_document = None
         self.reorder_list.clear()
         for page_number in range(1, count + 1):
             item = QListWidgetItem(self._t("Página {number}").format(number=page_number))
             item.setData(Qt.ItemDataRole.UserRole, page_number)
             self.reorder_list.addItem(item)
+        if count:
+            self.reorder_list.setCurrentRow(0)
         self.status_label.setText(self._t("{count} páginas carregadas. Arraste para reorganizar.").format(count=count))
+
+    def _preview_reorder_page(self, row: int) -> None:
+        document = self.reorder_document
+        if document is None or row < 0 or row >= document.pageCount():
+            self.reorder_preview.setPixmap(QPixmap())
+            self.reorder_preview.setText(self._t("Selecione uma página para visualizar."))
+            return
+        try:
+            point_size = document.pagePointSize(row)
+            if point_size.width() <= 0 or point_size.height() <= 0:
+                raise ValueError("Page dimensions are not available")
+            scale = min(320 / point_size.width(), 440 / point_size.height())
+            render_size = QSize(
+                max(1, round(point_size.width() * scale)),
+                max(1, round(point_size.height() * scale)),
+            )
+            page_image = document.render(row, render_size)
+            if page_image.isNull():
+                raise ValueError("The PDF renderer returned an empty image")
+            pixmap = QPixmap.fromImage(page_image)
+            self.reorder_preview.setText("")
+            self.reorder_preview.setPixmap(
+                pixmap.scaled(
+                    self.reorder_preview.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+            self.reorder_preview.setToolTip(
+                self._t("Página {number}").format(number=row + 1)
+            )
+        except Exception:
+            self.reorder_preview.setPixmap(QPixmap())
+            self.reorder_preview.setText(
+                self._t("Não foi possível gerar a prévia desta página.")
+            )
 
     def _reorder_pdf(self) -> None:
         source = self.reorder_path.text().strip()
@@ -1469,7 +1529,25 @@ class DocumentToolsWindow(QMainWindow):
         layout.addWidget(path_container)
         self.reorder_list = self._new_list()
         self.reorder_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        layout.addWidget(self.reorder_list, 1)
+        self.reorder_list.currentRowChanged.connect(self._preview_reorder_page)
+        preview_row = QHBoxLayout()
+        preview_row.addWidget(self.reorder_list, 1)
+        preview_column = QVBoxLayout()
+        preview_title = QLabel("Prévia da página selecionada")
+        preview_title.setObjectName("sectionTitle")
+        preview_column.addWidget(preview_title)
+        self.reorder_preview = QLabel("Selecione uma página para visualizar.")
+        self.reorder_preview.setObjectName("pagePreview")
+        self.reorder_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.reorder_preview.setMinimumSize(250, 320)
+        self.reorder_preview.setMaximumWidth(380)
+        self.reorder_preview.setWordWrap(True)
+        preview_column.addWidget(self.reorder_preview, 1)
+        preview_container = QWidget()
+        preview_container.setLayout(preview_column)
+        preview_row.addWidget(preview_container, 1)
+        layout.addLayout(preview_row, 1)
+        self.reorder_document: QPdfDocument | None = None
         actions = QHBoxLayout()
         self.reorder_password = None
         note = QLabel("Arraste uma página para cima ou para baixo. A numeração indica a página original.")
@@ -1503,6 +1581,12 @@ class DocumentToolsWindow(QMainWindow):
         form.addRow("Texto da marca d'água", self.stamp_text)
         self.stamp_numbering = QCheckBox("Adicionar numeração de páginas")
         form.addRow("", self.stamp_numbering)
+        self.stamp_ranges = QLineEdit()
+        self.stamp_ranges.setPlaceholderText("Deixe vazio para aplicar em todas as páginas")
+        self.stamp_ranges.setToolTip(
+            "O texto e a numeração serão aplicados apenas às páginas selecionadas. A numeração conserva o número original da página."
+        )
+        form.addRow("Páginas (opcional)", self.stamp_ranges)
         self.stamp_watermark_position = QComboBox()
         self.stamp_watermark_position.addItem("Diagonal (centro)", "diagonal")
         self.stamp_watermark_position.addItem("Centralizada", "center")
@@ -1561,6 +1645,7 @@ class DocumentToolsWindow(QMainWindow):
         file_mode = self._output_file_mode()
         watermark_position = str(self.stamp_watermark_position.currentData())
         page_number_position = str(self.stamp_number_position.currentData())
+        page_ranges = self.stamp_ranges.text().strip() or None
         font_size = self.stamp_font_size.value()
         opacity = self.stamp_opacity.value()
         self._run_task(
@@ -1570,6 +1655,7 @@ class DocumentToolsWindow(QMainWindow):
                     source, output,
                     watermark_text=text or None,
                     page_numbering=numbering,
+                    page_ranges=page_ranges,
                     watermark_position=watermark_position,
                     page_number_position=page_number_position,
                     font_size=font_size,
