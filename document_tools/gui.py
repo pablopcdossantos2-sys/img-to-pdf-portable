@@ -65,7 +65,7 @@ FORMAT_EXTENSIONS = {
 }
 
 TRANSLATIONS = {
-    "en": {    "en": {
+    "en": {
         "PDF e imagens • v{version} • organizado, seguro e local": "PDFs and images • v{version} • organized, safe and local",
         "●  PDF HUB • PROCESSAMENTO LOCAL": "●  PDF HUB • LOCAL PROCESSING",
         "O que vamos organizar hoje?": "What would you like to organize today?",
@@ -283,7 +283,7 @@ TRANSLATIONS = {
         "Não foi possível gerar miniaturas do PDF.": "Could not render PDF thumbnails.",
         "Visualize todas as páginas e arraste para definir a ordem final. Todas as páginas devem permanecer na lista.": "View all page thumbnails and drag them into the final order. Every page must remain in the list.",
     },
-    "es": {    "es": {
+    "es": {
         "PDF e imagens • v{version} • organizado, seguro e local": "PDF e imágenes • v{version} • organizado, seguro y local",
         "●  PDF HUB • PROCESSAMENTO LOCAL": "●  PDF HUB • PROCESAMIENTO LOCAL",
         "O que vamos organizar hoje?": "¿Qué quieres organizar hoy?",
