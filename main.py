@@ -14,6 +14,7 @@ def selftest() -> int:
 
     from PIL import Image
     from pypdf import PdfReader, PdfWriter
+    from PySide6.QtCore import QCoreApplication, QEvent
     from PySide6.QtWidgets import QApplication
     from document_tools.gui import DocumentToolsWindow
     from document_tools.pdf_ops import extract_pages, images_to_pdf
@@ -21,6 +22,8 @@ def selftest() -> int:
     application = QApplication([])
     window = DocumentToolsWindow()
     window.close()
+    window.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     application.processEvents()
 
     with tempfile.TemporaryDirectory(prefix="document-tools-selftest-") as directory:

@@ -113,16 +113,16 @@ jobs:
   package-linux:
     name: Build PDF Hub for Linux x64
     needs: test
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     env:
       QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Qt runtime libraries
+      - name: Install Qt and XCB runtime libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 libxcb-shape0 libxcb-util1 libxcb-cursor0 libxcb-keysyms1 libxcb-icccm4 libxcb-image0 libxcb-render-util0 libxcb-xinerama0
 
       - uses: actions/setup-python@v5
         with:
