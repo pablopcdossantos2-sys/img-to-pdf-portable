@@ -106,26 +106,3 @@ O executável será criado em `dist/PDFHub.exe`. Para verificar se o pacote inic
 ```
 
 A opção `--selftest` cria a interface em modo sem janela visível e encerra com código de sucesso se a inicialização funcionar.
-
-## ROADMAP
-
-### Concluído até a versão 0.8.0
-
-- [x] **Interface multilíngue:** seletor de idioma com português brasileiro, inglês e espanhol, incluindo as abas e os principais controles.
-- [x] **Reorganização visual:** arraste as páginas na lista e salve o PDF na nova ordem; todas as páginas são exigidas exatamente uma vez.
-- [x] **Compressão/otimização:** modo sem perdas para streams e objetos duplicados, e modo equilibrado para recompressão JPEG com qualidade configurável. A recompressão pode alterar a aparência das imagens e não garante redução em todos os documentos.
-- [x] **Marca d'água e numeração por intervalo:** escolha páginas específicas ou deixe o campo vazio para aplicar ao documento inteiro; a numeração preserva a referência à página original.
-- [x] **Miniaturas durante a reorganização:** grade com miniaturas de todas as páginas, carregadas em segundo plano, além da prévia da página selecionada.
-- [x] **Fluxo em lote:** combine rotação, marca d'água/numeração e otimização sem gerar manualmente arquivos intermediários.
-- [x] **Perfis reutilizáveis em JSON:** exporte e importe perfis entre computadores com validação de versão/esquema e rejeição de campos não reconhecidos; os perfis excluem caminhos e senhas.
-- [x] **Erros de bibliotecas traduzidos:** erros comuns de estrutura PDF, renderização e imagem são convertidos em mensagens mais claras nas três línguas.
-
-- [x] **Processamento de pastas com perfil salvo:** processa os PDFs em sequência, registra sucesso ou falha por arquivo, permite incluir subpastas e exporta o relatório em CSV. O histórico completo dos relatórios é salvo localmente entre sessões, com opção de carregar ou excluir registros; os 50 mais recentes são mantidos.
-- [x] **Migrações de esquema de perfis:** perfis do esquema 1 são convertidos automaticamente para o esquema 2 com validação estrita.
-
-### Próximas melhorias possíveis
-
-- [x] Retomar lotes interrompidos: resultados concluídos são reutilizados quando origem, destino, perfil e lista de arquivos continuam iguais; falhas são tentadas novamente.
-- [x] Pausa manual e cancelamento seguro de lotes: pausa entre PDFs e conclui o arquivo atual antes de cancelar, preservando o progresso para retomada.
-- [x] Reprocessar somente os PDFs que falharam no relatório, mantendo os resultados bem-sucedidos e preservando a seleção de falhas durante a retomada.
-- [x] Salvar e restaurar o histórico completo de relatórios entre sessões do aplicativo (50 relatórios mais recentes, com opções para carregar e excluir).
