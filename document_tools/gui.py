@@ -1466,17 +1466,28 @@ class DocumentToolsWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, self._t(title), "", PDF_FILTER)
         return path or None
 
+    def _desktop_directory(self) -> Path:
+        raw_desktop = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DesktopLocation)
+        desktop = Path(raw_desktop).expanduser() if raw_desktop else Path.home() / "Desktop"
+        return desktop if desktop.is_dir() else Path.home()
+
+    def _default_save_path(self, filename: str) -> str:
+        return str(self._desktop_directory() / filename)
+
     def _choose_output_pdf(
         self,
         suggested_name: str,
         *,
         source_paths: tuple[str, ...] | list[str] = (),
     ) -> str | None:
-        dialog = QFileDialog(self, self._t("Salvar PDF resultante"), suggested_name, PDF_FILTER)
+        desktop = self._desktop_directory()
+        dialog = QFileDialog(
+            self, self._t("Salvar PDF resultante"), str(desktop / suggested_name), PDF_FILTER
+        )
+        dialog.setDirectory(str(desktop))
         dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
         dialog.setFileMode(QFileDialog.FileMode.AnyFile)
         dialog.setDefaultSuffix("pdf")
-        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
         dialog.setOption(QFileDialog.Option.DontConfirmOverwrite, True)
         if dialog.exec() != QFileDialog.DialogCode.Accepted or not dialog.selectedFiles():
             return None
@@ -1508,7 +1519,7 @@ class DocumentToolsWindow(QMainWindow):
         return str(output)
 
     def _choose_directory(self, title: str) -> str | None:
-        path = QFileDialog.getExistingDirectory(self, self._t(title))
+        path = QFileDialog.getExistingDirectory(self, self._t(title), str(self._desktop_directory()))
         return path or None
 
     def _run_task(
@@ -1637,6 +1648,10 @@ class DocumentToolsWindow(QMainWindow):
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         form.setHorizontalSpacing(12)
         form.setVerticalSpacing(10)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
 
         self.language_combo = QComboBox()
         self.language_combo.addItem("Português (Brasil)", "pt")
@@ -1706,11 +1721,13 @@ class DocumentToolsWindow(QMainWindow):
             "Transformar imagens em um documento",
             "Adicione as imagens e organize a sequência. Cada arquivo será colocado em uma página A4 sem distorcer a proporção.",
         )
-        list_widget = self._new_list(extended=True)
+        list_widget = ImageDropList()
         self.image_list = list_widget
+        list_widget.filesDropped.connect(self._handle_dropped_images)
+        list_widget.setToolTip("Arraste imagens para esta área ou use “Adicionar imagens”.")
         layout.addWidget(list_widget, 1)
 
-        buttons = QHBoxLayout()
+        buttons = QGridLayout()
         add = QPushButton("+  Adicionar imagens")
         add.setObjectName("secondaryButton")
         add.clicked.connect(self._add_images)
@@ -1722,12 +1739,14 @@ class DocumentToolsWindow(QMainWindow):
         down.clicked.connect(lambda: self._move_selected(list_widget, 1))
         duplicate = QPushButton("Duplicar selecionadas")
         duplicate.clicked.connect(lambda: self._duplicate_selected(list_widget))
-        buttons.addWidget(add)
-        buttons.addWidget(remove)
-        buttons.addWidget(duplicate)
-        buttons.addStretch(1)
-        buttons.addWidget(up)
-        buttons.addWidget(down)
+        buttons.addWidget(add, 0, 0)
+        buttons.addWidget(remove, 0, 1)
+        buttons.addWidget(duplicate, 0, 2)
+        buttons.addWidget(up, 1, 1)
+        buttons.addWidget(down, 1, 2)
+        buttons.setColumnStretch(0, 1)
+        buttons.setColumnStretch(1, 1)
+        buttons.setColumnStretch(2, 1)
         layout.addLayout(buttons)
 
         options = QHBoxLayout()
@@ -1736,14 +1755,18 @@ class DocumentToolsWindow(QMainWindow):
         self.image_dpi.setRange(72, 600)
         self.image_dpi.setValue(150)
         self.image_dpi.setSuffix(" DPI")
+        self.image_dpi.setToolTip(
+            "Resolução estimada automaticamente a partir das dimensões em pixels das imagens; você pode ajustá-la manualmente."
+        )
         options.addWidget(self.image_dpi)
         options.addSpacing(18)
         options.addWidget(QLabel("Margem:"))
         self.image_margin = QDoubleSpinBox()
         self.image_margin.setRange(0, 40)
         self.image_margin.setDecimals(1)
-        self.image_margin.setValue(10)
+        self.image_margin.setValue(0)
         self.image_margin.setSuffix(" mm")
+        self.image_margin.valueChanged.connect(self._update_image_dpi_from_sources)
         options.addWidget(self.image_margin)
         options.addStretch(1)
         layout.addLayout(options)
@@ -1754,7 +1777,7 @@ class DocumentToolsWindow(QMainWindow):
         layout.addWidget(self.image_all_frames)
 
         bottom = QHBoxLayout()
-        hint = QLabel("Formatos: JPG, PNG, BMP, WEBP, TIFF e GIF.")
+        hint = QLabel("Arraste imagens para esta área ou use “Adicionar imagens”. Formatos: JPG, PNG, BMP, WEBP, TIFF e GIF.")
         hint.setObjectName("muted")
         make_pdf = QPushButton("Criar PDF")
         make_pdf.setObjectName("primaryButton")
@@ -1767,8 +1790,27 @@ class DocumentToolsWindow(QMainWindow):
     def _add_images(self) -> None:
         paths = self._choose_multiple("Adicionar imagens", IMAGE_FILTER)
         added = self._add_paths(self.image_list, paths)
+        if added:
+            self._update_image_dpi_from_sources()
         status = self._t("{added} imagem(ns) adicionada(s).").format(added=added) if added else self._t("Nenhuma imagem nova adicionada.")
         self.status_label.setText(status)
+
+    def _handle_dropped_images(self, paths: list[str]) -> None:
+        accepted = [path for path in paths if Path(path).suffix.casefold() in SUPPORTED_IMAGE_SUFFIXES]
+        added = self._add_paths(self.image_list, accepted)
+        if added:
+            self._update_image_dpi_from_sources()
+        self.status_label.setText(
+            self._t("{added} imagem(ns) adicionada(s).").format(added=added)
+            if added else self._t("Nenhuma imagem nova adicionada.")
+        )
+
+    def _update_image_dpi_from_sources(self) -> None:
+        sources = self._all_paths(self.image_list)
+        recommended = recommend_dpi_from_images(sources, margin_mm=self.image_margin.value())
+        if recommended is not None:
+            self.image_dpi.setValue(recommended)
+            self.status_label.setText(self._t("Calculando resolução a partir das imagens."))
 
     @staticmethod
     def _remove_selected(list_widget: QListWidget) -> None:
@@ -1915,6 +1957,10 @@ class DocumentToolsWindow(QMainWindow):
             "Escolha o documento e informe os números das páginas ou intervalos que deseja manter.",
         )
         form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
         self.extract_path = QLineEdit()
         self.extract_path.setReadOnly(True)
         browse = QPushButton("Escolher PDF")
@@ -1981,6 +2027,10 @@ class DocumentToolsWindow(QMainWindow):
             "Gire todas as páginas do documento ou informe um intervalo específico. Os conteúdos não são rasterizados.",
         )
         form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
         self.rotate_path = QLineEdit()
         self.rotate_path.setReadOnly(True)
         browse = QPushButton("Escolher PDF")
@@ -2049,6 +2099,10 @@ class DocumentToolsWindow(QMainWindow):
             "Cada página será salva como um PDF separado. Se algum nome de destino já existir, a operação será interrompida para evitar sobrescrita.",
         )
         form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
         self.split_path = QLineEdit()
         self.split_path.setReadOnly(True)
         self._split_custom_directory = False
@@ -2312,6 +2366,10 @@ class DocumentToolsWindow(QMainWindow):
             "Escolha o documento e defina o texto, a posição e a opacidade da marca d'água.",
         )
         form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
         self.stamp_path = QLineEdit()
         self.stamp_path.setReadOnly(True)
         browse = QPushButton("Escolher PDF")
@@ -2419,6 +2477,10 @@ class DocumentToolsWindow(QMainWindow):
             "A otimização sem perdas comprime streams e remove objetos redundantes; a equilibrada também recomprime imagens opacas.",
         )
         form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
         self.optimize_path = QLineEdit()
         self.optimize_path.setReadOnly(True)
         browse = QPushButton("Escolher PDF")
@@ -2538,6 +2600,10 @@ class DocumentToolsWindow(QMainWindow):
         layout.addWidget(profile_note)
 
         form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
         self.pipeline_path = QLineEdit()
         self.pipeline_path.setReadOnly(True)
         browse = QPushButton("Escolher PDF")
@@ -2807,7 +2873,7 @@ class DocumentToolsWindow(QMainWindow):
         filename, _ = QFileDialog.getSaveFileName(
             self,
             self._t("Exportar perfil"),
-            f"{suggested_stem}.json",
+            self._default_save_path(f"{suggested_stem}.json"),
             self._t("Arquivos JSON (*.json)"),
         )
         if not filename:
@@ -2984,6 +3050,10 @@ class DocumentToolsWindow(QMainWindow):
             "Selecione a pasta de origem e o destino, depois escolha um perfil salvo. Os arquivos originais serão preservados; PDFs com erro não interrompem os demais.",
         )
         form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
         self.batch_source_directory = QLineEdit()
         self.batch_source_directory.setReadOnly(True)
         source_row = QHBoxLayout()
@@ -3024,34 +3094,37 @@ class DocumentToolsWindow(QMainWindow):
         note.setWordWrap(True)
         layout.addWidget(note)
 
-        actions = QHBoxLayout()
+        actions = QGridLayout()
         self.batch_run_button = QPushButton("Aplicar perfil salvo à pasta")
         self.batch_run_button.setObjectName("primaryButton")
         self.batch_run_button.clicked.connect(self._run_pipeline_folder)
-        actions.addWidget(self.batch_run_button)
+        actions.addWidget(self.batch_run_button, 0, 0)
         self.batch_reprocess_failures_button = QPushButton("Reprocessar apenas falhas")
         self.batch_reprocess_failures_button.setEnabled(False)
         self.batch_reprocess_failures_button.clicked.connect(self._rerun_failed_batch_files)
-        actions.addWidget(self.batch_reprocess_failures_button)
+        actions.addWidget(self.batch_reprocess_failures_button, 0, 1)
         self.batch_pause_button = QPushButton("Pausar lote")
         self.batch_pause_button.setEnabled(False)
         self.batch_pause_button.clicked.connect(self._toggle_batch_pause)
-        actions.addWidget(self.batch_pause_button)
+        actions.addWidget(self.batch_pause_button, 1, 0)
         self.batch_cancel_button = QPushButton("Cancelar lote")
         self.batch_cancel_button.setEnabled(False)
         self.batch_cancel_button.clicked.connect(self._cancel_batch)
-        actions.addWidget(self.batch_cancel_button)
-        actions.addStretch(1)
+        actions.addWidget(self.batch_cancel_button, 1, 1)
         self.batch_report_button = QPushButton("Salvar relatório CSV")
         self.batch_report_button.setEnabled(False)
         self.batch_report_button.clicked.connect(self._export_batch_report)
-        actions.addWidget(self.batch_report_button)
+        actions.addWidget(self.batch_report_button, 2, 0, 1, 2)
+        actions.setColumnStretch(0, 1)
+        actions.setColumnStretch(1, 1)
         layout.addLayout(actions)
 
+        history_layout = QVBoxLayout()
+        history_layout.setSpacing(6)
+        history_layout.addWidget(QLabel("Relatórios anteriores"))
         history_row = QHBoxLayout()
-        history_row.addWidget(QLabel("Relatórios anteriores"))
         self.batch_history_combo = QComboBox()
-        self.batch_history_combo.setMinimumWidth(260)
+        self.batch_history_combo.setMinimumWidth(100)
         history_row.addWidget(self.batch_history_combo, 1)
         self.batch_history_load_button = QPushButton("Carregar relatório")
         self.batch_history_load_button.clicked.connect(self._load_selected_batch_history)
@@ -3059,7 +3132,8 @@ class DocumentToolsWindow(QMainWindow):
         self.batch_history_delete_button = QPushButton("Excluir relatório selecionado")
         self.batch_history_delete_button.clicked.connect(self._delete_selected_batch_history)
         history_row.addWidget(self.batch_history_delete_button)
-        layout.addLayout(history_row)
+        history_layout.addLayout(history_row)
+        layout.addLayout(history_layout)
 
         self.batch_results_table = QTableWidget(0, 4)
         self.batch_results_table.setHorizontalHeaderLabels([
@@ -3443,7 +3517,7 @@ class DocumentToolsWindow(QMainWindow):
             QMessageBox.information(self, self._t("Salvar relatório CSV"), self._t("Não há relatório para exportar."))
             return
         filename, _ = QFileDialog.getSaveFileName(
-            self, self._t("Salvar relatório CSV"), "relatorio-pdf-hub.csv", self._t("Arquivos CSV (*.csv)")
+            self, self._t("Salvar relatório CSV"), self._default_save_path("relatorio-pdf-hub.csv"), self._t("Arquivos CSV (*.csv)")
         )
         if not filename:
             return
@@ -3488,6 +3562,10 @@ class DocumentToolsWindow(QMainWindow):
         layout.addLayout(file_row)
 
         form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
         self.convert_format = QComboBox()
         self.convert_format.addItems(["JPEG", "PNG", "WEBP", "BMP", "TIFF"])
         form.addRow("Formato de saída", self.convert_format)
