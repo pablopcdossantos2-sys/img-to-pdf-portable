@@ -315,6 +315,7 @@ def process_pdf_folder(
         stored = result_state.get(relative)
         if stored is not None and stored.get("success") is True:
             result = BatchFileResult(str(source), True, str(stored["output_path"]), _RESUMED_MESSAGE)
+            result_state[relative]["message"] = _RESUMED_MESSAGE
         else:
             try:
                 relative_parent = source.parent.relative_to(source_root) if recursive else Path()
