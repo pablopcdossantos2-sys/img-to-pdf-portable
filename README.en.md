@@ -2,7 +2,7 @@
 
 **Languages:** [Português (Brasil)](README.md) · English · [Español](README.es.md)
 
-A desktop application for working with PDF files and images locally. It is built with **Python, PySide6, pypdf, and Pillow**. The application interface is currently in Brazilian Portuguese.
+A desktop application for working with PDF files and images locally, built with **Python, PySide6, pypdf, Pillow, and ReportLab**. The interface can be switched between Brazilian Portuguese, English, and Spanish; the choice is stored locally.
 
 ## Features
 
@@ -13,6 +13,9 @@ A desktop application for working with PDF files and images locally. It is built
 - **Extract pages:** save selected pages or ranges such as `1-3, 5, 8-10`, allow repeated pages, and accept a password. Navigation and annotations are retained where possible, with remapping to the retained pages.
 - **Rotate pages:** rotate by 90°, 180°, or 270°, across the whole document or selected pages, including password-protected PDFs.
 - **Split PDF:** create one PDF per page and create the output folder when needed. Passwords are supported, and metadata, bookmarks, and page annotations are preserved where possible. Existing destination files are never overwritten; conflicts stop the operation.
+- **Reorder pages:** load a PDF and drag page rows into the desired sequence. Labels show original page numbers, and every source page must appear exactly once.
+- **Watermark and page numbers:** add diagonal or centered text, page numbers in the bottom-right or centered footer, or both in one operation. Original page content is not rasterized.
+- **Optimize PDF:** choose lossless stream compression/deduplication or balanced JPEG recompression of opaque raster images with adjustable quality. Transparent and inline images are left unchanged.
 - **Safer output handling:** the save dialog adds the PDF extension, prevents choosing a source file as the output, and asks before replacing an existing file.
 
 ### Image tools
@@ -24,7 +27,7 @@ A desktop application for working with PDF files and images locally. It is built
 
 ### Usability, privacy, and reliability
 
-- Desktop interface with tabs, reorder controls, drag and drop, intentional item duplication, Portuguese error messages, and a processing indicator. Passwords are entered through masked fields, are not stored in preferences, and the fields are cleared when an operation starts.
+- Desktop interface with tabs and a PT-BR/English/Spanish language selector, reorderable lists, intentional item duplication, and a processing indicator. Passwords are entered through masked fields, are not stored in preferences, and the fields are cleared when an operation starts.
 - DPI and margin controls when converting images to PDF.
 - Long-running tasks execute outside the main UI thread; the window cannot be closed while a task is running.
 - A button opens the output folder when processing finishes.
@@ -32,7 +35,8 @@ A desktop application for working with PDF files and images locally. It is built
 - Source files are not replaced by normal processing operations.
 - Temporary/atomic writes for PDF operations; splitting stops if an output filename already exists.
 - Persistent output permission preference on Linux/macOS: owner-only (0600, recommended default) or shared-readable (0644). Windows permissions are managed by the operating system.
-- Automated tests and dependency auditing run in GitHub Actions. The workflow also smoke-tests the Windows executable and publishes a SHA-256 checksum.
+- **Quality note:** balanced optimization may reduce image quality and cannot guarantee a smaller result for every PDF; keep the original and compare outputs. Watermarks use the built-in Helvetica font and may not support every Unicode character.
+- Automated tests and dependency auditing run in GitHub Actions. The workflow validates Windows, Linux, and macOS packages and generates SHA-256 checksums.
 
 ## Use on Windows without installing Python
 
@@ -100,18 +104,16 @@ The `--selftest` option initializes the interface in headless mode and exits wit
 
 ## ROADMAP
 
-### Completed in version 0.3.0
+### Completed in version 0.4.0
 
-- [x] **Password-protected PDFs:** masked password fields for extraction, rotation, and splitting; prompt for each protected file when merging. Passwords are not saved in preferences.
-- [x] **PDF resource preservation:** use pypdf document/page cloning to preserve bookmarks, metadata, annotations, and internal links where possible. Results depend on the PDF's structure; complex forms and links to removed pages still require review.
-- [x] **Multipage and animated images:** choose whether to import all pages/frames or only the first when creating a PDF, including TIFF and Pillow-supported animated formats such as GIF and WEBP.
-- [x] **Permanent releases:** CI is configured to create a GitHub Release when a `v*` tag is pushed, with platform packages and checksums.
-- [x] **Cross-platform packages:** Windows x64, Linux x64, and macOS Apple Silicon builds are configured in GitHub Actions.
-- [x] **Output permissions:** persistent preference to use 0600 (owner-only, default) or 0644 (shared-readable) on Linux/macOS.
+- [x] **Multilingual interface:** switch between Brazilian Portuguese, English, and Spanish, including tabs and the main controls.
+- [x] **Visual page reordering:** drag pages into a new order and save the PDF; every page is required exactly once.
+- [x] **PDF compression/optimization:** lossless stream compression and duplicate-object removal, plus balanced JPEG recompression with configurable quality. Recompression may change image appearance and does not guarantee every file will shrink.
+- [x] **Watermarks and page numbering:** overlay text without rasterizing the original content, plus footer page numbers.
 
 ### Possible next improvements
 
-- [ ] Translate the interface into English and Spanish, in addition to Brazilian Portuguese.
-- [ ] Add visual page reordering with drag and drop before saving.
-- [ ] Add PDF compression/optimization with an explicit file-size vs. quality choice.
-- [ ] Add watermarks, page numbers, and stamps.
+- [ ] Show page thumbnails before reordering.
+- [ ] Batch export for chained operations.
+- [ ] Select specific pages/ranges when applying watermarks or page numbers.
+- [ ] Translate every dialog and error message consistently.
