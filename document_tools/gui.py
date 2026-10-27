@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -231,6 +232,24 @@ TRANSLATIONS = {
         "Deixe vazio para aplicar em todas as páginas": "Leave blank to apply to all pages",
         "O texto e a numeração serão aplicados apenas às páginas selecionadas. A numeração conserva o número original da página.": "Text and numbering are applied only to selected pages. Page numbers retain the original document numbering.",
         "Páginas marcadas: {ranges}": "Selected pages: {ranges}",
+        "Transformar imagens em um documento": "Turn images into a document",
+        "Adicione as imagens e organize a sequência. Cada arquivo será colocado em uma página A4 sem distorcer a proporção.": "Add images and arrange their order. Each file will be placed on an A4 page without distorting its aspect ratio.",
+        "Reunir documentos em um único arquivo": "Combine documents into one file",
+        "A otimização sem perdas comprime streams e remove objetos redundantes; a equilibrada também recomprime imagens opacas.": "Lossless optimization compresses streams and removes redundant objects; balanced optimization also recompresses opaque images.",
+        "Unindo os PDFs…": "Merging PDFs…",
+        "Extraindo páginas…": "Extracting pages…",
+        "Girando páginas…": "Rotating pages…",
+        "Dividindo PDF em arquivos de página única…": "Splitting PDF into single-page files…",
+        "Convertendo imagens…": "Converting images…",
+        "{count} páginas salvas em: {directory}": "{count} pages saved to: {directory}",
+        " Falhas: {count}.": " Failures: {count}.",
+        "O intervalo '{range}' precisa estar entre 1 e {count}.": "Range '{range}' must be between 1 and {count}.",
+        "A página {number} foi informada mais de uma vez.": "Page {number} was specified more than once.",
+        "Intervalo de páginas inválido: '{range}'.": "Invalid page range: '{range}'.",
+        "A senha informada para o PDF '{name}' está incorreta.": "The password for PDF '{name}' is incorrect.",
+        "A senha informada para o PDF '{name}' está incorreta ou não pôde ser usada.": "The password for PDF '{name}' is incorrect or could not be used.",
+        "O PDF '{name}' exige uma senha. Informe-a para continuar.": "PDF '{name}' requires a password. Enter it to continue.",
+        "A pasta já contém '{name}'. Escolha outra pasta ou remova os arquivos conflitantes.": "The folder already contains '{name}'. Choose another folder or remove conflicting files.",
     },
     "es": {
         "PDF e imagens • v{version} • organizado, seguro e local": "PDF e imágenes • v{version} • organizado, seguro y local",
@@ -383,6 +402,25 @@ TRANSLATIONS = {
         "Duplicar selecionados": "Duplicar seleccionados",
         "Selecione pelo menos dois PDFs.": "Selecciona al menos dos PDFs.",
         "Unir documentos em um único arquivo": "Unir documentos en un solo archivo",
+        "Transformar imagens em um documento": "Convertir imágenes en un documento",
+        "Adicione as imagens e organize a sequência. Cada arquivo será colocado em uma página A4 sem distorcer a proporção.": "Añade las imágenes y organiza la secuencia. Cada archivo se colocará en una página A4 sin deformar sus proporciones.",
+        "Reunir documentos em um único arquivo": "Unir documentos en un solo archivo",
+        "A otimização sem perdas comprime streams e remove objetos redundantes; a equilibrada também recomprime imagens opacas.": "La optimización sin pérdida comprime los streams y elimina objetos redundantes; la equilibrada también recomprime imágenes opacas.",
+        "Unindo os PDFs…": "Uniendo los PDF…",
+        "Extraindo páginas…": "Extrayendo páginas…",
+        "Girando páginas…": "Girando páginas…",
+        "Dividindo PDF em arquivos de página única…": "Dividiendo el PDF en archivos de una página…",
+        "Convertendo imagens…": "Convirtiendo imágenes…",
+        "{count} páginas salvas em: {directory}": "{count} páginas guardadas en: {directory}",
+        "{count} imagem(ns) convertida(s) em {directory}.": "{count} imagen(es) convertida(s) en {directory}.",
+        " Falhas: {count}.": " Errores: {count}.",
+        "O intervalo '{range}' precisa estar entre 1 e {count}.": "El intervalo '{range}' debe estar entre 1 y {count}.",
+        "A página {number} foi informada mais de uma vez.": "La página {number} se indicó más de una vez.",
+        "Intervalo de páginas inválido: '{range}'.": "Intervalo de páginas no válido: '{range}'.",
+        "A senha informada para o PDF '{name}' está incorreta.": "La contraseña del PDF '{name}' es incorrecta.",
+        "A senha informada para o PDF '{name}' está incorreta ou não pôde ser usada.": "La contraseña del PDF '{name}' es incorrecta o no se pudo usar.",
+        "O PDF '{name}' exige uma senha. Informe-a para continuar.": "El PDF '{name}' requiere una contraseña. Introdúcela para continuar.",
+        "A pasta já contém '{name}'. Escolha outra pasta ou remova os arquivos conflitantes.": "La carpeta ya contiene '{name}'. Elige otra carpeta o elimina los archivos en conflicto.",
     }
 }
 
@@ -569,24 +607,64 @@ class DocumentToolsWindow(QMainWindow):
             if core in reverse:
                 source = reverse[core]
                 return leading + mapping.get(source, source) + trailing
-        # Translate dynamic operation summaries without altering file paths or sizes.
+        # Translate dynamic operation summaries while preserving file paths and filenames.
         dynamic_prefixes = {
             "en": [
                 ("PDF criado: ", "PDF created: "),
                 ("PDFs unidos: ", "PDFs merged: "),
                 ("Páginas extraídas: ", "Pages extracted: "),
                 ("PDF rotacionado: ", "PDF rotated: "),
+                ("Unindo os PDFs…", "Merging PDFs…"),
+                ("Extraindo páginas…", "Extracting pages…"),
+                ("Girando páginas…", "Rotating pages…"),
+                ("Dividindo PDF em arquivos de página única…", "Splitting PDF into single-page files…"),
+                ("Convertendo imagens…", "Converting images…"),
             ],
             "es": [
                 ("PDF criado: ", "PDF creado: "),
                 ("PDFs unidos: ", "PDFs unidos: "),
                 ("Páginas extraídas: ", "Páginas extraídas: "),
-                ("PDF rotacionado: ", "PDF rotado: "),
+                ("PDF rotacionado: ", "PDF girado: "),
+                ("Unindo os PDFs…", "Uniendo los PDF…"),
+                ("Extraindo páginas…", "Extrayendo páginas…"),
+                ("Girando páginas…", "Girando páginas…"),
+                ("Dividindo PDF em arquivos de página única…", "Dividiendo el PDF en archivos de una página…"),
+                ("Convertendo imagens…", "Convirtiendo imágenes…"),
             ],
         }
         for source_prefix, translated_prefix in dynamic_prefixes.get(self._language, []):
             if core.startswith(source_prefix):
                 return leading + translated_prefix + core[len(source_prefix):] + trailing
+        page_range = re.match(r"^O intervalo '(.+)' precisa estar entre 1 e (\d+)\.$", core)
+        if page_range:
+            return self._t("O intervalo '{range}' precisa estar entre 1 e {count}.").format(
+                range=page_range.group(1), count=page_range.group(2)
+            )
+        duplicate_page = re.match(r"^A página (\d+) foi informada mais de uma vez\.$", core)
+        if duplicate_page:
+            return self._t("A página {number} foi informada mais de uma vez.").format(
+                number=duplicate_page.group(1)
+            )
+        invalid_range = re.match(r"^Intervalo de páginas inválido: '(.+)'\.$", core)
+        if invalid_range:
+            return self._t("Intervalo de páginas inválido: '{range}'.").format(
+                range=invalid_range.group(1)
+            )
+        wrong_password = re.match(r"^A senha informada para o PDF '(.+)' está incorreta\.$", core)
+        if wrong_password:
+            return self._t("A senha informada para o PDF '{name}' está incorreta.").format(
+                name=wrong_password.group(1)
+            )
+        required_password = re.match(r"^O PDF '(.+)' exige uma senha\. Informe-a para continuar\.$", core)
+        if required_password:
+            return self._t("O PDF '{name}' exige uma senha. Informe-a para continuar.").format(
+                name=required_password.group(1)
+            )
+        conflict = re.match(r"^A pasta já contém '(.+)'\. Escolha outra pasta ou remova os arquivos conflitantes\.$", core)
+        if conflict:
+            return self._t("A pasta já contém '{name}'. Escolha outra pasta ou remova os arquivos conflitantes.").format(
+                name=conflict.group(1)
+            )
         for source, translated in mapping.items():
             if "{message}" in source and core.startswith(source.split("{message}")[0]):
                 prefix = source.split("{message}")[0]
@@ -912,7 +990,7 @@ class DocumentToolsWindow(QMainWindow):
         return str(output)
 
     def _choose_directory(self, title: str) -> str | None:
-        path = QFileDialog.getExistingDirectory(self, title)
+        path = QFileDialog.getExistingDirectory(self, self._t(title))
         return path or None
 
     def _run_task(
@@ -1189,8 +1267,8 @@ class DocumentToolsWindow(QMainWindow):
                 if pdf_requires_user_password(source):
                     password, accepted = QInputDialog.getText(
                         self,
-                        "Senha do PDF",
-                        f"O arquivo '{Path(source).name}' está protegido. Digite a senha:",
+                        self._t("Senha do PDF"),
+                        self._t("O arquivo '{name}' está protegido. Digite a senha:").format(name=Path(source).name),
                         QLineEdit.EchoMode.Password,
                     )
                     if not accepted:
@@ -1411,7 +1489,10 @@ class DocumentToolsWindow(QMainWindow):
         file_mode = self._output_file_mode()
         self._run_task(
             "Dividindo PDF em arquivos de página única…",
-            lambda: f"{len(split_pdf(source, directory, password=password, file_mode=file_mode))} páginas salvas em: {directory}",
+            lambda: self._t("{count} páginas salvas em: {directory}").format(
+                count=len(split_pdf(source, directory, password=password, file_mode=file_mode)),
+                directory=directory,
+            ),
             output_location=directory,
         )
 
@@ -1884,9 +1965,11 @@ class DocumentToolsWindow(QMainWindow):
                 except Exception as error:
                     failures.append(f"{source.name}: {error}")
 
-            summary = f"{len(completed)} imagem(ns) convertida(s) em {directory}."
+            summary = self._t("{count} imagem(ns) convertida(s) em {directory}.").format(
+                count=len(completed), directory=directory
+            )
             if failures:
-                summary += f" Falhas: {len(failures)}. " + " | ".join(failures[:3])
+                summary += self._t(" Falhas: {count}.").format(count=len(failures)) + " " + " | ".join(failures[:3])
             if not completed:
                 raise RuntimeError(summary)
             return summary
