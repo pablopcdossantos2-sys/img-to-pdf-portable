@@ -221,3 +221,84 @@ def test_cancel_releases_a_paused_batch_control() -> None:
     assert not worker.is_alive()
     assert outcome == [False]
     assert control.was_stopped is False
+
+
+
+def test_reprocess_only_failed_preserves_successes_and_skips_them(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source, output = tmp_path / "input", tmp_path / "output"
+    source.mkdir()
+    output.mkdir()
+    for name in ("a.pdf", "b.pdf", "c.pdf"):
+        (source / name).write_bytes(name.encode("ascii"))
+    calls: list[str] = []
+    attempts: dict[str, int] = {}
+
+    def fake_pipeline(input_path, output_path, **kwargs):
+        name = Path(input_path).name
+        calls.append(name)
+        attempts[name] = attempts.get(name, 0) + 1
+        if name == "a.pdf" and attempts[name] == 1:
+            raise ValueError("first attempt fails")
+        Path(output_path).write_bytes(b"processed")
+        return Path(output_path)
+
+    monkeypatch.setattr(batch, "process_pdf_pipeline", fake_pipeline)
+    original = process_pdf_folder(source, output, make_profile())
+    assert [item.success for item in original] == [False, True, True]
+    assert calls == ["a.pdf", "b.pdf", "c.pdf"]
+
+    retried = process_pdf_folder(
+        source, output, make_profile(),
+        only_sources=[original[0].source_path],
+        initial_results=original,
+        resume=True,
+    )
+    assert [Path(item.source_path).name for item in retried] == ["a.pdf", "b.pdf", "c.pdf"]
+    assert all(item.success for item in retried)
+    assert calls == ["a.pdf", "b.pdf", "c.pdf", "a.pdf"]
+    assert (output / "b-processed.pdf").read_bytes() == b"processed"
+
+
+def test_failure_only_retry_checkpoint_resumes_the_same_subset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source, output = tmp_path / "input", tmp_path / "output"
+    source.mkdir()
+    output.mkdir()
+    for name in ("a.pdf", "b.pdf", "c.pdf"):
+        (source / name).write_bytes(name.encode("ascii"))
+    calls: list[str] = []
+    attempts: dict[str, int] = {}
+
+    def fake_pipeline(input_path, output_path, **kwargs):
+        name = Path(input_path).name
+        calls.append(name)
+        attempts[name] = attempts.get(name, 0) + 1
+        if name in {"a.pdf", "b.pdf"} and attempts[name] == 1:
+            raise ValueError("initial failure")
+        Path(output_path).write_bytes(b"processed")
+        return Path(output_path)
+
+    monkeypatch.setattr(batch, "process_pdf_pipeline", fake_pipeline)
+    original = process_pdf_folder(source, output, make_profile())
+    assert [item.success for item in original] == [False, False, True]
+
+    control = BatchControl()
+
+    def cancel_after_one(done: int, total: int, name: str) -> None:
+        if done == 1:
+            control.cancel()
+
+    partial = process_pdf_folder(
+        source, output, make_profile(),
+        only_sources=[original[0].source_path, original[1].source_path],
+        initial_results=original, resume=True, control=control,
+        progress_callback=cancel_after_one,
+    )
+    assert [Path(item.source_path).name for item in partial] == ["a.pdf", "b.pdf", "c.pdf"]
+    assert partial[0].success and not partial[1].success and partial[2].success
+    assert (output / CHECKPOINT_FILENAME).is_file()
+    assert calls == ["a.pdf", "b.pdf", "c.pdf", "a.pdf"]
+
+    resumed = process_pdf_folder(source, output, make_profile(), resume=True)
+    assert all(item.success for item in resumed)
+    assert calls == ["a.pdf", "b.pdf", "c.pdf", "a.pdf", "b.pdf"]
+    assert not (output / CHECKPOINT_FILENAME).exists()
