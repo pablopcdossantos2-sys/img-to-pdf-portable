@@ -306,6 +306,7 @@ TRANSLATIONS = {
         "O PDF contém uma estrutura não suportada ou está danificado. Tente salvar uma nova cópia do PDF antes de processar.": "The PDF contains an unsupported structure or is damaged. Try saving a fresh copy before processing it.",
         "A imagem não pôde ser processada. Verifique se o arquivo está íntegro e usa um formato compatível.": "The image could not be processed. Check that the file is intact and uses a supported format.",
         "Não foi possível renderizar o PDF. Ele pode usar recursos não suportados ou estar danificado.": "The PDF could not be rendered. It may use unsupported features or be damaged.",
+        "O perfil salvo contém opções inválidas e não pode ser exportado.": "The saved profile contains invalid options and cannot be exported.",
     },
     "es": {
         "PDF e imagens • v{version} • organizado, seguro e local": "PDF e imágenes • v{version} • organizado, seguro y local",
@@ -530,6 +531,7 @@ TRANSLATIONS = {
         "O PDF contém uma estrutura não suportada ou está danificado. Tente salvar uma nova cópia do PDF antes de processar.": "El PDF contiene una estructura no compatible o está dañado. Intenta guardar una copia nueva antes de procesarlo.",
         "A imagem não pôde ser processada. Verifique se o arquivo está íntegro e usa um formato compatível.": "No se pudo procesar la imagen. Comprueba que el archivo esté íntegro y tenga un formato compatible.",
         "Não foi possível renderizar o PDF. Ele pode usar recursos não suportados ou estar danificado.": "No se pudo renderizar el PDF. Puede usar funciones no compatibles o estar dañado.",
+        "O perfil salvo contém opções inválidas e não pode ser exportado.": "El perfil guardado contiene opciones no válidas y no se puede exportar.",
     }
 }
 
@@ -2313,7 +2315,7 @@ class DocumentToolsWindow(QMainWindow):
             raise ValueError("O arquivo de perfil não contém um objeto JSON.")
         if set(document) != {"schema_version", "name", "profile"}:
             raise ValueError("O arquivo contém campos extras ou não reconhecidos.")
-        if document.get("schema_version") != 1:
+        if type(document.get("schema_version")) is not int or document.get("schema_version") != 1:
             raise ValueError("A versão do perfil não é compatível.")
         name = document.get("name")
         profile = document.get("profile")
@@ -2371,10 +2373,23 @@ class DocumentToolsWindow(QMainWindow):
         if output.suffix.lower() != ".json":
             output = output.with_suffix(".json")
         output = output.resolve()
+        try:
+            safe_name, safe_profile = self._validate_pipeline_profile_document({
+                "schema_version": 1,
+                "name": name,
+                "profile": profiles[name],
+            })
+        except ValueError:
+            QMessageBox.warning(
+                self,
+                self._t("Exportar perfil"),
+                self._t("O perfil salvo contém opções inválidas e não pode ser exportado."),
+            )
+            return
         document = {
             "schema_version": 1,
-            "name": name,
-            "profile": profiles[name],
+            "name": safe_name,
+            "profile": safe_profile,
         }
         temporary: Path | None = None
         try:
