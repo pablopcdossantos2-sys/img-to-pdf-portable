@@ -6,7 +6,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PySide6.QtCore import QCoreApplication, QEvent
-from PySide6.QtWidgets import QApplication, QLineEdit, QListWidget, QListWidgetItem
+from PySide6.QtWidgets import QApplication, QAbstractItemView, QLineEdit, QListWidget, QListWidgetItem
 
 from document_tools.gui import APP_NAME, DocumentToolsWindow
 
@@ -119,7 +119,7 @@ def test_language_selector_translates_tabs_into_english_and_spanish(qt_app: QApp
 def test_new_pdf_tools_are_available_in_the_interface(qt_app: QApplication) -> None:
     window = DocumentToolsWindow()
     try:
-        assert window.reorder_list.dragDropMode() == window.reorder_list.DragDropMode.InternalMove
+        assert window.reorder_list.dragDropMode() == QAbstractItemView.DragDropMode.InternalMove
         assert window.stamp_numbering.isChecked() is False
         assert window.optimize_mode.currentData() == "lossless"
         assert window.optimize_quality.isEnabled() is False
