@@ -201,6 +201,25 @@ TRANSLATIONS = {
         "Qualidade JPEG precisa ficar entre 50 e 95.": "JPEG quality must be between 50 and 95.",
         "Escolha otimização sem perdas ou equilibrada.": "Choose lossless or balanced optimization.",
         "Esta opção recomprime imagens sem transparência; a qualidade visual pode diminuir.": "This option recompresses opaque images; visual quality may decrease.",
+        "Junte documentos em um único arquivo": "Combine documents into one file",
+        "A ordem dos PDFs na lista será a ordem dos documentos no arquivo final.": "The PDF list order will become the document order in the final file.",
+        "Escolha uma senha por PDF ou deixe a senha como None.": "Provide one password per PDF or leave the password as None.",
+        "Unir documentos em um único arquivo": "Combine documents into one file",
+        "Escolha o documento e defina o texto, a posição e a opacidade da marca d'água.": "Choose the document and set watermark text, position, and opacity.",
+        "Escolha o modo de otimização e a qualidade das imagens.": "Choose the optimization mode and image quality.",
+        "Modo de otimização": "Optimization mode",
+        "{count} páginas carregadas. Arraste para reorganizar.": "{count} pages loaded. Drag to reorder.",
+        "Arraste uma página para cima ou para baixo. A numeração indica a página original.": "Drag a page up or down. The label shows its original page number.",
+        "Escolher PDF para otimizar": "Choose PDF to optimize",
+        "Escolher PDF para marca d'água/numeração": "Choose PDF for watermark/page numbering",
+        "Escolher PDF para reorganizar suas páginas": "Choose a PDF to reorder",
+        "Processamento local:": "Local processing:",
+        "{added} imagem(ns) adicionada(s).": "{added} image(s) added.",
+        "Nenhuma imagem nova adicionada.": "No new images added.",
+        "{added} PDF(s) adicionado(s).": "{added} PDF(s) added.",
+        "Nenhum PDF novo adicionado.": "No new PDFs added.",
+        "{count} imagem(ns) convertida(s) em {directory}.": "{count} image(s) converted in {directory}.",
+        "Qualidade": "Quality",
     },
     "es": {
         "PDF e imagens • v{version} • organizado, seguro e local": "PDF e imágenes • v{version} • organizado, seguro y local",
@@ -325,6 +344,22 @@ TRANSLATIONS = {
         "Otimização equilibrada": "Optimización equilibrada",
         "PDF otimizado: {old} → {new} ({percent}% de redução)": "PDF optimizado: {old} → {new} ({percent}% menos)",
         "Esta opção recomprime imagens sem transparência; a qualidade visual pode diminuir.": "Esta opción recomprime imágenes sin transparencia; la calidad visual puede disminuir.",
+        "Junte documentos em um único arquivo": "Unir documentos en un solo archivo",
+        "A ordem dos PDFs na lista será a ordem dos documentos no arquivo final.": "El orden de la lista de PDFs será el orden en el documento final.",
+        "Escolha o documento e defina o texto, a posição e a opacidade da marca d'água.": "Elige un documento y define el texto, la posición y la opacidad de la marca de agua.",
+        "Escolha o modo de otimização e a qualidade das imagens.": "Elige el modo de optimización y la calidad de imagen.",
+        "Modo de otimização": "Modo de optimización",
+        "{count} páginas carregadas. Arraste para reorganizar.": "{count} páginas cargadas. Arrastra para reordenar.",
+        "Arraste uma página para cima ou para baixo. A numeração indica a página original.": "Arrastra una página hacia arriba o abajo. La etiqueta indica el número de página original.",
+        "Não foi possível abrir o PDF": "No se pudo abrir el PDF",
+        "Escolher PDF para otimizar": "Elegir PDF para optimizar",
+        "Escolher PDF para marca d'água/numeração": "Elegir PDF para marca de agua/numeración",
+        "Escolher PDF para reorganizar suas páginas": "Elegir PDF para reorganizar sus páginas",
+        "Qualidade": "Calidad",
+        "{added} imagem(ns) adicionada(s).": "{added} imagen(es) añadida(s).",
+        "Nenhuma imagem nova adicionada.": "No se añadieron imágenes nuevas.",
+        "{added} PDF(s) adicionado(s).": "Se añadieron {added} PDF(s).",
+        "Nenhum PDF novo adicionado.": "No se añadieron PDF nuevos.",
     },
 }
 
@@ -492,13 +527,30 @@ class DocumentToolsWindow(QMainWindow):
         """Translate a Brazilian Portuguese UI string to the active interface language."""
         if self._language == "pt":
             return text
-        if text in TRANSLATIONS.get(self._language, {}):
-            return TRANSLATIONS[self._language][text]
+        leading = text[:len(text) - len(text.lstrip())]
+        trailing = text[len(text.rstrip()):]
+        core = text.strip()
+        if core.startswith("PDF e imagens • v") and core.endswith("organizado, seguro e local"):
+            version = core.split(" • ")[1]
+            translated = {
+                "en": f"PDFs and images • {version} • organized, safe and local",
+                "es": f"PDF e imágenes • {version} • organizado, seguro y local",
+            }.get(self._language, core)
+            return leading + translated + trailing
+        mapping = TRANSLATIONS.get(self._language, {})
+        if core in mapping:
+            return leading + mapping[core] + trailing
+        # Allow switching between non-Portuguese languages when a status is already translated.
+        for language in ("en", "es"):
+            reverse = {translated: source for source, translated in TRANSLATIONS[language].items()}
+            if core in reverse:
+                source = reverse[core]
+                return leading + mapping.get(source, source) + trailing
         # Messages that embed file paths or worker errors are translated as a prefix/suffix.
-        for source, translated in TRANSLATIONS.get(self._language, {}).items():
-            if "{message}" in source and text.startswith(source.split("{message}")[0]):
+        for source, translated in mapping.items():
+            if "{message}" in source and core.startswith(source.split("{message}")[0]):
                 prefix = source.split("{message}")[0]
-                return translated.split("{message}")[0] + text[len(prefix):]
+                return leading + translated.split("{message}")[0] + core[len(prefix):] + trailing
         return text
 
     def _capture_ui_texts(self) -> None:
