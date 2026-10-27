@@ -17,7 +17,7 @@ Aplicación de escritorio para trabajar localmente con archivos PDF e imágenes,
 - **Marcas de agua y numeración selectivas:** aplica texto, numeración o ambos a todas las páginas o solo a intervalos (por ejemplo, `2-4, 7`). La numeración conserva la posición original de la página en el documento. El contenido original no se rasteriza.
 - **Optimizar PDF:** elige compresión de streams sin pérdida y eliminación de objetos duplicados, o recomprensión JPEG equilibrada de imágenes opacas con calidad ajustable. Las imágenes transparentes y las imágenes inline se mantienen sin cambios.
 - **Flujo por lotes:** combina rotación, marca de agua/numeración y optimización en una sola operación. Las etapas siguen un orden fijo, usan archivos temporales locales y solo guardan el resultado final si todo termina correctamente.
-- **Perfiles reutilizables:** guarda, carga y elimina perfiles con nombre en las preferencias locales. Los perfiles guardan solo opciones de procesamiento; no incluyen la ruta del PDF ni la contraseña.
+- **Perfiles reutilizables por lotes:** guarda, carga y elimina perfiles con nombre en las preferencias locales, o expórtalos/importarlos como JSON para transferirlos entre equipos. El archivo usa una versión de esquema validada y solo contiene opciones de procesamiento; nunca incluye rutas de PDF ni contraseñas. Se rechazan campos desconocidos y opciones no válidas.
 - **Protección de salida:** el cuadro de guardado añade la extensión PDF, impide elegir como destino uno de los archivos de origen y solicita confirmación antes de reemplazar un archivo existente.
 
 ### Herramientas para imágenes
@@ -29,7 +29,7 @@ Aplicación de escritorio para trabajar localmente con archivos PDF e imágenes,
 
 ### Facilidad de uso, privacidad y robustez
 
-- Interfaz de escritorio con selector de idioma PT-BR/inglés/español, cuadrículas de miniaturas con vista previa, perfiles reutilizables de flujo por lotes, duplicación intencional e indicador de procesamiento. Los diálogos principales, solicitudes de contraseña, confirmaciones y errores habituales de intervalos siguen el idioma seleccionado. Las contraseñas se escriben en campos ocultos, no se guardan en las preferencias y los campos se limpian al iniciar la operación.
+- Interfaz de escritorio con selector de idioma PT-BR/inglés/español, cuadrículas de miniaturas con vista previa, perfiles reutilizables de flujo por lotes, duplicación intencional e indicador de procesamiento. Los diálogos principales, solicitudes de contraseña, confirmaciones y errores habituales de intervalos siguen el idioma seleccionado. Los errores comunes de análisis pypdf, renderizado Qt PDF y procesamiento de imágenes reciben mensajes más claros y traducidos, sin exponer diagnósticos internos. Las contraseñas se escriben en campos ocultos, no se guardan en las preferencias y los campos se limpian al iniciar la operación.
 - Controles de DPI y márgenes al convertir imágenes a PDF.
 - Las tareas largas se ejecutan fuera del hilo principal de la interfaz; la ventana no se puede cerrar mientras una tarea está activa.
 - Un botón permite abrir la carpeta de salida al finalizar el procesamiento.
@@ -52,7 +52,7 @@ El flujo **PDF Hub CI, security and packages** prueba la aplicación y genera pa
 
 El artefacto incluye el entorno de ejecución y no requiere instalar Python por separado. Windows puede mostrar una advertencia de seguridad para archivos descargados; verifica el origen antes de ejecutar la aplicación.
 
-> Los artefactos de GitHub Actions son temporales y caducan según el periodo de retención configurado. Las versiones permanentes se generan al enviar una etiqueta como `v0.6.0`. Los ejecutables no tienen firma digital/notarización; Windows SmartScreen o macOS Gatekeeper pueden mostrar una advertencia.
+> Los artefactos de GitHub Actions son temporales y caducan según el periodo de retención configurado. Las versiones permanentes se generan al enviar una etiqueta como `v0.7.0`. Los ejecutables no tienen firma digital/notarización; Windows SmartScreen o macOS Gatekeeper pueden mostrar una advertencia.
 
 ## Ejecutar desde el código fuente
 
@@ -106,7 +106,7 @@ La opción `--selftest` inicializa la interfaz sin mostrar una ventana y termina
 
 ## ROADMAP
 
-### Completado hasta la versión 0.6.0
+### Completado hasta la versión 0.7.0
 
 - [x] **Interfaz multilingüe:** cambia entre portugués brasileño, inglés y español, incluidas las pestañas y los controles principales.
 - [x] **Reordenación visual:** arrastra las páginas al nuevo orden y guarda el PDF; cada página debe aparecer exactamente una vez.
@@ -114,9 +114,10 @@ La opción `--selftest` inicializa la interfaz sin mostrar una ventana y termina
 - [x] **Marcas de agua y numeración por intervalos:** selecciona páginas específicas o deja el campo vacío para aplicar a todo el documento; la numeración conserva la referencia de página original.
 - [x] **Miniaturas al reordenar:** cuadrícula con miniaturas de todas las páginas, generadas en segundo plano, junto con la vista previa seleccionada.
 - [x] **Flujo por lotes:** combina rotación, marca de agua/numeración y optimización sin crear manualmente archivos intermedios.
-- [x] **Perfiles reutilizables:** guarda/carga/elimina combinaciones de etapas en las preferencias locales; los perfiles excluyen rutas y contraseñas.
+- [x] **Perfiles JSON reutilizables:** exporta/importa perfiles entre equipos con validación de versión/esquema y rechazo de campos desconocidos; los perfiles excluyen rutas y contraseñas.
+- [x] **Errores de bibliotecas traducidos:** los fallos habituales de estructura PDF, renderizado e imágenes se muestran con mensajes más claros en los tres idiomas.
 
 ### Posibles mejoras futuras
 
-- [ ] Exportar/importar perfiles de flujo por lotes en archivos JSON para transferirlos entre equipos.
-- [ ] Traducir mensajes excepcionales de bibliotecas externas y formatos PDF poco habituales.
+- [ ] Aplicar un perfil guardado a varios PDFs de una carpeta, con un informe individual de éxito/error.
+- [ ] Añadir migraciones de esquema para mantener importables los perfiles cuando se incorporen nuevas opciones.
