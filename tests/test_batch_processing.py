@@ -1,0 +1,79 @@
+from __future__ import annotations
+from pathlib import Path
+import pytest
+import document_tools.batch_processing as batch
+from document_tools.batch_processing import process_pdf_folder
+
+
+def make_profile() -> dict[str, object]:
+    return {
+        "rotate_enabled": True, "rotate_angle": 90, "rotate_ranges": "",
+        "stamp_enabled": False, "stamp_text": "", "page_numbering": False,
+        "stamp_ranges": "", "optimize_enabled": False, "optimize_mode": "lossless",
+        "quality": 82, "output_suffix": "-processed",
+    }
+
+
+def test_folder_batch_records_per_file_failures_and_never_overwrites(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source, output = tmp_path / "input", tmp_path / "output"
+    source.mkdir(); output.mkdir()
+    for name in ("a.pdf", "b.pdf", "bad.pdf"):
+        (source / name).write_bytes(b"fake pdf")
+    existing = output / "a-processed.pdf"
+    existing.write_bytes(b"keep this")
+    processed: list[str] = []
+
+    def fake_pipeline(input_path, output_path, **kwargs):
+        name = Path(input_path).name
+        processed.append(name)
+        if name == "bad.pdf":
+            raise ValueError("simulated malformed PDF")
+        Path(output_path).write_bytes(b"processed")
+        return Path(output_path)
+
+    monkeypatch.setattr(batch, "process_pdf_pipeline", fake_pipeline)
+    progress: list[tuple[int, int, str]] = []
+    results = process_pdf_folder(source, output, make_profile(), progress_callback=lambda done, total, name: progress.append((done, total, name)))
+    assert [Path(item.source_path).name for item in results] == ["a.pdf", "b.pdf", "bad.pdf"]
+    assert [item.success for item in results] == [True, True, False]
+    assert Path(results[0].output_path).name == "a-processed-2.pdf"
+    assert existing.read_bytes() == b"keep this"
+    assert Path(results[1].output_path).read_bytes() == b"processed"
+    assert results[2].output_path == "" and "simulated malformed PDF" in results[2].message
+    assert processed == ["a.pdf", "b.pdf", "bad.pdf"]
+    assert [entry[0] for entry in progress] == [1, 2, 3] and all(entry[1] == 3 for entry in progress)
+
+
+def test_recursive_batch_preserves_subfolder_layout_and_matches_uppercase_pdf(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source, output = tmp_path / "input", tmp_path / "output"
+    (source / "nested").mkdir(parents=True); output.mkdir()
+    (source / "top.PDF").write_bytes(b"fake")
+    (source / "nested" / "inside.pdf").write_bytes(b"fake")
+
+    def fake_pipeline(input_path, output_path, **kwargs):
+        Path(output_path).write_bytes(b"processed")
+        return Path(output_path)
+
+    monkeypatch.setattr(batch, "process_pdf_pipeline", fake_pipeline)
+    results = process_pdf_folder(source, output, make_profile(), recursive=True)
+    assert len(results) == 2 and all(result.success for result in results)
+    assert (output / "top-processed.pdf").exists()
+    assert (output / "nested" / "inside-processed.pdf").exists()
+
+
+def test_folder_batch_rejects_output_inside_source_and_empty_folder(tmp_path: Path) -> None:
+    source = tmp_path / "input"
+    source.mkdir(); (source / "subfolder").mkdir()
+    with pytest.raises(ValueError, match="pasta de saída"):
+        process_pdf_folder(source, source / "subfolder", make_profile())
+    output = tmp_path / "output"; output.mkdir()
+    with pytest.raises(ValueError, match="não contém arquivos PDF"):
+        process_pdf_folder(source, output, make_profile())
+
+
+def test_batch_requires_at_least_one_active_operation(tmp_path: Path) -> None:
+    source, output = tmp_path / "input", tmp_path / "output"
+    source.mkdir(); output.mkdir(); (source / "one.pdf").write_bytes(b"fake")
+    profile = make_profile(); profile["rotate_enabled"] = False
+    with pytest.raises(ValueError, match="pelo menos uma etapa"):
+        process_pdf_folder(source, output, profile)
