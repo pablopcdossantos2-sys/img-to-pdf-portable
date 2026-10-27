@@ -732,6 +732,102 @@ def create_app_icon() -> QIcon:
     return icon
 
 
+TRANSLATIONS["en"].update({
+    "Modo de divisão": "Split method",
+    "Um arquivo por página": "One file per page",
+    "A cada N páginas": "Every N pages",
+    "Páginas por arquivo": "Pages per file",
+    "Após páginas específicas": "After selected pages",
+    "Páginas após as quais dividir": "Pages after which to split",
+    "Ex.: 2, 5, 10": "e.g. 2, 5, 10",
+    "Após páginas pares": "After even pages",
+    "Após páginas ímpares": "After odd pages",
+    "Por tamanho aproximado": "By approximate size",
+    "Tamanho alvo por arquivo": "Target size per file",
+    "Por marcadores do sumário": "By bookmarks (outline)",
+    "Nível do marcador": "Bookmark level",
+    "Filtrar marcador (expressão regular, opcional)": "Filter bookmark title (optional regex)",
+    "Filtro opcional; use uma expressão regular": "Optional filter; enter a regular expression",
+    "Divida o PDF por página, grupos de páginas, tamanho aproximado ou marcadores do sumário.": "Split by page, page groups, approximate size or document bookmarks.",
+    "O tamanho é aproximado; um PDF de uma única página pode exceder o limite.": "The size is approximate; a single-page PDF may exceed the target.",
+    "O modo equilibrado recomprime imagens sem transparência; a qualidade visual pode diminuir. A redução depende do conteúdo do PDF.": "Balanced mode recompresses opaque images; visual quality may decrease. Reduction depends on PDF content.",
+    "O modo sem perdas não altera a qualidade das imagens; use o modo equilibrado para aplicar este valor.": "Lossless mode does not change image quality; use balanced mode to apply this value.",
+    "PDF otimizado: {old} → {new} ({percent}% menor)": "PDF optimized: {old} → {new} ({percent}% smaller)",
+    "PDF otimizado: {old} → {new} ({percent}% maior)": "PDF optimized: {old} → {new} ({percent}% larger)",
+    "PDF otimizado: {old} → {new} (tamanho igual)": "PDF optimized: {old} → {new} (same size)",
+    "Modo de divisão inválido.": "Invalid split method.",
+    "O número de páginas por arquivo deve ser positivo.": "Pages per file must be a positive number.",
+    "Informe páginas após as quais dividir, por exemplo: 2, 5, 8.": "Enter page numbers after which to split, e.g. 2, 5, 8.",
+    "O tamanho alvo precisa ser maior que zero.": "The target size must be greater than zero.",
+    "O nível do marcador precisa ser um inteiro positivo.": "Bookmark level must be a positive integer.",
+    "A expressão regular para filtrar marcadores é inválida.": "The bookmark filter is not a valid regular expression.",
+    "O PDF não contém marcadores no nível solicitado (ou nenhum corresponde ao filtro).": "The PDF has no bookmarks at the selected level (or none match the filter).",
+    "Não foi possível gerar divisões a partir das opções informadas.": "Could not create split files from the selected options.",
+    "Dividindo PDF em arquivos…": "Splitting PDF into files…",
+    "{count} arquivos criados em: {directory}": "{count} files created in: {directory}"
+});
+TRANSLATIONS["es"].update({
+    "Modo de divisão": "Método de división",
+    "Um arquivo por página": "Un archivo por página",
+    "A cada N páginas": "Cada N páginas",
+    "Páginas por arquivo": "Páginas por archivo",
+    "Após páginas específicas": "Después de páginas concretas",
+    "Páginas após as quais dividir": "Páginas después de las que dividir",
+    "Ex.: 2, 5, 10": "Ej.: 2, 5, 10",
+    "Após páginas pares": "Después de páginas pares",
+    "Após páginas ímpares": "Después de páginas impares",
+    "Por tamanho aproximado": "Por tamaño aproximado",
+    "Tamanho alvo por arquivo": "Tamaño objetivo por archivo",
+    "Por marcadores do sumário": "Por marcadores del índice",
+    "Nível do marcador": "Nivel del marcador",
+    "Filtrar marcador (expressão regular, opcional)": "Filtrar marcador (expresión regular, opcional)",
+    "Filtro opcional; use uma expressão regular": "Filtro opcional; introduce una expresión regular",
+    "Divida o PDF por página, grupos de páginas, tamanho aproximado ou marcadores do sumário.": "Divide por página, grupos de páginas, tamaño aproximado o marcadores del índice.",
+    "O tamanho é aproximado; um PDF de uma única página pode exceder o limite.": "El tamaño es aproximado; un PDF de una sola página puede superar el límite.",
+    "O modo equilibrado recomprime imagens sem transparência; a qualidade visual pode diminuir. A redução depende do conteúdo do PDF.": "El modo equilibrado recomprime imágenes opacas; la calidad visual puede disminuir. La reducción depende del contenido del PDF.",
+    "O modo sem perdas não altera a qualidade das imagens; use o modo equilibrado para aplicar este valor.": "El modo sin pérdida no cambia la calidad de las imágenes; usa el modo equilibrado para aplicar este valor.",
+    "PDF otimizado: {old} → {new} ({percent}% menor)": "PDF optimizado: {old} → {new} ({percent}% más pequeño)",
+    "PDF otimizado: {old} → {new} ({percent}% maior)": "PDF optimizado: {old} → {new} ({percent}% más grande)",
+    "PDF otimizado: {old} → {new} (tamanho igual)": "PDF optimizado: {old} → {new} (mismo tamaño)",
+    "Modo de divisão inválido.": "Método de división no válido.",
+    "O número de páginas por arquivo deve ser positivo.": "Las páginas por archivo deben ser un número positivo.",
+    "Informe páginas após as quais dividir, por exemplo: 2, 5, 8.": "Indica las páginas después de las que dividir, por ejemplo: 2, 5, 8.",
+    "O tamanho alvo precisa ser maior que zero.": "El tamaño objetivo debe ser mayor que cero.",
+    "O nível do marcador precisa ser um inteiro positivo.": "El nivel del marcador debe ser un entero positivo.",
+    "A expressão regular para filtrar marcadores é inválida.": "El filtro de marcadores no es una expresión regular válida.",
+    "O PDF não contém marcadores no nível solicitado (ou nenhum corresponde ao filtro).": "El PDF no tiene marcadores en el nivel indicado (o ninguno coincide con el filtro).",
+    "Não foi possível gerar divisões a partir das opções informadas.": "No se pudieron crear divisiones con las opciones seleccionadas.",
+    "Dividindo PDF em arquivos…": "Dividiendo el PDF en archivos…",
+    "{count} arquivos criados em: {directory}": "{count} archivos creados en: {directory}"
+});
+
+class ReorderablePageList(QListWidget):
+    """Icon grid whose drop handler always reorders the underlying item model."""
+
+    def move_page_to_row(self, source_row: int, target_row: int) -> None:
+        if source_row < 0 or source_row >= self.count():
+            return
+        item = self.takeItem(source_row)
+        target_row = max(0, min(target_row, self.count()))
+        self.insertItem(target_row, item)
+        self.setCurrentItem(item)
+
+    def dropEvent(self, event) -> None:
+        selected = self.selectedItems()
+        if len(selected) != 1 or event.source() is not self:
+            event.ignore()
+            return
+        source_row = self.row(selected[0])
+        target_row = self.indexAt(event.position().toPoint()).row()
+        if target_row < 0:
+            target_row = self.count() - 1
+        if source_row == target_row:
+            event.acceptProposedAction()
+            return
+        self.move_page_to_row(source_row, target_row)
+        event.acceptProposedAction()
+
+
 class ImageDropList(QListWidget):
     """Image list that accepts external images while retaining internal reordering."""
 
@@ -2060,7 +2156,7 @@ class DocumentToolsWindow(QMainWindow):
     def _build_split_tab(self) -> QWidget:
         page, layout = self._new_page(
             "Dividir o PDF em arquivos menores",
-            "Cada página será salva como um PDF separado. Se algum nome de destino já existir, a operação será interrompida para evitar sobrescrita.",
+            "Divida o PDF por página, grupos de páginas, tamanho aproximado ou marcadores do sumário.",
         )
         form = QFormLayout()
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
@@ -2089,13 +2185,53 @@ class DocumentToolsWindow(QMainWindow):
         directory_container = QWidget()
         directory_container.setLayout(directory_row)
         form.addRow("Pasta de saída", directory_container)
+
+        self.split_mode = QComboBox()
+        for label, data in [
+            ("Um arquivo por página", "each_page"),
+            ("A cada N páginas", "every_n_pages"),
+            ("Após páginas específicas", "after_pages"),
+            ("Após páginas pares", "after_even_pages"),
+            ("Após páginas ímpares", "after_odd_pages"),
+            ("Por tamanho aproximado", "by_size"),
+            ("Por marcadores do sumário", "by_bookmarks"),
+        ]:
+            self.split_mode.addItem(label, data)
+        self.split_mode.currentIndexChanged.connect(self._update_split_mode_controls)
+        form.addRow("Modo de divisão", self.split_mode)
+
+        self.split_pages_per_file = QSpinBox()
+        self.split_pages_per_file.setRange(1, 10000)
+        self.split_pages_per_file.setValue(10)
+        form.addRow("Páginas por arquivo", self.split_pages_per_file)
+        self.split_after_pages = QLineEdit()
+        self.split_after_pages.setPlaceholderText("Ex.: 2, 5, 10")
+        form.addRow("Páginas após as quais dividir", self.split_after_pages)
+        self.split_target_mb = QDoubleSpinBox()
+        self.split_target_mb.setDecimals(1)
+        self.split_target_mb.setRange(0.1, 1000.0)
+        self.split_target_mb.setSingleStep(0.5)
+        self.split_target_mb.setValue(10.0)
+        self.split_target_mb.setSuffix(" MB")
+        form.addRow("Tamanho alvo por arquivo", self.split_target_mb)
+        self.split_bookmark_level = QSpinBox()
+        self.split_bookmark_level.setRange(1, 10)
+        self.split_bookmark_level.setValue(1)
+        form.addRow("Nível do marcador", self.split_bookmark_level)
+        self.split_bookmark_pattern = QLineEdit()
+        self.split_bookmark_pattern.setPlaceholderText("Filtro opcional; use uma expressão regular")
+        form.addRow("Filtrar marcador (expressão regular, opcional)", self.split_bookmark_pattern)
         self.split_password = QLineEdit()
         self.split_password.setEchoMode(QLineEdit.EchoMode.Password)
         self.split_password.setPlaceholderText("Opcional; não é armazenada")
         form.addRow("Senha do PDF (opcional)", self.split_password)
+        self._split_form = form
         layout.addLayout(form)
+        note = QLabel("O tamanho é aproximado; um PDF de uma única página pode exceder o limite.")
+        note.setObjectName("muted")
+        note.setWordWrap(True)
+        layout.addWidget(note)
         layout.addStretch(1)
-
         actions = QHBoxLayout()
         actions.addStretch(1)
         split = QPushButton("Dividir PDF")
@@ -2103,7 +2239,23 @@ class DocumentToolsWindow(QMainWindow):
         split.clicked.connect(self._split_pdf)
         actions.addWidget(split)
         layout.addLayout(actions)
+        self._update_split_mode_controls()
         return page
+
+    def _update_split_mode_controls(self, *_args) -> None:
+        mode = str(self.split_mode.currentData())
+        rows = (
+            (self.split_pages_per_file, mode == "every_n_pages"),
+            (self.split_after_pages, mode == "after_pages"),
+            (self.split_target_mb, mode == "by_size"),
+            (self.split_bookmark_level, mode == "by_bookmarks"),
+            (self.split_bookmark_pattern, mode == "by_bookmarks"),
+        )
+        for widget, visible in rows:
+            widget.setVisible(visible)
+            label = self._split_form.labelForField(widget)
+            if label is not None:
+                label.setVisible(visible)
 
     def _select_split_pdf(self) -> None:
         path = self._choose_pdf("Escolher PDF para dividir")
@@ -2124,13 +2276,23 @@ class DocumentToolsWindow(QMainWindow):
         if not source or not directory:
             QMessageBox.information(self, self._t("Dividir PDF"), self._t("Escolha o PDF e uma pasta de saída."))
             return
+        mode = str(self.split_mode.currentData())
         password = self.split_password.text() or None
         self.split_password.clear()
-        file_mode = self._output_file_mode()
+        arguments = {
+            "mode": mode,
+            "pages_per_file": self.split_pages_per_file.value(),
+            "split_after_pages": self.split_after_pages.text().strip() or None,
+            "target_size_mb": self.split_target_mb.value(),
+            "bookmark_level": self.split_bookmark_level.value(),
+            "bookmark_pattern": self.split_bookmark_pattern.text().strip() or None,
+            "password": password,
+            "file_mode": self._output_file_mode(),
+        }
         self._run_task(
-            "Dividindo PDF em arquivos de página única…",
-            lambda: self._t("{count} páginas salvas em: {directory}").format(
-                count=len(split_pdf(source, directory, password=password, file_mode=file_mode)),
+            self._t("Dividindo PDF em arquivos…"),
+            lambda: self._t("{count} arquivos criados em: {directory}").format(
+                count=len(split_pdf(source, directory, **arguments)),
                 directory=directory,
             ),
             output_location=directory,
@@ -2281,19 +2443,35 @@ class DocumentToolsWindow(QMainWindow):
         path_container = QWidget()
         path_container.setLayout(path_row)
         layout.addWidget(path_container)
-        self.reorder_list = self._new_list()
+        self.reorder_list = ReorderablePageList()
+        self.reorder_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.reorder_list.setAlternatingRowColors(False)
         self.reorder_list.setViewMode(QListWidget.ViewMode.IconMode)
         self.reorder_list.setFlow(QListWidget.Flow.LeftToRight)
         self.reorder_list.setWrapping(True)
         self.reorder_list.setResizeMode(QListWidget.ResizeMode.Adjust)
-        self.reorder_list.setMovement(QListWidget.Movement.Snap)
+        # Positions are static; the drop handler reorders actual rows.
+        self.reorder_list.setMovement(QListWidget.Movement.Static)
         self.reorder_list.setLayoutMode(QListWidget.LayoutMode.Batched)
         self.reorder_list.setBatchSize(32)
         self.reorder_list.setIconSize(QSize(76, 96))
         self.reorder_list.setGridSize(QSize(112, 132))
         self.reorder_list.setUniformItemSizes(True)
+        self.reorder_list.setDragEnabled(True)
+        self.reorder_list.setAcceptDrops(True)
+        self.reorder_list.setDropIndicatorShown(True)
         self.reorder_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.reorder_list.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.reorder_list.currentRowChanged.connect(self._preview_reorder_page)
+        reorder_controls = QHBoxLayout()
+        move_up = QPushButton("↑  Subir")
+        move_up.clicked.connect(lambda: self._move_selected(self.reorder_list, -1))
+        move_down = QPushButton("↓  Descer")
+        move_down.clicked.connect(lambda: self._move_selected(self.reorder_list, 1))
+        reorder_controls.addWidget(move_up)
+        reorder_controls.addWidget(move_down)
+        reorder_controls.addStretch(1)
+        layout.addLayout(reorder_controls)
         preview_row = QHBoxLayout()
         preview_row.addWidget(self.reorder_list, 1)
         preview_column = QVBoxLayout()
@@ -2459,17 +2637,19 @@ class DocumentToolsWindow(QMainWindow):
         self.optimize_mode = QComboBox()
         self.optimize_mode.addItem("Sem perdas (mais conservador)", "lossless")
         self.optimize_mode.addItem("Equilibrada (recomprimir imagens)", "balanced")
+        self.optimize_mode.setCurrentIndex(self.optimize_mode.findData("balanced"))
         form.addRow("Modo de otimização", self.optimize_mode)
         self.optimize_quality = QSpinBox()
         self.optimize_quality.setRange(50, 95)
         self.optimize_quality.setValue(82)
         self.optimize_quality.setSuffix(" / 100")
+        self.optimize_quality.setToolTip("O modo sem perdas não altera a qualidade das imagens; use o modo equilibrado para aplicar este valor.")
         form.addRow("Qualidade das imagens", self.optimize_quality)
         self.optimize_password = QLineEdit()
         self.optimize_password.setEchoMode(QLineEdit.EchoMode.Password)
         self.optimize_password.setPlaceholderText("Opcional; não é armazenada")
         form.addRow("Senha do PDF (opcional)", self.optimize_password)
-        warning = QLabel("Esta opção recomprime imagens sem transparência; a qualidade visual pode diminuir.")
+        warning = QLabel("O modo equilibrado recomprime imagens sem transparência; a qualidade visual pode diminuir. A redução depende do conteúdo do PDF.")
         warning.setObjectName("muted")
         warning.setWordWrap(True)
         layout.addLayout(form)
@@ -2524,13 +2704,22 @@ class DocumentToolsWindow(QMainWindow):
             )
             old_size = Path(source).stat().st_size
             new_size = result.stat().st_size
-            reduction = max(0, round((old_size - new_size) / old_size * 100)) if old_size else 0
-            template = "Otimização equilibrada" if mode == "balanced" else "Otimização sem perdas"
-            return self._t("PDF otimizado: {old} → {new} ({percent}% de redução)").format(
+            if new_size < old_size:
+                percent = round((old_size - new_size) / old_size * 100) if old_size else 0
+                template = "PDF otimizado: {old} → {new} ({percent}% menor)"
+            elif new_size > old_size:
+                percent = round((new_size - old_size) / old_size * 100) if old_size else 0
+                template = "PDF otimizado: {old} → {new} ({percent}% maior)"
+            else:
+                percent = 0
+                template = "PDF otimizado: {old} → {new} (tamanho igual)"
+            message = self._t(template).format(
                 old=self._format_size(old_size),
                 new=self._format_size(new_size),
-                percent=reduction,
-            ) + " — " + self._t(template)
+                percent=percent,
+            )
+            mode_label = "Otimização equilibrada" if mode == "balanced" else "Otimização sem perdas"
+            return message + " — " + self._t(mode_label)
 
         self._run_task(self._t("Reduzir tamanho do PDF"), task, output_location=output)
 

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 from pypdf import PdfReader, PdfWriter
+from reportlab.pdfgen import canvas as reportlab_canvas
 
 import document_tools.pdf_ops as pdf_ops
 from document_tools.pdf_ops import (
@@ -172,6 +173,50 @@ def test_split_pdf_creates_missing_destination_directory(tmp_path: Path) -> None
     assert all(len(read_pdf(path).pages) == 1 for path in outputs)
     with pytest.raises(FileExistsError, match="já contém"):
         split_pdf(source, output_dir)
+
+
+def test_split_pdf_can_group_every_n_pages(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [110, 120, 130, 140, 150])
+    outputs = split_pdf(source, tmp_path / "split", mode="every_n_pages", pages_per_file=2)
+    assert [len(read_pdf(path).pages) for path in outputs] == [2, 2, 1]
+    assert [round(float(page.mediabox.width)) for path in outputs for page in read_pdf(path).pages] == [110, 120, 130, 140, 150]
+
+
+def test_split_pdf_can_split_after_selected_pages(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [110, 120, 130, 140, 150, 160])
+    outputs = split_pdf(source, tmp_path / "split", mode="after_pages", split_after_pages="2, 5")
+    assert [len(read_pdf(path).pages) for path in outputs] == [2, 3, 1]
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_lengths"),
+    [("after_even_pages", [2, 2, 1]), ("after_odd_pages", [1, 2, 2])],
+)
+def test_split_pdf_can_split_after_even_or_odd_pages(tmp_path: Path, mode: str, expected_lengths: list[int]) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [110, 120, 130, 140, 150])
+    outputs = split_pdf(source, tmp_path / mode, mode=mode)
+    assert [len(read_pdf(path).pages) for path in outputs] == expected_lengths
+
+
+def test_split_pdf_can_split_by_approximate_size(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [110, 120, 130])
+    outputs = split_pdf(source, tmp_path / "split", mode="by_size", target_size_mb=0.000001)
+    assert len(outputs) == 3
+    assert all(len(read_pdf(path).pages) == 1 for path in outputs)
+
+
+def test_split_pdf_can_split_at_bookmark_level(tmp_path: Path) -> None:
+    source = tmp_path / "bookmarked.pdf"
+    writer = PdfWriter()
+    for width in (110, 120, 130, 140):
+        writer.add_blank_page(width=width, height=300)
+    writer.add_outline_item("Chapter One", 0)
+    writer.add_outline_item("Chapter Two", 2)
+    with source.open("wb") as stream:
+        writer.write(stream)
+    outputs = split_pdf(source, tmp_path / "split", mode="by_bookmarks", bookmark_level=1)
+    assert [len(read_pdf(path).pages) for path in outputs] == [2, 2]
+    assert [round(float(page.mediabox.width)) for path in outputs for page in read_pdf(path).pages] == [110, 120, 130, 140]
 
 
 def test_split_pdf_rolls_back_partial_outputs_on_failure(
@@ -458,6 +503,25 @@ def test_optimize_pdf_balanced_recompresses_supported_image_pdfs(tmp_path: Path)
     reader = read_pdf(output)
     assert len(reader.pages) == 1
     assert output.stat().st_size > 0
+
+
+def test_optimize_pdf_quality_setting_changes_image_compression(tmp_path: Path) -> None:
+    image_path = tmp_path / "photo.jpg"
+    source = tmp_path / "photo.pdf"
+    low_quality = tmp_path / "low-quality.pdf"
+    high_quality = tmp_path / "high-quality.pdf"
+    image = Image.effect_noise((1000, 700), 100).convert("RGB")
+    image.save(image_path, format="JPEG", quality=96)
+    image.close()
+    document = reportlab_canvas.Canvas(str(source), pagesize=(1000, 700))
+    document.drawImage(str(image_path), 0, 0, width=1000, height=700)
+    document.showPage()
+    document.save()
+    optimize_pdf(source, low_quality, mode="balanced", quality=50)
+    optimize_pdf(source, high_quality, mode="balanced", quality=95)
+    assert len(read_pdf(low_quality).pages) == 1
+    assert low_quality.stat().st_size < high_quality.stat().st_size
+    assert low_quality.stat().st_size < source.stat().st_size
 
 
 def test_optimize_pdf_rejects_invalid_mode_and_quality(tmp_path: Path) -> None:

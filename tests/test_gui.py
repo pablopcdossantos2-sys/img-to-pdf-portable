@@ -137,16 +137,46 @@ def test_new_pdf_tools_are_available_in_the_interface(qt_app: QApplication) -> N
     window = DocumentToolsWindow()
     try:
         assert window.reorder_list.dragDropMode() == QAbstractItemView.DragDropMode.InternalMove
+        assert window.reorder_list.movement() == QListWidget.Movement.Static
         assert window.stamp_numbering.isChecked() is False
-        assert window.optimize_mode.currentData() == "lossless"
+        assert window.optimize_mode.currentData() == "balanced"
+        assert window.optimize_quality.isEnabled() is True
+        window.optimize_mode.setCurrentIndex(window.optimize_mode.findData("lossless"))
         assert window.optimize_quality.isEnabled() is False
         window.optimize_mode.setCurrentIndex(window.optimize_mode.findData("balanced"))
         assert window.optimize_quality.isEnabled() is True
+        assert window.split_mode.currentData() == "each_page"
+        assert window.split_pages_per_file.isHidden()
+        window.split_mode.setCurrentIndex(window.split_mode.findData("every_n_pages"))
+        assert not window.split_pages_per_file.isHidden()
+        window.split_mode.setCurrentIndex(window.split_mode.findData("after_pages"))
+        assert not window.split_after_pages.isHidden()
+        window.split_mode.setCurrentIndex(window.split_mode.findData("by_size"))
+        assert not window.split_target_mb.isHidden()
+        window.split_mode.setCurrentIndex(window.split_mode.findData("by_bookmarks"))
+        assert not window.split_bookmark_level.isHidden()
     finally:
         window.close()
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         qt_app.processEvents()
+
+def test_reorder_grid_moves_the_actual_item_row(qt_app: QApplication) -> None:
+    from document_tools.gui import ReorderablePageList
+    widget = ReorderablePageList()
+    try:
+        for page_number in range(1, 5):
+            item = QListWidgetItem(f"Página {page_number}")
+            item.setData(Qt.ItemDataRole.UserRole, page_number)
+            widget.addItem(item)
+        widget.move_page_to_row(0, 2)
+        assert [widget.item(i).data(Qt.ItemDataRole.UserRole) for i in range(widget.count())] == [2, 3, 1, 4]
+    finally:
+        widget.close()
+        widget.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
 
 def test_reorder_preview_renders_the_selected_page(qt_app: QApplication, tmp_path) -> None:
     source = tmp_path / "preview.pdf"

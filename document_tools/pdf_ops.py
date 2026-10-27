@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 from io import BytesIO
 from pathlib import Path
@@ -349,10 +350,36 @@ def split_pdf(
     input_path: str | Path,
     output_directory: str | Path,
     *,
+    mode: str = "each_page",
+    pages_per_file: int = 1,
+    split_after_pages: str | None = None,
+    target_size_mb: float = 10.0,
+    bookmark_level: int = 1,
+    bookmark_pattern: str | None = None,
     password: str | None = None,
     file_mode: int = 0o600,
 ) -> list[Path]:
-    """Split a PDF while preserving page annotations/bookmarks where supported."""
+    """Split a PDF by page, page groups, boundaries, estimated size or bookmark level."""
+    valid_modes = {
+        "each_page", "every_n_pages", "after_pages", "after_even_pages",
+        "after_odd_pages", "by_size", "by_bookmarks",
+    }
+    if mode not in valid_modes:
+        raise ValueError("Modo de divisão inválido.")
+    if mode == "every_n_pages" and pages_per_file < 1:
+        raise ValueError("O número de páginas por arquivo deve ser positivo.")
+    if mode == "by_size" and target_size_mb <= 0:
+        raise ValueError("O tamanho alvo precisa ser maior que zero.")
+    if mode == "by_bookmarks" and bookmark_level < 1:
+        raise ValueError("O nível do marcador precisa ser um inteiro positivo.")
+
+    pattern = None
+    if mode == "by_bookmarks" and bookmark_pattern and bookmark_pattern.strip():
+        try:
+            pattern = re.compile(bookmark_pattern, re.IGNORECASE)
+        except re.error as error:
+            raise ValueError("A expressão regular para filtrar marcadores é inválida.") from error
+
     source = Path(input_path).expanduser().resolve()
     directory = Path(output_directory).expanduser().resolve()
     _validate_file_mode(file_mode)
@@ -367,20 +394,131 @@ def split_pdf(
     created: list[Path] = []
     with source.open("rb") as stream:
         reader = _open_reader(source, stream, password=password)
-        width = max(3, len(str(len(reader.pages))))
-        outputs = [
-            directory / f"{source.stem}-pagina-{index + 1:0{width}d}.pdf"
-            for index in range(len(reader.pages))
-        ]
+        page_count = len(reader.pages)
+        groups: list[list[int]] = []
+        group_titles: list[str | None] = []
+
+        if mode == "each_page":
+            groups = [[i] for i in range(page_count)]
+        elif mode == "every_n_pages":
+            groups = [
+                list(range(start, min(start + pages_per_file, page_count)))
+                for start in range(0, page_count, pages_per_file)
+            ]
+        elif mode in {"after_pages", "after_even_pages", "after_odd_pages"}:
+            if mode == "after_pages":
+                if not split_after_pages or not split_after_pages.strip():
+                    raise ValueError(
+                        "Informe páginas após as quais dividir, por exemplo: 2, 5, 8."
+                    )
+                # Page-range parser is 0-based; the end of a split is 1-based.
+                boundaries = sorted({
+                    index + 1 for index in parse_page_ranges(split_after_pages, page_count)
+                })
+            elif mode == "after_even_pages":
+                boundaries = list(range(2, page_count + 1, 2))
+            else:
+                boundaries = list(range(1, page_count + 1, 2))
+            start = 0
+            for end in boundaries:
+                if end > start:
+                    groups.append(list(range(start, end)))
+                    start = end
+            if start < page_count:
+                groups.append(list(range(start, page_count)))
+        elif mode == "by_size":
+            # This is deliberately an estimate: serialized output size also depends on
+            # shared resources, compression, metadata and page-tree overhead.
+            target_bytes = max(1, int(target_size_mb * 1024 * 1024))
+            estimates: list[int] = []
+            for page in reader.pages:
+                estimate = 0
+                try:
+                    contents = page.get_contents()
+                    if contents is not None:
+                        estimate += len(contents.get_data())
+                except Exception:
+                    pass
+                try:
+                    estimate += sum(len(image.data) for image in page.images if not image.is_inline)
+                except Exception:
+                    pass
+                estimates.append(max(1, estimate))
+            current_group: list[int] = []
+            current_size = 0
+            for index, estimate in enumerate(estimates):
+                if current_group and current_size + estimate > target_bytes:
+                    groups.append(current_group)
+                    current_group, current_size = [], 0
+                current_group.append(index)
+                current_size += estimate
+            if current_group:
+                groups.append(current_group)
+        else:  # by_bookmarks
+            bookmarks: list[tuple[int, str]] = []
+
+            def collect_bookmarks(entries, level: int = 1) -> None:
+                for entry in entries:
+                    if isinstance(entry, list):
+                        collect_bookmarks(entry, level + 1)
+                        continue
+                    if level != bookmark_level:
+                        continue
+                    title = str(getattr(entry, "title", "") or "").strip()
+                    if pattern is not None and not pattern.search(title):
+                        continue
+                    try:
+                        page_index = reader.get_destination_page_number(entry)
+                    except Exception:
+                        continue
+                    if 0 <= page_index < page_count:
+                        bookmarks.append((page_index, title or "Marcador"))
+
+            collect_bookmarks(reader.outline)
+            if not bookmarks:
+                raise ValueError(
+                    "O PDF não contém marcadores no nível solicitado (ou nenhum corresponde ao filtro)."
+                )
+            bookmarks.sort(key=lambda item: item[0])
+            unique_bookmarks: list[tuple[int, str]] = []
+            used_pages: set[int] = set()
+            for page_index, title in bookmarks:
+                if page_index not in used_pages:
+                    used_pages.add(page_index)
+                    unique_bookmarks.append((page_index, title))
+            if unique_bookmarks[0][0] > 0:
+                unique_bookmarks.insert(0, (0, "Início"))
+            for index, (start, title) in enumerate(unique_bookmarks):
+                end = unique_bookmarks[index + 1][0] if index + 1 < len(unique_bookmarks) else page_count
+                if start < end:
+                    groups.append(list(range(start, end)))
+                    group_titles.append(title)
+
+        if not groups:
+            raise ValueError("Não foi possível gerar divisões a partir das opções informadas.")
+
+        width = max(3, len(str(len(groups))))
+        outputs: list[Path] = []
+        for index, page_indexes in enumerate(groups, start=1):
+            if mode == "each_page":
+                filename = f"{source.stem}-pagina-{page_indexes[0] + 1:0{width}d}.pdf"
+            elif mode == "by_bookmarks":
+                title = group_titles[index - 1] if index - 1 < len(group_titles) else "Marcador"
+                safe_title = re.sub(r"[^\w.-]+", "-", title, flags=re.UNICODE).strip(" .-_")
+                filename = f"{source.stem}-{index:0{width}d}-{(safe_title or 'marcador')[:60]}.pdf"
+            else:
+                filename = f"{source.stem}-parte-{index:0{width}d}.pdf"
+            outputs.append(directory / filename)
+
         conflicts = [path.name for path in outputs if path.exists()]
         if conflicts:
             raise FileExistsError(
                 f"A pasta já contém '{conflicts[0]}'. Escolha outra pasta ou remova os arquivos conflitantes."
             )
         try:
-            for index, target in enumerate(outputs):
+            for indexes, target in zip(groups, outputs):
                 writer = PdfWriter()
-                writer.append(reader, pages=[index], import_outline=True)
+                writer.append(reader, pages=indexes, import_outline=True)
                 _copy_metadata(reader, writer)
                 _atomic_pdf_save(
                     target,
@@ -577,33 +715,25 @@ def optimize_pdf(
     def write(temporary: Path) -> None:
         with source.open("rb") as stream:
             reader = _open_reader(source, stream, password=password)
-            writer = PdfWriter()
-            writer.append(reader, import_outline=True)
-            _copy_metadata(reader, writer)
+            # pypdf's documented image replacement flow uses a writer cloned from the reader.
+            writer = PdfWriter(clone_from=reader)
             for page in writer.pages:
+                images = list(page.images)
                 page.compress_content_streams(level=9)
                 if mode != "balanced":
                     continue
-                for image_file in list(page.images):
+                for image_file in images:
                     if image_file.is_inline or not image_file.is_displayed:
                         continue
                     image = image_file.image
                     if image is None:
                         continue
-                    # Retain transparency/soft-mask graphics to avoid changing their appearance.
+                    # Do not rasterize alpha images; pypdf preserves supported source modes.
                     if image.mode in {"RGBA", "LA", "PA"} or "transparency" in image.info:
                         continue
-                    converted: Image.Image | None = None
-                    try:
-                        converted = image.convert("RGB")
-                        image_file.replace(
-                            converted,
-                            quality=quality,
-                            optimize=True,
-                        )
-                    finally:
-                        if converted is not None:
-                            converted.close()
+                    # Pass the image extracted from the output document directly, so the
+                    # selected JPEG quality is actually applied to its image XObject.
+                    image_file.replace(image, quality=quality, optimize=True)
             writer.compress_identical_objects(
                 remove_duplicates=True,
                 remove_unreferenced=True,
