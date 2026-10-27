@@ -16,6 +16,7 @@ A desktop application for working with PDF files and images locally, built with 
 - **Reorder pages with preview:** load a PDF, drag the page rows, and inspect the selected page in the preview panel. The preview follows the source page when rows are moved; every page must appear exactly once.
 - **Selective watermarks and page numbers:** apply text, numbering, or both to all pages or only selected ranges (for example, `2-4, 7`). Numbering retains the page's original position in the document. Original content is not rasterized.
 - **Optimize PDF:** choose lossless stream compression/deduplication or balanced JPEG recompression of opaque raster images with adjustable quality. Transparent and inline images are left unchanged.
+- **Batch workflow:** combine rotation, watermark/page numbering, and optimization in one operation. Steps run in a fixed order, use local temporary files, and only complete the final save if the sequence succeeds.
 - **Safer output handling:** the save dialog adds the PDF extension, prevents choosing a source file as the output, and asks before replacing an existing file.
 
 ### Image tools
@@ -111,9 +112,9 @@ The `--selftest` option initializes the interface in headless mode and exits wit
 - [x] **PDF compression/optimization:** lossless stream compression and duplicate-object removal, plus balanced JPEG recompression with configurable quality. Recompression may change image appearance and does not guarantee every file will shrink.
 - [x] **Page-range watermarks and numbering:** choose specific pages or leave the field blank to apply across the document; numbering retains original page references.
 - [x] **Preview while reordering:** a preview panel renders the selected page and tracks its original page number after reordering.
+- [x] **Batch workflow:** combine rotation, watermark/page numbering, and optimization without manually creating intermediate files.
 
 ### Possible next improvements
 
 - [ ] Show thumbnails for every page directly in the reorder list, in addition to the selected-page preview.
-- [ ] Add batch workflows to chain rotation, watermarking, numbering, and optimization in one run.
 - [ ] Translate exceptional messages from external libraries and unusual PDF formats.
