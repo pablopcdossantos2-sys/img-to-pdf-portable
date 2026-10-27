@@ -39,6 +39,10 @@ from document_tools.pdf_ops import (
     extract_pages,
     images_to_pdf,
     merge_pdfs,
+    optimize_pdf,
+    pdf_page_count,
+    reorder_pdf_pages,
+    stamp_pdf,
     rotate_pdf,
     split_pdf,
     pdf_requires_user_password,
@@ -54,6 +58,274 @@ FORMAT_EXTENSIONS = {
     "WEBP": ".webp",
     "BMP": ".bmp",
     "TIFF": ".tif",
+}
+
+TRANSLATIONS = {
+    "en": {
+        "PDF e imagens • v{version} • organizado, seguro e local": "PDFs and images • v{version} • organized, safe and local",
+        "●  PDF HUB • PROCESSAMENTO LOCAL": "●  PDF HUB • LOCAL PROCESSING",
+        "O que vamos organizar hoje?": "What would you like to organize today?",
+        "Escolha uma ferramenta abaixo. Os arquivos de origem são preservados.": "Choose a tool below. Original files are preserved.",
+        "Permissões de saída (Linux/macOS)": "Output permissions (Linux/macOS)",
+        "No Windows, o sistema de permissões é gerenciado pelo próprio sistema operacional.": "On Windows, permissions are managed by the operating system.",
+        "Somente usuário (0600)": "Owner only (0600)",
+        "Compartilhado (0644)": "Shared readable (0644)",
+        "0600: somente o usuário atual. 0644: outros usuários do sistema podem ler os arquivos.": "0600: only the current user. 0644: other system users can read the files.",
+        "Idioma / Language": "Language",
+        "Imagens para PDF": "Images to PDF",
+        "Unir PDFs": "Merge PDFs",
+        "Extrair páginas": "Extract pages",
+        "Girar páginas": "Rotate pages",
+        "Dividir PDF": "Split PDF",
+        "Reordenar páginas": "Reorder pages",
+        "Marca d'água e numeração": "Watermark and page numbers",
+        "Otimizar PDF": "Optimize PDF",
+        "Converter imagens": "Convert images",
+        "Pronto. Selecione uma operação acima.": "Ready. Choose an operation above.",
+        "Abrir pasta": "Open folder",
+        "O arquivo ou a pasta não foi encontrado. Confira o caminho e tente novamente.": "The file or folder could not be found. Check the path and try again.",
+        "Não foi possível acessar ou salvar o arquivo. Confira as permissões e feche o documento em outros programas.": "The file could not be accessed or saved. Check permissions and close it in other applications.",
+        "A imagem é inválida, muito grande para processar com segurança ou usa um formato não suportado.": "The image is invalid, too large to process safely, or uses an unsupported format.",
+        "Não foi possível interpretar o PDF. Ele pode estar danificado ou protegido por senha.": "The PDF could not be read. It may be damaged or password-protected.",
+        "Imagens para PDF": "Images to PDF",
+        "Unir PDFs": "Merge PDFs",
+        "Extrair páginas": "Extract pages",
+        "Girar páginas": "Rotate pages",
+        "Dividir PDF": "Split PDF",
+        "Converter imagens": "Convert images",
+        "Adicionar imagens": "Add images",
+        "+  Adicionar imagens": "+  Add images",
+        "Remover selecionadas": "Remove selected",
+        "↑  Subir": "↑  Move up",
+        "↓  Descer": "↓  Move down",
+        "Duplicar selecionadas": "Duplicate selected",
+        "Resolução:": "Resolution:",
+        "Margem:": "Margin:",
+        "Incluir todas as páginas/quadros de imagens multipágina ou animadas": "Include all pages/frames from multipage or animated images",
+        "Quando desmarcado, usa somente a primeira página ou o primeiro quadro de cada arquivo.": "When unchecked, only the first page or frame of each file is used.",
+        "Formatos: JPG, PNG, BMP, WEBP, TIFF e GIF.": "Formats: JPG, PNG, BMP, WEBP, TIFF and GIF.",
+        "Criar PDF": "Create PDF",
+        "Criando PDF a partir das imagens…": "Creating PDF from images…",
+        "Criando PDF a partir das imagens": "Creating PDF from images",
+        "Selecione pelo menos dois PDFs.": "Select at least two PDFs.",
+        "Salvar somente as páginas necessárias": "Save only the pages you need",
+        "Escolha o documento e informe os números das páginas ou intervalos que deseja manter.": "Choose the document and enter the page numbers or ranges to keep.",
+        "Arquivo de origem": "Source file",
+        "Páginas": "Pages",
+        "Ex.: 1-3, 5, 8-10": "e.g. 1-3, 5, 8-10",
+        "Senha do PDF (opcional)": "PDF password (optional)",
+        "Opcional; não é armazenada": "Optional; not stored",
+        "Permitir repetir páginas no PDF resultante": "Allow repeated pages in the output PDF",
+        "A ordem informada será mantida. Intervalos inválidos ou páginas repetidas são recusados.": "The requested order is preserved. Invalid ranges or duplicate pages are rejected.",
+        "Extrair páginas": "Extract pages",
+        "Corrigir a orientação das páginas": "Correct page orientation",
+        "Gire todas as páginas do documento ou informe um intervalo específico. Os conteúdos não são rasterizados.": "Rotate all pages or enter a specific range. Page content is not rasterized.",
+        "PDF de origem": "Source PDF",
+        "90° no sentido horário": "90° clockwise",
+        "270° no sentido horário": "270° clockwise",
+        "Deixe vazio para girar todas as páginas": "Leave blank to rotate all pages",
+        "Páginas (opcional)": "Pages (optional)",
+        "Exemplo: 1-2, 5. As páginas não selecionadas permanecem sem rotação.": "Example: 1-2, 5. Unselected pages are not rotated.",
+        "Girar páginas": "Rotate pages",
+        "Dividir o PDF em arquivos menores": "Split the PDF into smaller files",
+        "Cada página será salva como um PDF separado. Se algum nome de destino já existir, a operação será interrompida para evitar sobrescrita.": "Each page is saved as a separate PDF. If a destination filename already exists, the operation stops to prevent overwriting.",
+        "Pasta de saída": "Output folder",
+        "Escolher pasta": "Choose folder",
+        "Dividir PDF": "Split PDF",
+        "Converter e redimensionar imagens": "Convert and resize images",
+        "Converta várias imagens de uma só vez. O redimensionamento mantém a proporção e nunca amplia imagens pequenas.": "Convert multiple images at once. Resizing preserves aspect ratio and never enlarges small images.",
+        "Formato de saída": "Output format",
+        "Largura máx.": "Max width",
+        "Altura máx.": "Max height",
+        "Dimensões (px)": "Dimensions (px)",
+        "Qualidade JPEG/WEBP": "JPEG/WEBP quality",
+        "Converter imagens": "Convert images",
+        "Escolher PDF": "Choose PDF",
+        "Escolher pasta de saída": "Choose output folder",
+        "Escolher pasta para salvar as imagens": "Choose a folder to save images",
+        "Salvar PDF resultante": "Save output PDF",
+        "Escolha outro nome": "Choose another name",
+        "O arquivo de saída não pode substituir um dos arquivos de origem.": "The output file cannot replace a source file.",
+        "Confirmar substituição": "Confirm replacement",
+        "O arquivo “{name}” já existe. Deseja substituí-lo?": "The file “{name}” already exists. Replace it?",
+        "Operação cancelada. O arquivo existente foi preservado.": "Operation cancelled. The existing file was preserved.",
+        "Operação não concluída": "Operation not completed",
+        "Não foi possível concluir a operação: {message}": "Could not complete operation: {message}",
+        "A pasta de saída não está disponível.": "The output folder is not available.",
+        "Abra esta pasta manualmente:\n{path}": "Open this folder manually:\n{path}",
+        "Uma operação está em andamento. Aguarde a conclusão antes de fechar o aplicativo.": "An operation is in progress. Wait for it to finish before closing the app.",
+        "Selecione pelo menos um arquivo de origem.": "Select at least one source file.",
+        "Adicione pelo menos uma imagem primeiro.": "Add at least one image first.",
+        "Adicione pelo menos dois PDFs.": "Add at least two PDFs.",
+        "Selecione pelo menos dois PDFs para unir.": "Select at least two PDFs to merge.",
+        "Escolha o PDF de origem.": "Choose the source PDF.",
+        "Senha do PDF": "PDF password",
+        "O arquivo '{name}' está protegido. Digite a senha:": "The file '{name}' is protected. Enter its password:",
+        "Senha necessária": "Password required",
+        "Informe uma senha não vazia para continuar.": "Enter a non-empty password to continue.",
+        "Não foi possível verificar o PDF": "Could not inspect the PDF",
+        "Não foi possível abrir o PDF": "Could not open the PDF",
+        "Escolha o PDF e uma pasta de saída.": "Choose the PDF and an output folder.",
+        "Escolha uma pasta de saída existente.": "Choose an existing output folder.",
+        "Página {number}": "Page {number}",
+        "Visualize e arraste as páginas para definir a ordem final. Todas as páginas devem permanecer na lista.": "Drag pages to set the final order. Every page must remain in the list.",
+        "Salvar PDF reordenado": "Save reordered PDF",
+        "Reordenar PDF": "Reorder PDF",
+        "Escolha um PDF para reorganizar suas páginas.": "Choose a PDF to reorder its pages.",
+        "PDF reordenado: {path}": "PDF reordered: {path}",
+        "Adicionar uma marca d'água de texto, numeração, ou ambos. O conteúdo original não é rasterizado.": "Add a text watermark, page numbers, or both. Original content is not rasterized.",
+        "Texto da marca d'água": "Watermark text",
+        "Ex.: CONFIDENCIAL": "e.g. CONFIDENTIAL",
+        "Adicionar numeração de páginas": "Add page numbers",
+        "Posição da marca d'água": "Watermark position",
+        "Diagonal (centro)": "Diagonal (center)",
+        "Centralizada": "Centered",
+        "Rodapé central": "Centered footer",
+        "Posição da numeração": "Page number position",
+        "Rodapé direito": "Bottom right",
+        "Rodapé centralizado": "Bottom center",
+        "Tamanho do texto": "Text size",
+        "Opacidade": "Opacity",
+        "Aplicar marca d'água/numeração": "Apply watermark/page numbers",
+        "PDF carimbado: {path}": "PDF stamped: {path}",
+        "Informe o texto da marca d'água ou ative a numeração de páginas.": "Enter watermark text or enable page numbering.",
+        "PDF de origem para otimizar": "Source PDF to optimize",
+        "Escolha entre preservar toda a qualidade (sem perdas) ou reduzir mais o tamanho recomprimindo imagens.": "Choose to preserve full quality (lossless) or reduce size further by recompressing images.",
+        "Sem perdas (mais conservador)": "Lossless (safer)",
+        "Equilibrada (recomprimir imagens)": "Balanced (recompress images)",
+        "Qualidade das imagens": "Image quality",
+        "Reduzir tamanho do PDF": "Reduce PDF size",
+        "Otimização sem perdas": "Lossless optimization",
+        "Otimização equilibrada": "Balanced optimization",
+        "PDF otimizado: {old} → {new} ({percent}% de redução)": "PDF optimized: {old} → {new} ({percent}% smaller)",
+        "Qualidade JPEG precisa ficar entre 50 e 95.": "JPEG quality must be between 50 and 95.",
+        "Escolha otimização sem perdas ou equilibrada.": "Choose lossless or balanced optimization.",
+        "Esta opção recomprime imagens sem transparência; a qualidade visual pode diminuir.": "This option recompresses opaque images; visual quality may decrease.",
+    },
+    "es": {
+        "PDF e imagens • v{version} • organizado, seguro e local": "PDF e imágenes • v{version} • organizado, seguro y local",
+        "●  PDF HUB • PROCESSAMENTO LOCAL": "●  PDF HUB • PROCESAMIENTO LOCAL",
+        "O que vamos organizar hoje?": "¿Qué quieres organizar hoy?",
+        "Escolha uma ferramenta abaixo. Os arquivos de origem são preservados.": "Elige una herramienta. Los archivos originales se conservan.",
+        "Permissões de saída (Linux/macOS)": "Permisos de salida (Linux/macOS)",
+        "No Windows, o sistema de permissões é gerenciado pelo próprio sistema operacional.": "En Windows, los permisos los gestiona el sistema operativo.",
+        "Somente usuário (0600)": "Solo el usuario (0600)",
+        "Compartilhado (0644)": "Lectura compartida (0644)",
+        "0600: somente o usuário atual. 0644: outros usuários do sistema podem ler os arquivos.": "0600: solo el usuario actual. 0644: otros usuarios pueden leer los archivos.",
+        "Idioma / Language": "Idioma",
+        "Imagens para PDF": "Imágenes a PDF",
+        "Unir PDFs": "Unir PDFs",
+        "Extrair páginas": "Extraer páginas",
+        "Girar páginas": "Girar páginas",
+        "Dividir PDF": "Dividir PDF",
+        "Reordenar páginas": "Reordenar páginas",
+        "Marca d'água e numeração": "Marca de agua y numeración",
+        "Otimizar PDF": "Optimizar PDF",
+        "Converter imagens": "Convertir imágenes",
+        "Pronto. Selecione uma operação acima.": "Listo. Selecciona una operación arriba.",
+        "Abrir pasta": "Abrir carpeta",
+        "Não foi possível acessar ou salvar o arquivo. Confira as permissões e feche o documento em outros programas.": "No se pudo acceder o guardar el archivo. Comprueba los permisos y cierra el documento en otras aplicaciones.",
+        "O arquivo ou a pasta não foi encontrado. Confira o caminho e tente novamente.": "No se encontró el archivo o la carpeta. Comprueba la ruta.",
+        "A imagem é inválida, muito grande para processar com segurança ou usa um formato não suportado.": "La imagen no es válida, es demasiado grande para procesarla de forma segura o usa un formato no compatible.",
+        "Não foi possível interpretar o PDF. Ele pode estar danificado ou protegido por senha.": "No se pudo leer el PDF. Puede estar dañado o protegido por contraseña.",
+        "Adicionar imagens": "Añadir imágenes",
+        "+  Adicionar imagens": "+  Añadir imágenes",
+        "Remover selecionadas": "Eliminar seleccionadas",
+        "↑  Subir": "↑  Subir",
+        "↓  Descer": "↓  Bajar",
+        "Duplicar selecionadas": "Duplicar seleccionadas",
+        "Resolução:": "Resolución:",
+        "Margem:": "Margen:",
+        "Incluir todas as páginas/quadros de imagens multipágina ou animadas": "Incluir todas las páginas/fotogramas de imágenes animadas o multipágina",
+        "Quando desmarcado, usa somente a primeira página ou o primeiro quadro de cada arquivo.": "Si se desmarca, solo se usa la primera página o el primer fotograma de cada archivo.",
+        "Formatos: JPG, PNG, BMP, WEBP, TIFF e GIF.": "Formatos: JPG, PNG, BMP, WEBP, TIFF y GIF.",
+        "Criar PDF": "Crear PDF",
+        "Salv​ar somente as páginas necessárias": "Guardar solo las páginas necesarias",
+        "Salvar somente as páginas necessárias": "Guardar solo las páginas necesarias",
+        "Escolha o documento e informe os números das páginas ou intervalos que deseja manter.": "Elige el documento e indica los números o intervalos de páginas que deseas conservar.",
+        "Arquivo de origem": "Archivo de origen",
+        "Páginas": "Páginas",
+        "Ex.: 1-3, 5, 8-10": "Ej.: 1-3, 5, 8-10",
+        "Senha do PDF (opcional)": "Contraseña del PDF (opcional)",
+        "Opcional; não é armazenada": "Opcional; no se guarda",
+        "Permitir repetir páginas no PDF resultante": "Permitir repetir páginas en el PDF resultante",
+        "A ordem informada será mantida. Intervalos inválidos ou páginas repetidas são recusados.": "Se conserva el orden indicado. Los intervalos inválidos o las páginas repetidas se rechazan.",
+        "Corrigir a orientação das páginas": "Corregir la orientación de las páginas",
+        "Gire todas as páginas do documento ou informe um intervalo específico. Os conteúdos não são rasterizados.": "Gira todas las páginas o indica un intervalo. El contenido no se rasteriza.",
+        "PDF de origem": "PDF de origen",
+        "90° no sentido horário": "90° en sentido horario",
+        "270° no sentido horário": "270° en sentido horario",
+        "Deixe vazio para girar todas as páginas": "Déjalo vacío para girar todas las páginas",
+        "Páginas (opcional)": "Páginas (opcional)",
+        "Exemplo: 1-2, 5. As páginas não selecionadas permanecem sem rotação.": "Ejemplo: 1-2, 5. Las páginas no seleccionadas no giran.",
+        "Dividir o PDF em arquivos menores": "Dividir el PDF en archivos más pequeños",
+        "Cada página será salva como um PDF separado. Se algum nome de destino já existir, a operação será interrompida para evitar sobrescrita.": "Cada página se guardará como un PDF separado. Si ya existe un archivo de destino, la operación se detendrá para evitar sobrescribirlo.",
+        "Pasta de saída": "Carpeta de salida",
+        "Escolher pasta": "Elegir carpeta",
+        "Converter e redimensionar imagens": "Convertir y cambiar tamaño de imágenes",
+        "Converta várias imagens de uma só vez. O redimensionamento mantém a proporção e nunca amplia imagens pequenas.": "Convierte varias imágenes a la vez. El cambio de tamaño conserva la proporción y no amplía imágenes pequeñas.",
+        "Formato de saída": "Formato de salida",
+        "Largura máx.": "Ancho máx.",
+        "Altura máx.": "Alto máx.",
+        "Dimensões (px)": "Dimensiones (px)",
+        "Qualidade JPEG/WEBP": "Calidad JPEG/WEBP",
+        "Escolher PDF": "Elegir PDF",
+        "Escolher pasta de saída": "Elegir carpeta de salida",
+        "Escolher pasta para salvar as imagens": "Elegir carpeta para guardar imágenes",
+        "Salvar PDF resultante": "Guardar PDF resultante",
+        "Escolha outro nome": "Elige otro nombre",
+        "O arquivo de saída não pode substituir um dos arquivos de origem.": "El archivo de salida no puede reemplazar uno de los archivos de origen.",
+        "Confirmar substituição": "Confirmar reemplazo",
+        "O arquivo “{name}” já existe. Deseja substituí-lo?": "El archivo “{name}” ya existe. ¿Deseas reemplazarlo?",
+        "Operação cancelada. O arquivo existente foi preservado.": "Operación cancelada. Se conservó el archivo existente.",
+        "Operação não concluída": "Operación no completada",
+        "Não foi possível concluir a operação: {message}": "No se pudo completar la operación: {message}",
+        "A pasta de saída não está disponível.": "La carpeta de salida no está disponible.",
+        "Uma operação está em andamento. Aguarde a conclusão antes de fechar o aplicativo.": "Hay una operación en curso. Espera a que termine antes de cerrar la aplicación.",
+        "Adicione pelo menos uma imagem primeiro.": "Añade al menos una imagen primero.",
+        "Adicione pelo menos dois PDFs.": "Añade al menos dos PDFs.",
+        "Selecione pelo menos dois PDFs para unir.": "Selecciona al menos dos PDFs para unir.",
+        "Escolha o PDF de origem.": "Elige el PDF de origen.",
+        "Senha do PDF": "Contraseña del PDF",
+        "O arquivo '{name}' está protegido. Digite a senha:": "El archivo '{name}' está protegido. Introduce la contraseña:",
+        "Senha necessária": "Se necesita contraseña",
+        "Informe uma senha não vazia para continuar.": "Introduce una contraseña no vacía para continuar.",
+        "Não foi possível verificar o PDF": "No se pudo comprobar el PDF",
+        "Escolha o PDF e uma pasta de saída.": "Elige el PDF y una carpeta de salida.",
+        "Escolha uma pasta de saída existente.": "Elige una carpeta de salida existente.",
+        "Página {number}": "Página {number}",
+        "Visualize e arraste as páginas para definir a ordem final. Todas as páginas devem permanecer na lista.": "Arrastra las páginas para definir el orden final. Deben permanecer todas las páginas.",
+        "Salvar PDF reordenado": "Guardar PDF reordenado",
+        "Reordenar PDF": "Reordenar PDF",
+        "Escolha um PDF para reorganizar suas páginas.": "Elige un PDF para reorganizar sus páginas.",
+        "PDF reordenado: {path}": "PDF reordenado: {path}",
+        "Adicionar uma marca d'água de texto, numeração, ou ambos. O conteúdo original não é rasterizado.": "Añade una marca de agua de texto, numeración o ambas. El contenido original no se rasteriza.",
+        "Texto da marca d'água": "Texto de la marca de agua",
+        "Ex.: CONFIDENCIAL": "Ej.: CONFIDENCIAL",
+        "Adicionar numeração de páginas": "Añadir numeración de páginas",
+        "Posição da marca d'água": "Posición de la marca de agua",
+        "Diagonal (centro)": "Diagonal (centro)",
+        "Centralizada": "Centrada",
+        "Rodapé central": "Pie centrado",
+        "Posição da numeração": "Posición de la numeración",
+        "Rodapé direito": "Pie derecho",
+        "Rodapé centralizado": "Pie centrado",
+        "Tamanho do texto": "Tamaño del texto",
+        "Opacidade": "Opacidad",
+        "Aplicar marca d'água/numeração": "Aplicar marca de agua/numeración",
+        "PDF carimbado: {path}": "PDF marcado: {path}",
+        "Informe o texto da marca d'água ou ative a numeração de páginas.": "Escribe el texto de la marca de agua o activa la numeración.",
+        "PDF de origem para otimizar": "PDF de origen para optimizar",
+        "Escolha entre preservar toda a qualidade (sem perdas) ou reduzir mais o tamanho recomprimindo imagens.": "Elige conservar toda la calidad (sin pérdida) o reducir más el tamaño recomprimiendo imágenes.",
+        "Sem perdas (mais conservador)": "Sin pérdida (más conservador)",
+        "Equilibrada (recomprimir imagens)": "Equilibrada (recomprimir imágenes)",
+        "Qualidade das imagens": "Calidad de las imágenes",
+        "Reduzir tamanho do PDF": "Reducir el tamaño del PDF",
+        "Otimização sem perdas": "Optimización sin pérdida",
+        "Otimização equilibrada": "Optimización equilibrada",
+        "PDF otimizado: {old} → {new} ({percent}% de redução)": "PDF optimizado: {old} → {new} ({percent}% menos)",
+        "Esta opção recomprime imagens sem transparência; a qualidade visual pode diminuir.": "Esta opción recomprime imágenes sin transparencia; la calidad visual puede disminuir.",
+    },
 }
 
 
@@ -96,6 +368,12 @@ class DocumentToolsWindow(QMainWindow):
         self.setMinimumSize(920, 650)
         self.resize(1160, 810)
         self.settings = QSettings("PDFHub", "PDF Hub")
+        self._language = "pt"
+        self._original_ui_texts: dict[QWidget, str] = {}
+        self._original_tooltips: dict[QWidget, str] = {}
+        self._original_placeholders: dict[QLineEdit, str] = {}
+        self._original_combo_items: dict[QComboBox, list[str]] = {}
+        self._original_tab_titles: list[str] = []
         self._worker: OperationWorker | None = None
         self._pending_output_directory: Path | None = None
         self._split_custom_directory = False
@@ -143,6 +421,11 @@ class DocumentToolsWindow(QMainWindow):
         central_layout.addWidget(intro)
 
         permission_row = QHBoxLayout()
+        language_label = QLabel("Idioma / Language")
+        self.language_combo = QComboBox()
+        self.language_combo.addItem("Português (Brasil)", "pt")
+        self.language_combo.addItem("English", "en")
+        self.language_combo.addItem("Español", "es")
         permission_label = QLabel("Permissões de saída (Linux/macOS)")
         permission_label.setObjectName("muted")
         permission_label.setToolTip("No Windows, o sistema de permissões é gerenciado pelo próprio sistema operacional.")
@@ -159,6 +442,9 @@ class DocumentToolsWindow(QMainWindow):
         self.output_permissions.currentIndexChanged.connect(self._save_output_permissions)
         permission_row.addWidget(permission_label)
         permission_row.addWidget(self.output_permissions)
+        permission_row.addSpacing(16)
+        permission_row.addWidget(language_label)
+        permission_row.addWidget(self.language_combo)
         permission_row.addStretch(1)
         central_layout.addLayout(permission_row)
 
@@ -169,6 +455,9 @@ class DocumentToolsWindow(QMainWindow):
         self.tabs.addTab(self._build_extract_tab(), "  Extrair páginas  ")
         self.tabs.addTab(self._build_rotate_tab(), "  Girar páginas  ")
         self.tabs.addTab(self._build_split_tab(), "  Dividir PDF  ")
+        self.tabs.addTab(self._build_reorder_tab(), "  Reordenar páginas  ")
+        self.tabs.addTab(self._build_stamp_tab(), "  Marca d'água e numeração  ")
+        self.tabs.addTab(self._build_optimize_tab(), "  Otimizar PDF  ")
         self.tabs.addTab(self._build_convert_tab(), "  Converter imagens  ")
         central_layout.addWidget(self.tabs, 1)
 
@@ -192,6 +481,81 @@ class DocumentToolsWindow(QMainWindow):
 
         self.setCentralWidget(central)
         self.setStyleSheet(self._stylesheet())
+        self._capture_ui_texts()
+        saved_language = str(self.settings.value("language", "pt"))
+        language_index = self.language_combo.findData(saved_language)
+        self.language_combo.setCurrentIndex(language_index if language_index >= 0 else 0)
+        self.language_combo.currentIndexChanged.connect(self._change_language)
+        self._apply_language(str(self.language_combo.currentData()))
+
+    def _t(self, text: str) -> str:
+        """Translate a Brazilian Portuguese UI string to the active interface language."""
+        if self._language == "pt":
+            return text
+        if text in TRANSLATIONS.get(self._language, {}):
+            return TRANSLATIONS[self._language][text]
+        # Messages that embed file paths or worker errors are translated as a prefix/suffix.
+        for source, translated in TRANSLATIONS.get(self._language, {}).items():
+            if "{message}" in source and text.startswith(source.split("{message}")[0]):
+                prefix = source.split("{message}")[0]
+                return translated.split("{message}")[0] + text[len(prefix):]
+        return text
+
+    def _capture_ui_texts(self) -> None:
+        for widget in self.findChildren(QWidget):
+            if widget is self.language_combo:
+                continue
+            if isinstance(widget, (QLabel, QPushButton, QCheckBox)):
+                self._original_ui_texts[widget] = widget.text()
+            if widget.toolTip():
+                self._original_tooltips[widget] = widget.toolTip()
+            if isinstance(widget, QLineEdit) and widget.placeholderText():
+                self._original_placeholders[widget] = widget.placeholderText()
+            if isinstance(widget, QComboBox) and widget is not self.language_combo:
+                self._original_combo_items[widget] = [
+                    widget.itemText(index) for index in range(widget.count())
+                ]
+        self._original_tab_titles = [
+            self.tabs.tabText(index) for index in range(self.tabs.count())
+        ]
+
+    def _change_language(self) -> None:
+        language = str(self.language_combo.currentData())
+        self.settings.setValue("language", language)
+        self._apply_language(language)
+
+    def _apply_language(self, language: str) -> None:
+        self._language = language if language in {"pt", "en", "es"} else "pt"
+        for widget, original in self._original_ui_texts.items():
+            try:
+                translated = self._t(original)
+                if isinstance(widget, (QLabel, QPushButton, QCheckBox)):
+                    widget.setText(translated)
+            except RuntimeError:
+                continue
+        for widget, original in self._original_tooltips.items():
+            try:
+                widget.setToolTip(self._t(original))
+            except RuntimeError:
+                continue
+        for widget, original in self._original_placeholders.items():
+            try:
+                widget.setPlaceholderText(self._t(original))
+            except RuntimeError:
+                continue
+        for widget, original_items in self._original_combo_items.items():
+            try:
+                current = widget.currentIndex()
+                for index, original in enumerate(original_items):
+                    widget.setItemText(index, self._t(original))
+                widget.setCurrentIndex(current)
+            except RuntimeError:
+                continue
+        for index, original in enumerate(self._original_tab_titles):
+            self.tabs.setTabText(index, self._t(original))
+        # Refresh the current status text too, so switching language does not leave stale Portuguese text.
+        if self.status_label.text():
+            self.status_label.setText(self._t(self.status_label.text()))
 
     @staticmethod
     def _stylesheet() -> str:
@@ -956,6 +1320,279 @@ class DocumentToolsWindow(QMainWindow):
             lambda: f"{len(split_pdf(source, directory, password=password, file_mode=file_mode))} páginas salvas em: {directory}",
             output_location=directory,
         )
+
+    def _select_reorder_pdf(self) -> None:
+        path = self._choose_pdf(self._t("Reordenar PDF"))
+        if not path:
+            return
+        password: str | None = None
+        try:
+            if pdf_requires_user_password(path):
+                password, accepted = QInputDialog.getText(
+                    self,
+                    self._t("Senha do PDF"),
+                    self._t("O arquivo '{name}' está protegido. Digite a senha:").format(name=Path(path).name),
+                    QLineEdit.EchoMode.Password,
+                )
+                if not accepted:
+                    return
+            count = pdf_page_count(path, password=password or None)
+        except Exception as error:
+            QMessageBox.warning(self, self._t("Não foi possível abrir o PDF"), self._t(str(error)))
+            return
+        self.reorder_path.setText(path)
+        self.reorder_password = password or None
+        self.reorder_list.clear()
+        for page_number in range(1, count + 1):
+            item = QListWidgetItem(self._t("Página {number}").format(number=page_number))
+            item.setData(Qt.ItemDataRole.UserRole, page_number)
+            self.reorder_list.addItem(item)
+        self.status_label.setText(self._t("{count} páginas carregadas. Arraste para reorganizar.").format(count=count))
+
+    def _reorder_pdf(self) -> None:
+        source = self.reorder_path.text().strip()
+        if not source or not self.reorder_list.count():
+            QMessageBox.information(self, self._t("Reordenar PDF"), self._t("Escolha um PDF para reorganizar suas páginas."))
+            return
+        order = [
+            int(self.reorder_list.item(index).data(Qt.ItemDataRole.UserRole))
+            for index in range(self.reorder_list.count())
+        ]
+        output = self._require_output_pdf(f"{Path(source).stem}-reordenado.pdf", source_paths=[source])
+        if not output:
+            return
+        file_mode = self._output_file_mode()
+        password = self.reorder_password
+        self._run_task(
+            self._t("Reordenar PDF"),
+            lambda: self._t("PDF reordenado: {path}").format(
+                path=reorder_pdf_pages(source, order, output, password=password, file_mode=file_mode)
+            ),
+            output_location=output,
+        )
+
+    def _build_reorder_tab(self) -> QWidget:
+        page, layout = self._new_page(
+            "Visualize e arraste as páginas para definir a ordem final. Todas as páginas devem permanecer na lista.",
+            "Escolha um PDF para reorganizar suas páginas.",
+        )
+        path_row = QHBoxLayout()
+        self.reorder_path = QLineEdit()
+        self.reorder_path.setReadOnly(True)
+        browse = QPushButton("Escolher PDF")
+        browse.clicked.connect(self._select_reorder_pdf)
+        path_row.addWidget(self.reorder_path, 1)
+        path_row.addWidget(browse)
+        path_container = QWidget()
+        path_container.setLayout(path_row)
+        layout.addWidget(path_container)
+        self.reorder_list = self._new_list()
+        self.reorder_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        layout.addWidget(self.reorder_list, 1)
+        actions = QHBoxLayout()
+        self.reorder_password = None
+        note = QLabel("Arraste uma página para cima ou para baixo. A numeração indica a página original.")
+        note.setObjectName("muted")
+        actions.addWidget(note, 1)
+        save = QPushButton("Salvar PDF reordenado")
+        save.setObjectName("primaryButton")
+        save.clicked.connect(self._reorder_pdf)
+        actions.addWidget(save)
+        layout.addLayout(actions)
+        return page
+
+    def _build_stamp_tab(self) -> QWidget:
+        page, layout = self._new_page(
+            "Adicionar uma marca d'água de texto, numeração, ou ambos. O conteúdo original não é rasterizado.",
+            "Escolha o documento e defina o texto, a posição e a opacidade da marca d'água.",
+        )
+        form = QFormLayout()
+        self.stamp_path = QLineEdit()
+        self.stamp_path.setReadOnly(True)
+        browse = QPushButton("Escolher PDF")
+        browse.clicked.connect(self._select_stamp_pdf)
+        file_row = QHBoxLayout()
+        file_row.addWidget(self.stamp_path, 1)
+        file_row.addWidget(browse)
+        file_container = QWidget()
+        file_container.setLayout(file_row)
+        form.addRow("PDF de origem", file_container)
+        self.stamp_text = QLineEdit()
+        self.stamp_text.setPlaceholderText("Ex.: CONFIDENCIAL")
+        form.addRow("Texto da marca d'água", self.stamp_text)
+        self.stamp_numbering = QCheckBox("Adicionar numeração de páginas")
+        form.addRow("", self.stamp_numbering)
+        self.stamp_watermark_position = QComboBox()
+        self.stamp_watermark_position.addItem("Diagonal (centro)", "diagonal")
+        self.stamp_watermark_position.addItem("Centralizada", "center")
+        self.stamp_watermark_position.addItem("Rodapé central", "bottom-center")
+        form.addRow("Posição da marca d'água", self.stamp_watermark_position)
+        self.stamp_number_position = QComboBox()
+        self.stamp_number_position.addItem("Rodapé direito", "bottom-right")
+        self.stamp_number_position.addItem("Rodapé centralizado", "bottom-center")
+        form.addRow("Posição da numeração", self.stamp_number_position)
+        self.stamp_font_size = QSpinBox()
+        self.stamp_font_size.setRange(8, 120)
+        self.stamp_font_size.setValue(34)
+        form.addRow("Tamanho do texto", self.stamp_font_size)
+        self.stamp_opacity = QDoubleSpinBox()
+        self.stamp_opacity.setRange(0.05, 1.0)
+        self.stamp_opacity.setSingleStep(0.05)
+        self.stamp_opacity.setValue(0.22)
+        form.addRow("Opacidade", self.stamp_opacity)
+        self.stamp_password = QLineEdit()
+        self.stamp_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.stamp_password.setPlaceholderText("Opcional; não é armazenada")
+        form.addRow("Senha do PDF (opcional)", self.stamp_password)
+        layout.addLayout(form)
+        actions = QHBoxLayout()
+        actions.addStretch(1)
+        apply_button = QPushButton("Aplicar marca d'água/numeração")
+        apply_button.setObjectName("primaryButton")
+        apply_button.clicked.connect(self._apply_stamp)
+        actions.addWidget(apply_button)
+        layout.addLayout(actions)
+        return page
+
+    def _select_stamp_pdf(self) -> None:
+        path = self._choose_pdf("Escolher PDF para marca d'água/numeração")
+        if path:
+            self.stamp_path.setText(path)
+
+    def _apply_stamp(self) -> None:
+        source = self.stamp_path.text().strip()
+        if not source:
+            QMessageBox.information(self, self._t("Escolher PDF"), self._t("Escolha o PDF de origem."))
+            return
+        text = self.stamp_text.text().strip()
+        numbering = self.stamp_numbering.isChecked()
+        if not text and not numbering:
+            QMessageBox.information(
+                self, self._t("Marca d'água e numeração"),
+                self._t("Informe o texto da marca d'água ou ative a numeração de páginas."),
+            )
+            return
+        output = self._require_output_pdf(f"{Path(source).stem}-marcado.pdf", source_paths=[source])
+        if not output:
+            return
+        password = self.stamp_password.text() or None
+        self.stamp_password.clear()
+        file_mode = self._output_file_mode()
+        watermark_position = str(self.stamp_watermark_position.currentData())
+        page_number_position = str(self.stamp_number_position.currentData())
+        font_size = self.stamp_font_size.value()
+        opacity = self.stamp_opacity.value()
+        self._run_task(
+            self._t("Aplicar marca d'água/numeração"),
+            lambda: self._t("PDF carimbado: {path}").format(
+                path=stamp_pdf(
+                    source, output,
+                    watermark_text=text or None,
+                    page_numbering=numbering,
+                    watermark_position=watermark_position,
+                    page_number_position=page_number_position,
+                    font_size=font_size,
+                    opacity=opacity,
+                    password=password,
+                    file_mode=file_mode,
+                )
+            ),
+            output_location=output,
+        )
+
+    def _build_optimize_tab(self) -> QWidget:
+        page, layout = self._new_page(
+            "Escolha entre preservar toda a qualidade (sem perdas) ou reduzir mais o tamanho recomprimindo imagens.",
+            "A otimização sem perdas comprime streams e remove objetos redundantes; a equilibrada também recomprime imagens opacas.",
+        )
+        form = QFormLayout()
+        self.optimize_path = QLineEdit()
+        self.optimize_path.setReadOnly(True)
+        browse = QPushButton("Escolher PDF")
+        browse.clicked.connect(self._select_optimize_pdf)
+        file_row = QHBoxLayout()
+        file_row.addWidget(self.optimize_path, 1)
+        file_row.addWidget(browse)
+        file_container = QWidget()
+        file_container.setLayout(file_row)
+        form.addRow("PDF de origem para otimizar", file_container)
+        self.optimize_mode = QComboBox()
+        self.optimize_mode.addItem("Sem perdas (mais conservador)", "lossless")
+        self.optimize_mode.addItem("Equilibrada (recomprimir imagens)", "balanced")
+        form.addRow("Modo de otimização", self.optimize_mode)
+        self.optimize_quality = QSpinBox()
+        self.optimize_quality.setRange(50, 95)
+        self.optimize_quality.setValue(82)
+        self.optimize_quality.setSuffix(" / 100")
+        form.addRow("Qualidade das imagens", self.optimize_quality)
+        self.optimize_password = QLineEdit()
+        self.optimize_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.optimize_password.setPlaceholderText("Opcional; não é armazenada")
+        form.addRow("Senha do PDF (opcional)", self.optimize_password)
+        warning = QLabel("Esta opção recomprime imagens sem transparência; a qualidade visual pode diminuir.")
+        warning.setObjectName("muted")
+        warning.setWordWrap(True)
+        layout.addLayout(form)
+        layout.addWidget(warning)
+        actions = QHBoxLayout()
+        actions.addStretch(1)
+        optimize = QPushButton("Reduzir tamanho do PDF")
+        optimize.setObjectName("primaryButton")
+        optimize.clicked.connect(self._optimize_pdf)
+        actions.addWidget(optimize)
+        layout.addLayout(actions)
+        self.optimize_mode.currentIndexChanged.connect(self._update_optimize_quality_state)
+        self._update_optimize_quality_state()
+        return page
+
+    def _update_optimize_quality_state(self) -> None:
+        self.optimize_quality.setEnabled(self.optimize_mode.currentData() == "balanced")
+
+    def _select_optimize_pdf(self) -> None:
+        path = self._choose_pdf("Escolher PDF para otimizar")
+        if path:
+            self.optimize_path.setText(path)
+
+    @staticmethod
+    def _format_size(size: int) -> str:
+        units = ("B", "KB", "MB", "GB")
+        value = float(size)
+        for unit in units:
+            if value < 1024 or unit == units[-1]:
+                return f"{value:.1f} {unit}"
+            value /= 1024
+        return f"{value:.1f} GB"
+
+    def _optimize_pdf(self) -> None:
+        source = self.optimize_path.text().strip()
+        if not source:
+            QMessageBox.information(self, self._t("Otimizar PDF"), self._t("Escolha o PDF de origem."))
+            return
+        output = self._require_output_pdf(f"{Path(source).stem}-otimizado.pdf", source_paths=[source])
+        if not output:
+            return
+        mode = str(self.optimize_mode.currentData())
+        quality = self.optimize_quality.value()
+        password = self.optimize_password.text() or None
+        self.optimize_password.clear()
+        file_mode = self._output_file_mode()
+
+        def task() -> str:
+            result = optimize_pdf(
+                source, output, mode=mode, quality=quality,
+                password=password, file_mode=file_mode,
+            )
+            old_size = Path(source).stat().st_size
+            new_size = result.stat().st_size
+            reduction = max(0, round((old_size - new_size) / old_size * 100)) if old_size else 0
+            template = "Otimização equilibrada" if mode == "balanced" else "Otimização sem perdas"
+            return self._t("PDF otimizado: {old} → {new} ({percent}% de redução)").format(
+                old=self._format_size(old_size),
+                new=self._format_size(new_size),
+                percent=reduction,
+            ) + " — " + self._t(template)
+
+        self._run_task(self._t("Reduzir tamanho do PDF"), task, output_location=output)
 
     def _build_convert_tab(self) -> QWidget:
         page, layout = self._new_page(
