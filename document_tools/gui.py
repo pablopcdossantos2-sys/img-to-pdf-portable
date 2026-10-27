@@ -890,8 +890,8 @@ class SideNavigationWidget(QWidget):
 
         self.sidebar = QFrame()
         self.sidebar.setObjectName("sidePanel")
-        self.sidebar.setMinimumWidth(188)
-        self.sidebar.setMaximumWidth(220)
+        self.sidebar.setMinimumWidth(276)
+        self.sidebar.setMaximumWidth(310)
         sidebar_layout = QVBoxLayout(self.sidebar)
         sidebar_layout.setContentsMargins(6, 8, 6, 8)
 
@@ -899,6 +899,7 @@ class SideNavigationWidget(QWidget):
         nav_scroll.setObjectName("navigationScroll")
         nav_scroll.setFrameShape(QFrame.Shape.NoFrame)
         nav_scroll.setWidgetResizable(True)
+        nav_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.nav_widget = QWidget()
         self.nav_widget.setObjectName("navigationContent")
         self.nav_layout = QVBoxLayout(self.nav_widget)
@@ -1092,7 +1093,7 @@ class DocumentToolsWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(APP_NAME)
-        self.setMinimumSize(760, 540)
+        self.setMinimumSize(900, 540)
         self.resize(1160, 810)
         self.settings = QSettings("PDFHub", "PDF Hub")
         app_data = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
@@ -1415,6 +1416,17 @@ class DocumentToolsWindow(QMainWindow):
         }
         QListWidget::item:selected { background: $LIST_SELECTED; color: $LIST_SELECTED_TEXT; }
         QListWidget::item:hover:!selected { background: $BUTTON; }
+        QListWidget#reorderPageList::item {
+            background: #FFFFFF; color: $TEXT; border: 1px solid $BORDER;
+            border-radius: 6px; padding: 6px; margin: 3px;
+        }
+        QListWidget#reorderPageList::item:selected {
+            background: #FFFFFF; color: $TEXT; border: 2px solid $PRIMARY;
+        }
+        QLabel#pagePreview {
+            background: #FFFFFF; color: $TEXT; border: 1px solid $BORDER;
+            border-radius: 8px; padding: 8px;
+        }
         QPushButton {
             background: $BUTTON; color: $BUTTON_TEXT; border: 1px solid $BORDER;
             border-radius: 8px; padding: 9px 11px; font-weight: 600;
@@ -1453,8 +1465,13 @@ class DocumentToolsWindow(QMainWindow):
         QTableWidget { background: $INPUT; color: $TEXT; gridline-color: $BORDER; border: 1px solid $BORDER; }
         QHeaderView::section { background: $PANEL; color: $TEXT; border: 1px solid $BORDER; padding: 5px; }
         """
-        for key, value in palette.items():
-            style = style.replace("$" + key, value)
+        # Replace complete palette tokens only. Plain str.replace("$TEXT", ...) also
+        # corrupts longer tokens such as $HEADER_TEXT and $BUTTON_TEXT.
+        style = re.sub(
+            r"\$([A-Z_]+)",
+            lambda match: palette.get(match.group(1), match.group(0)),
+            style,
+        )
         return style
 
     def _new_page(self, title: str, description: str) -> tuple[QWidget, QVBoxLayout]:
@@ -2444,6 +2461,7 @@ class DocumentToolsWindow(QMainWindow):
         path_container.setLayout(path_row)
         layout.addWidget(path_container)
         self.reorder_list = ReorderablePageList()
+        self.reorder_list.setObjectName("reorderPageList")
         self.reorder_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.reorder_list.setAlternatingRowColors(False)
         self.reorder_list.setViewMode(QListWidget.ViewMode.IconMode)
