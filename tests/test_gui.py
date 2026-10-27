@@ -548,6 +548,14 @@ def test_image_dpi_is_estimated_after_adding_a_source_image(
         window._update_image_dpi_from_sources()
         assert window.image_dpi.value() == 300
         assert window.image_margin.value() == 0
+
+        # The DPI estimate is an initial value, not a lock: manual choices remain intact.
+        window.image_dpi.setValue(180)
+        window.image_margin.setValue(10)
+        assert window.image_dpi.value() == 180
+        window.image_list.item(0).setSelected(True)
+        window._remove_image_inputs()
+        assert window.image_dpi.value() == 150
     finally:
         window.close()
         window.deleteLater()

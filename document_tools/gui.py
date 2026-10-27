@@ -1687,7 +1687,7 @@ class DocumentToolsWindow(QMainWindow):
         add.setObjectName("secondaryButton")
         add.clicked.connect(self._add_images)
         remove = QPushButton("Remover selecionadas")
-        remove.clicked.connect(lambda: self._remove_selected(list_widget))
+        remove.clicked.connect(self._remove_image_inputs)
         up = QPushButton("↑  Subir")
         up.clicked.connect(lambda: self._move_selected(list_widget, -1))
         down = QPushButton("↓  Descer")
@@ -1721,7 +1721,6 @@ class DocumentToolsWindow(QMainWindow):
         self.image_margin.setDecimals(1)
         self.image_margin.setValue(0)
         self.image_margin.setSuffix(" mm")
-        self.image_margin.valueChanged.connect(self._update_image_dpi_from_sources)
         options.addWidget(self.image_margin)
         options.addStretch(1)
         layout.addLayout(options)
@@ -1764,9 +1763,15 @@ class DocumentToolsWindow(QMainWindow):
     def _update_image_dpi_from_sources(self) -> None:
         sources = self._all_paths(self.image_list)
         recommended = recommend_dpi_from_images(sources, margin_mm=self.image_margin.value())
-        if recommended is not None:
-            self.image_dpi.setValue(recommended)
-            self.status_label.setText(self._t("Resolução recomendada calculada a partir das imagens."))
+        if recommended is None:
+            self.image_dpi.setValue(150)
+            return
+        self.image_dpi.setValue(recommended)
+        self.status_label.setText(self._t("Resolução recomendada calculada a partir das imagens."))
+
+    def _remove_image_inputs(self) -> None:
+        self._remove_selected(self.image_list)
+        self._update_image_dpi_from_sources()
 
     @staticmethod
     def _remove_selected(list_widget: QListWidget) -> None:
