@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import os
 import tempfile
+from io import BytesIO
 from pathlib import Path
 from typing import Callable, Sequence
 
 from PIL import Image, ImageOps
 from pypdf import PdfReader, PdfWriter
+from reportlab.pdfgen import canvas
 
 
 SUPPORTED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff", ".gif"}
@@ -501,3 +503,198 @@ def convert_image(
         if image is not None and image is not final_image:
             image.close()
         temporary.unlink(missing_ok=True)
+
+
+def pdf_page_count(input_path: str | Path, *, password: str | None = None) -> int:
+    """Return a PDF's page count after validating any required password."""
+    source = Path(input_path).expanduser().resolve()
+    if not source.is_file():
+        raise FileNotFoundError(f"PDF não encontrado: {source}")
+    if source.suffix.lower() != ".pdf":
+        raise ValueError("O arquivo de origem precisa ser PDF.")
+    with source.open("rb") as stream:
+        reader = _open_reader(source, stream, password=password)
+        return len(reader.pages)
+
+
+def reorder_pdf_pages(
+    input_path: str | Path,
+    page_order: Sequence[int],
+    output_path: str | Path,
+    *,
+    password: str | None = None,
+    file_mode: int = 0o600,
+) -> Path:
+    """Save every page in a user-supplied 1-based order, without dropping or duplicating pages."""
+    sources, output = _normalise_pdf_paths([input_path], output_path)
+    source = sources[0]
+    _validate_file_mode(file_mode)
+
+    def write(temporary: Path) -> None:
+        with source.open("rb") as stream:
+            reader = _open_reader(source, stream, password=password)
+            count = len(reader.pages)
+            if len(page_order) != count or set(page_order) != set(range(1, count + 1)):
+                raise ValueError(
+                    f"A ordem deve conter cada página uma única vez, de 1 a {count}."
+                )
+            writer = PdfWriter()
+            writer.append(
+                reader,
+                pages=[page_number - 1 for page_number in page_order],
+                import_outline=True,
+            )
+            _copy_metadata(reader, writer)
+            writer.write(temporary)
+
+    _atomic_pdf_save(output, write, file_mode=file_mode)
+    return output
+
+
+def optimize_pdf(
+    input_path: str | Path,
+    output_path: str | Path,
+    *,
+    mode: str = "lossless",
+    quality: int = 82,
+    password: str | None = None,
+    file_mode: int = 0o600,
+) -> Path:
+    """Optimize PDF streams and optionally recompress supported raster images as JPEG.
+
+    lossless mode only compresses streams and deduplicates objects. balanced mode also
+    recompresses opaque raster images using the requested JPEG quality; images with
+    alpha/transparency and inline images are intentionally left unchanged.
+    """
+    if mode not in {"lossless", "balanced"}:
+        raise ValueError("Escolha otimização sem perdas ou equilibrada.")
+    if not 50 <= quality <= 95:
+        raise ValueError("A qualidade JPEG precisa ficar entre 50 e 95.")
+    sources, output = _normalise_pdf_paths([input_path], output_path)
+    source = sources[0]
+    _validate_file_mode(file_mode)
+
+    def write(temporary: Path) -> None:
+        with source.open("rb") as stream:
+            reader = _open_reader(source, stream, password=password)
+            writer = PdfWriter()
+            writer.append(reader, import_outline=True)
+            _copy_metadata(reader, writer)
+            for page in writer.pages:
+                page.compress_content_streams(level=9)
+                if mode != "balanced":
+                    continue
+                for image_file in list(page.images):
+                    if image_file.is_inline or not image_file.is_displayed:
+                        continue
+                    image = image_file.image
+                    if image is None:
+                        continue
+                    # Retain transparency/soft-mask graphics to avoid changing their appearance.
+                    if image.mode in {"RGBA", "LA", "PA"} or "transparency" in image.info:
+                        continue
+                    converted: Image.Image | None = None
+                    try:
+                        converted = image.convert("RGB")
+                        image_file.replace(
+                            converted,
+                            format="JPEG",
+                            quality=quality,
+                            optimize=True,
+                        )
+                    finally:
+                        if converted is not None:
+                            converted.close()
+            writer.compress_identical_objects(
+                remove_identicals=True,
+                remove_orphans=True,
+            )
+            writer.write(temporary)
+
+    _atomic_pdf_save(output, write, file_mode=file_mode)
+    return output
+
+
+def stamp_pdf(
+    input_path: str | Path,
+    output_path: str | Path,
+    *,
+    watermark_text: str | None = None,
+    page_numbering: bool = False,
+    watermark_position: str = "diagonal",
+    page_number_position: str = "bottom-right",
+    font_size: int = 34,
+    opacity: float = 0.22,
+    password: str | None = None,
+    file_mode: int = 0o600,
+) -> Path:
+    """Overlay a text watermark and/or page numbers without rasterizing the source pages."""
+    watermark = (watermark_text or "").strip()
+    if not watermark and not page_numbering:
+        raise ValueError("Informe o texto da marca d'água ou ative a numeração de páginas.")
+    if not 8 <= font_size <= 120:
+        raise ValueError("O tamanho da fonte precisa ficar entre 8 e 120.")
+    if not 0.05 <= opacity <= 1:
+        raise ValueError("A opacidade precisa ficar entre 0,05 e 1.")
+    if watermark_position not in {"diagonal", "center", "bottom-center"}:
+        raise ValueError("Posição de marca d'água inválida.")
+    if page_number_position not in {"bottom-right", "bottom-center"}:
+        raise ValueError("Posição de numeração inválida.")
+
+    sources, output = _normalise_pdf_paths([input_path], output_path)
+    source = sources[0]
+    _validate_file_mode(file_mode)
+
+    def write(temporary: Path) -> None:
+        with source.open("rb") as stream:
+            reader = _open_reader(source, stream, password=password)
+            writer = PdfWriter()
+            writer.append(reader, import_outline=True)
+            _copy_metadata(reader, writer)
+            total_pages = len(writer.pages)
+
+            for index, page in enumerate(writer.pages, start=1):
+                width = float(page.mediabox.width)
+                height = float(page.mediabox.height)
+                overlay_stream = BytesIO()
+                overlay_canvas = canvas.Canvas(
+                    overlay_stream,
+                    pagesize=(width, height),
+                    pageCompression=1,
+                )
+                overlay_canvas.saveState()
+                overlay_canvas.setFillColorRGB(0.38, 0.42, 0.49)
+                overlay_canvas.setFillAlpha(opacity)
+
+                if watermark:
+                    overlay_canvas.setFont("Helvetica-Bold", font_size)
+                    if watermark_position == "diagonal":
+                        overlay_canvas.translate(width / 2, height / 2)
+                        overlay_canvas.rotate(35)
+                        overlay_canvas.drawCentredString(0, 0, watermark)
+                    elif watermark_position == "center":
+                        overlay_canvas.drawCentredString(width / 2, height / 2, watermark)
+                    else:
+                        overlay_canvas.drawCentredString(width / 2, 32, watermark)
+
+                if page_numbering:
+                    overlay_canvas.setFillAlpha(1)
+                    overlay_canvas.setFont("Helvetica", max(9, min(16, font_size // 2)))
+                    page_label = f"{index} / {total_pages}"
+                    if page_number_position == "bottom-center":
+                        overlay_canvas.drawCentredString(width / 2, 18, page_label)
+                    else:
+                        overlay_canvas.drawRightString(width - 28, 18, page_label)
+
+                overlay_canvas.restoreState()
+                overlay_canvas.showPage()
+                overlay_canvas.save()
+                overlay_stream.seek(0)
+                overlay_reader = PdfReader(overlay_stream, strict=False)
+                page.merge_page(overlay_reader.pages[0], over=True, expand=False)
+                overlay_stream.close()
+
+            writer.write(temporary)
+
+    _atomic_pdf_save(output, write, file_mode=file_mode)
+    return output
