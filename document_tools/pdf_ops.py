@@ -705,3 +705,75 @@ def stamp_pdf(
 
     _atomic_pdf_save(output, write, file_mode=file_mode)
     return output
+
+
+def process_pdf_pipeline(
+    input_path: str | Path,
+    output_path: str | Path,
+    *,
+    rotate_angle: int | None = None,
+    rotate_ranges: str | None = None,
+    watermark_text: str | None = None,
+    page_numbering: bool = False,
+    stamp_ranges: str | None = None,
+    optimize_mode: str | None = None,
+    quality: int = 82,
+    password: str | None = None,
+    file_mode: int = 0o600,
+) -> Path:
+    """Run selected PDF transformations in a fixed order with atomic final output.
+
+    The sequence is rotation, watermark/page numbering, then optimization. Intermediate
+    documents are temporary files in the destination folder and are removed automatically.
+    The original source is never modified, and the final destination is only replaced after
+    the last selected operation has completed successfully.
+    """
+    sources, output = _normalise_pdf_paths([input_path], output_path)
+    source = sources[0]
+    _validate_file_mode(file_mode)
+    if rotate_angle is not None and rotate_angle not in (90, 180, 270):
+        raise ValueError("Escolha uma rotação de 90, 180 ou 270 graus.")
+    if optimize_mode not in (None, "lossless", "balanced"):
+        raise ValueError("Escolha otimização sem perdas ou equilibrada.")
+
+    operations: list[Callable[[Path, Path], Path]] = []
+    if rotate_angle is not None:
+        operations.append(
+            lambda current, target: rotate_pdf(
+                current, target, rotate_angle, rotate_ranges,
+                password=password, file_mode=file_mode,
+            )
+        )
+    if (watermark_text or "").strip() or page_numbering:
+        operations.append(
+            lambda current, target: stamp_pdf(
+                current, target,
+                watermark_text=watermark_text,
+                page_numbering=page_numbering,
+                page_ranges=stamp_ranges,
+                password=password,
+                file_mode=file_mode,
+            )
+        )
+    if optimize_mode is not None:
+        operations.append(
+            lambda current, target: optimize_pdf(
+                current, target,
+                mode=optimize_mode,
+                quality=quality,
+                password=password,
+                file_mode=file_mode,
+            )
+        )
+    if not operations:
+        raise ValueError("Selecione pelo menos uma etapa para executar o fluxo em lote.")
+
+    with tempfile.TemporaryDirectory(prefix="pdf-hub-pipeline-", dir=str(output.parent)) as temp_dir:
+        current = source
+        for index, operation in enumerate(operations):
+            is_last = index == len(operations) - 1
+            target = output if is_last else Path(temp_dir) / f"stage-{index + 1}.pdf"
+            operation(current, target)
+            current = target
+
+    return output
