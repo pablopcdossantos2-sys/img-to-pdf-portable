@@ -378,6 +378,7 @@ TRANSLATIONS = {
         "Não foi possível armazenar o relatório no histórico local.": "Could not save the report to local history.",
         "Processando arquivo {completed} de {total}: {name}": "Processing file {completed} of {total}: {name}",
         "Lote concluído: {success} sucesso(s), {failed} falha(s) de {total} PDF(s).": "Batch complete: {success} succeeded, {failed} failed out of {total} PDF(s).",
+        "Pronto. Selecione uma ferramenta no menu lateral.": "Ready. Choose a tool from the left menu.",
         "Não há relatório para exportar.": "There is no report to export.",
         "Relatório salvo: {path}": "Report saved: {path}",
         "Não foi possível salvar o relatório CSV. Verifique a pasta e as permissões.": "Could not save the CSV report. Check the folder and permissions.",
@@ -674,6 +675,7 @@ TRANSLATIONS = {
         "Não foi possível armazenar o relatório no histórico local.": "No se pudo guardar el informe en el historial local.",
         "Processando arquivo {completed} de {total}: {name}": "Procesando archivo {completed} de {total}: {name}",
         "Lote concluído: {success} sucesso(s), {failed} falha(s) de {total} PDF(s).": "Lote completado: {success} correcto(s), {failed} error(es) de {total} PDF(s).",
+        "Pronto. Selecione uma ferramenta no menu lateral.": "Listo. Elige una herramienta en el menú lateral.",
         "Não há relatório para exportar.": "No hay ningún informe para exportar.",
         "Relatório salvo: {path}": "Informe guardado: {path}",
         "Não foi possível salvar o relatório CSV. Verifique a pasta e as permissões.": "No se pudo guardar el informe CSV. Comprueba la carpeta y los permisos.",
@@ -802,6 +804,7 @@ class SideNavigationWidget(QWidget):
         nav_scroll.setFrameShape(QFrame.Shape.NoFrame)
         nav_scroll.setWidgetResizable(True)
         self.nav_widget = QWidget()
+        self.nav_widget.setObjectName("navigationContent")
         self.nav_layout = QVBoxLayout(self.nav_widget)
         self.nav_layout.setContentsMargins(2, 2, 2, 2)
         self.nav_layout.setSpacing(3)
@@ -1068,7 +1071,7 @@ class DocumentToolsWindow(QMainWindow):
         central_layout.addWidget(self.tabs, 1)
 
         footer = QHBoxLayout()
-        self.status_label = QLabel("Pronto. Selecione uma operação acima.")
+        self.status_label = QLabel("Pronto. Selecione uma ferramenta no menu lateral.")
         self.status_label.setObjectName("statusLabel")
         self.status_label.setWordWrap(True)
         footer.addWidget(self.status_label, 1)
@@ -1297,7 +1300,7 @@ class DocumentToolsWindow(QMainWindow):
             border-radius: 12px;
         }
         QScrollArea#navigationScroll, QScrollArea#contentScrollArea,
-        QStackedWidget#pageStack { background: transparent; border: none; }
+        QStackedWidget#pageStack, QWidget#navigationContent { background: transparent; border: none; }
         QPushButton#navButton {
             background: transparent; color: $MUTED; border: none;
             border-radius: 8px; padding: 10px 12px; text-align: left; font-weight: 600;
