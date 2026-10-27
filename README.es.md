@@ -13,8 +13,8 @@ Aplicación de escritorio para trabajar localmente con archivos PDF e imágenes,
 - **Extraer páginas:** guarda páginas o intervalos como `1-3, 5, 8-10`, permite repetir páginas y acepta contraseña. La navegación y las anotaciones se conservan cuando es posible, con referencias adaptadas a las páginas retenidas.
 - **Girar páginas:** gira 90°, 180° o 270°, en todo el documento o solo las páginas seleccionadas, incluidos los PDFs protegidos con contraseña.
 - **Dividir PDF:** crea un PDF por página y crea la carpeta de destino cuando hace falta. Admite contraseñas e intenta conservar metadatos, marcadores y anotaciones de página. Los archivos de destino existentes nunca se sobrescriben; si hay conflicto, la operación se detiene.
-- **Reordenar páginas:** carga un PDF y arrastra las páginas a la secuencia deseada. Las etiquetas indican la página original y cada página debe aparecer exactamente una vez.
-- **Marca de agua y numeración:** añade texto diagonal o centrado, números de página en el pie derecho o centrado, o ambos en una sola operación. El contenido original no se rasteriza.
+- **Reordenar páginas con vista previa:** carga un PDF, arrastra las filas y revisa la página seleccionada en el panel de vista previa. La vista previa sigue la página de origen al mover las filas; cada página debe aparecer exactamente una vez.
+- **Marcas de agua y numeración selectivas:** aplica texto, numeración o ambos a todas las páginas o solo a intervalos (por ejemplo, `2-4, 7`). La numeración conserva la posición original de la página en el documento. El contenido original no se rasteriza.
 - **Optimizar PDF:** elige compresión de streams sin pérdida y eliminación de objetos duplicados, o recomprensión JPEG equilibrada de imágenes opacas con calidad ajustable. Las imágenes transparentes y las imágenes inline se mantienen sin cambios.
 - **Protección de salida:** el cuadro de guardado añade la extensión PDF, impide elegir como destino uno de los archivos de origen y solicita confirmación antes de reemplazar un archivo existente.
 
@@ -27,7 +27,7 @@ Aplicación de escritorio para trabajar localmente con archivos PDF e imágenes,
 
 ### Facilidad de uso, privacidad y robustez
 
-- Interfaz de escritorio con selector de idioma PT-BR/inglés/español, listas reordenables, duplicación intencional de elementos e indicador de procesamiento. Las contraseñas se escriben en campos ocultos, no se guardan en las preferencias y los campos se limpian al iniciar la operación.
+- Interfaz de escritorio con selector de idioma PT-BR/inglés/español, listas reordenables, vista previa de la página seleccionada, duplicación intencional e indicador de procesamiento. Los diálogos principales, solicitudes de contraseña, confirmaciones y errores habituales de intervalos siguen el idioma seleccionado. Las contraseñas se escriben en campos ocultos, no se guardan en las preferencias y los campos se limpian al iniciar la operación.
 - Controles de DPI y márgenes al convertir imágenes a PDF.
 - Las tareas largas se ejecutan fuera del hilo principal de la interfaz; la ventana no se puede cerrar mientras una tarea está activa.
 - Un botón permite abrir la carpeta de salida al finalizar el procesamiento.
@@ -50,7 +50,7 @@ El flujo **PDF Hub CI, security and packages** prueba la aplicación y genera pa
 
 El artefacto incluye el entorno de ejecución y no requiere instalar Python por separado. Windows puede mostrar una advertencia de seguridad para archivos descargados; verifica el origen antes de ejecutar la aplicación.
 
-> Los artefactos de GitHub Actions son temporales y caducan según el periodo de retención configurado. Las versiones permanentes se generan al enviar una etiqueta como `v0.4.0`. Los ejecutables no tienen firma digital/notarización; Windows SmartScreen o macOS Gatekeeper pueden mostrar una advertencia.
+> Los artefactos de GitHub Actions son temporales y caducan según el periodo de retención configurado. Las versiones permanentes se generan al enviar una etiqueta como `v0.5.0`. Los ejecutables no tienen firma digital/notarización; Windows SmartScreen o macOS Gatekeeper pueden mostrar una advertencia.
 
 ## Ejecutar desde el código fuente
 
@@ -104,16 +104,16 @@ La opción `--selftest` inicializa la interfaz sin mostrar una ventana y termina
 
 ## ROADMAP
 
-### Completado en la versión 0.4.0
+### Completado hasta la versión 0.5.0
 
 - [x] **Interfaz multilingüe:** cambia entre portugués brasileño, inglés y español, incluidas las pestañas y los controles principales.
 - [x] **Reordenación visual:** arrastra las páginas al nuevo orden y guarda el PDF; cada página debe aparecer exactamente una vez.
 - [x] **Compresión/optimización PDF:** compresión sin pérdida de streams y eliminación de objetos duplicados, más recomprensión JPEG equilibrada con calidad configurable. La recomprensión puede cambiar la apariencia de las imágenes y no garantiza reducir todos los archivos.
-- [x] **Marcas de agua y numeración:** superposición de texto sin rasterizar el contenido original, además de números de página en el pie.
+- [x] **Marcas de agua y numeración por intervalos:** selecciona páginas específicas o deja el campo vacío para aplicar a todo el documento; la numeración conserva la referencia de página original.
+- [x] **Vista previa al reordenar:** el panel renderiza la página seleccionada y sigue su número original después de cambiar el orden.
 
 ### Posibles mejoras futuras
 
-- [ ] Mostrar miniaturas de página antes de reordenarlas.
-- [ ] Exportación por lotes para encadenar varias operaciones.
-- [ ] Elegir páginas o intervalos específicos al aplicar marcas de agua o números de página.
-- [ ] Traducir de forma consistente todos los diálogos y mensajes de error.
+- [ ] Mostrar miniaturas de todas las páginas directamente en la lista de reordenación, además de la vista previa seleccionada.
+- [ ] Crear flujos por lotes para encadenar rotación, marcas de agua, numeración y optimización en una sola ejecución.
+- [ ] Traducir mensajes excepcionales de bibliotecas externas y formatos PDF poco habituales.
