@@ -13,8 +13,8 @@ A desktop application for working with PDF files and images locally, built with 
 - **Extract pages:** save selected pages or ranges such as `1-3, 5, 8-10`, allow repeated pages, and accept a password. Navigation and annotations are retained where possible, with remapping to the retained pages.
 - **Rotate pages:** rotate by 90°, 180°, or 270°, across the whole document or selected pages, including password-protected PDFs.
 - **Split PDF:** create one PDF per page and create the output folder when needed. Passwords are supported, and metadata, bookmarks, and page annotations are preserved where possible. Existing destination files are never overwritten; conflicts stop the operation.
-- **Reorder pages:** load a PDF and drag page rows into the desired sequence. Labels show original page numbers, and every source page must appear exactly once.
-- **Watermark and page numbers:** add diagonal or centered text, page numbers in the bottom-right or centered footer, or both in one operation. Original page content is not rasterized.
+- **Reorder pages with preview:** load a PDF, drag the page rows, and inspect the selected page in the preview panel. The preview follows the source page when rows are moved; every page must appear exactly once.
+- **Selective watermarks and page numbers:** apply text, numbering, or both to all pages or only selected ranges (for example, `2-4, 7`). Numbering retains the page's original position in the document. Original content is not rasterized.
 - **Optimize PDF:** choose lossless stream compression/deduplication or balanced JPEG recompression of opaque raster images with adjustable quality. Transparent and inline images are left unchanged.
 - **Safer output handling:** the save dialog adds the PDF extension, prevents choosing a source file as the output, and asks before replacing an existing file.
 
@@ -27,7 +27,7 @@ A desktop application for working with PDF files and images locally, built with 
 
 ### Usability, privacy, and reliability
 
-- Desktop interface with tabs and a PT-BR/English/Spanish language selector, reorderable lists, intentional item duplication, and a processing indicator. Passwords are entered through masked fields, are not stored in preferences, and the fields are cleared when an operation starts.
+- Desktop interface with a PT-BR/English/Spanish language selector, reorderable lists, a selected-page preview, intentional item duplication, and a processing indicator. Main dialogs, password prompts, confirmations, and common page-range errors follow the selected language. Passwords are entered through masked fields, are not stored in preferences, and the fields are cleared when an operation starts.
 - DPI and margin controls when converting images to PDF.
 - Long-running tasks execute outside the main UI thread; the window cannot be closed while a task is running.
 - A button opens the output folder when processing finishes.
@@ -50,7 +50,7 @@ The **PDF Hub CI, security and packages** workflow tests the app and builds port
 
 The artifact includes the runtime and does not require a separate Python installation. Windows may show a security warning for downloaded files; verify the source before running the application.
 
-> GitHub Actions artifacts are temporary and expire according to the configured retention period. Versioned GitHub Releases are created when a tag such as `v0.4.0` is pushed. The executables are not digitally signed/notarized; Windows SmartScreen or macOS Gatekeeper may display a warning.
+> GitHub Actions artifacts are temporary and expire according to the configured retention period. Versioned GitHub Releases are created when a tag such as `v0.5.0` is pushed. The executables are not digitally signed/notarized; Windows SmartScreen or macOS Gatekeeper may display a warning.
 
 ## Run from source
 
@@ -104,16 +104,16 @@ The `--selftest` option initializes the interface in headless mode and exits wit
 
 ## ROADMAP
 
-### Completed in version 0.4.0
+### Completed through version 0.5.0
 
 - [x] **Multilingual interface:** switch between Brazilian Portuguese, English, and Spanish, including tabs and the main controls.
 - [x] **Visual page reordering:** drag pages into a new order and save the PDF; every page is required exactly once.
 - [x] **PDF compression/optimization:** lossless stream compression and duplicate-object removal, plus balanced JPEG recompression with configurable quality. Recompression may change image appearance and does not guarantee every file will shrink.
-- [x] **Watermarks and page numbering:** overlay text without rasterizing the original content, plus footer page numbers.
+- [x] **Page-range watermarks and numbering:** choose specific pages or leave the field blank to apply across the document; numbering retains original page references.
+- [x] **Preview while reordering:** a preview panel renders the selected page and tracks its original page number after reordering.
 
 ### Possible next improvements
 
-- [ ] Show page thumbnails before reordering.
-- [ ] Batch export for chained operations.
-- [ ] Select specific pages/ranges when applying watermarks or page numbers.
-- [ ] Translate every dialog and error message consistently.
+- [ ] Show thumbnails for every page directly in the reorder list, in addition to the selected-page preview.
+- [ ] Add batch workflows to chain rotation, watermarking, numbering, and optimization in one run.
+- [ ] Translate exceptional messages from external libraries and unusual PDF formats.
