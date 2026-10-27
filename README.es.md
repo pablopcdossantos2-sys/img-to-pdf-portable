@@ -13,10 +13,11 @@ Aplicación de escritorio para trabajar localmente con archivos PDF e imágenes,
 - **Extraer páginas:** guarda páginas o intervalos como `1-3, 5, 8-10`, permite repetir páginas y acepta contraseña. La navegación y las anotaciones se conservan cuando es posible, con referencias adaptadas a las páginas retenidas.
 - **Girar páginas:** gira 90°, 180° o 270°, en todo el documento o solo las páginas seleccionadas, incluidos los PDFs protegidos con contraseña.
 - **Dividir PDF:** crea un PDF por página y crea la carpeta de destino cuando hace falta. Admite contraseñas e intenta conservar metadatos, marcadores y anotaciones de página. Los archivos de destino existentes nunca se sobrescriben; si hay conflicto, la operación se detiene.
-- **Reordenar páginas con vista previa:** carga un PDF, arrastra las filas y revisa la página seleccionada en el panel de vista previa. La vista previa sigue la página de origen al mover las filas; cada página debe aparecer exactamente una vez.
+- **Reordenar páginas con miniaturas y vista previa:** cada página aparece como miniatura en una cuadrícula; arrastra para cambiar el orden y revisa la página seleccionada en el panel de vista previa. Las miniaturas se generan en segundo plano y siguen la página original. Cada página debe aparecer exactamente una vez.
 - **Marcas de agua y numeración selectivas:** aplica texto, numeración o ambos a todas las páginas o solo a intervalos (por ejemplo, `2-4, 7`). La numeración conserva la posición original de la página en el documento. El contenido original no se rasteriza.
 - **Optimizar PDF:** elige compresión de streams sin pérdida y eliminación de objetos duplicados, o recomprensión JPEG equilibrada de imágenes opacas con calidad ajustable. Las imágenes transparentes y las imágenes inline se mantienen sin cambios.
 - **Flujo por lotes:** combina rotación, marca de agua/numeración y optimización en una sola operación. Las etapas siguen un orden fijo, usan archivos temporales locales y solo guardan el resultado final si todo termina correctamente.
+- **Perfiles reutilizables:** guarda, carga y elimina perfiles con nombre en las preferencias locales. Los perfiles guardan solo opciones de procesamiento; no incluyen la ruta del PDF ni la contraseña.
 - **Protección de salida:** el cuadro de guardado añade la extensión PDF, impide elegir como destino uno de los archivos de origen y solicita confirmación antes de reemplazar un archivo existente.
 
 ### Herramientas para imágenes
@@ -28,7 +29,7 @@ Aplicación de escritorio para trabajar localmente con archivos PDF e imágenes,
 
 ### Facilidad de uso, privacidad y robustez
 
-- Interfaz de escritorio con selector de idioma PT-BR/inglés/español, listas reordenables, vista previa de la página seleccionada, duplicación intencional e indicador de procesamiento. Los diálogos principales, solicitudes de contraseña, confirmaciones y errores habituales de intervalos siguen el idioma seleccionado. Las contraseñas se escriben en campos ocultos, no se guardan en las preferencias y los campos se limpian al iniciar la operación.
+- Interfaz de escritorio con selector de idioma PT-BR/inglés/español, cuadrículas de miniaturas con vista previa, perfiles reutilizables de flujo por lotes, duplicación intencional e indicador de procesamiento. Los diálogos principales, solicitudes de contraseña, confirmaciones y errores habituales de intervalos siguen el idioma seleccionado. Las contraseñas se escriben en campos ocultos, no se guardan en las preferencias y los campos se limpian al iniciar la operación.
 - Controles de DPI y márgenes al convertir imágenes a PDF.
 - Las tareas largas se ejecutan fuera del hilo principal de la interfaz; la ventana no se puede cerrar mientras una tarea está activa.
 - Un botón permite abrir la carpeta de salida al finalizar el procesamiento.
@@ -51,7 +52,7 @@ El flujo **PDF Hub CI, security and packages** prueba la aplicación y genera pa
 
 El artefacto incluye el entorno de ejecución y no requiere instalar Python por separado. Windows puede mostrar una advertencia de seguridad para archivos descargados; verifica el origen antes de ejecutar la aplicación.
 
-> Los artefactos de GitHub Actions son temporales y caducan según el periodo de retención configurado. Las versiones permanentes se generan al enviar una etiqueta como `v0.5.0`. Los ejecutables no tienen firma digital/notarización; Windows SmartScreen o macOS Gatekeeper pueden mostrar una advertencia.
+> Los artefactos de GitHub Actions son temporales y caducan según el periodo de retención configurado. Las versiones permanentes se generan al enviar una etiqueta como `v0.6.0`. Los ejecutables no tienen firma digital/notarización; Windows SmartScreen o macOS Gatekeeper pueden mostrar una advertencia.
 
 ## Ejecutar desde el código fuente
 
@@ -105,16 +106,17 @@ La opción `--selftest` inicializa la interfaz sin mostrar una ventana y termina
 
 ## ROADMAP
 
-### Completado hasta la versión 0.5.0
+### Completado hasta la versión 0.6.0
 
 - [x] **Interfaz multilingüe:** cambia entre portugués brasileño, inglés y español, incluidas las pestañas y los controles principales.
 - [x] **Reordenación visual:** arrastra las páginas al nuevo orden y guarda el PDF; cada página debe aparecer exactamente una vez.
 - [x] **Compresión/optimización PDF:** compresión sin pérdida de streams y eliminación de objetos duplicados, más recomprensión JPEG equilibrada con calidad configurable. La recomprensión puede cambiar la apariencia de las imágenes y no garantiza reducir todos los archivos.
 - [x] **Marcas de agua y numeración por intervalos:** selecciona páginas específicas o deja el campo vacío para aplicar a todo el documento; la numeración conserva la referencia de página original.
-- [x] **Vista previa al reordenar:** el panel renderiza la página seleccionada y sigue su número original después de cambiar el orden.
+- [x] **Miniaturas al reordenar:** cuadrícula con miniaturas de todas las páginas, generadas en segundo plano, junto con la vista previa seleccionada.
 - [x] **Flujo por lotes:** combina rotación, marca de agua/numeración y optimización sin crear manualmente archivos intermedios.
+- [x] **Perfiles reutilizables:** guarda/carga/elimina combinaciones de etapas en las preferencias locales; los perfiles excluyen rutas y contraseñas.
 
 ### Posibles mejoras futuras
 
-- [ ] Mostrar miniaturas de todas las páginas directamente en la lista de reordenación, además de la vista previa seleccionada.
+- [ ] Exportar/importar perfiles de flujo por lotes en archivos JSON para transferirlos entre equipos.
 - [ ] Traducir mensajes excepcionales de bibliotecas externas y formatos PDF poco habituales.
