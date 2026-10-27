@@ -10,9 +10,10 @@ from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtGui import QImage
 from pypdf import PdfWriter
+from pypdf.errors import PdfReadError
 from PySide6.QtWidgets import QApplication, QAbstractItemView, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton
 
-from document_tools.gui import APP_NAME, DocumentToolsWindow, PageThumbnailWorker
+from document_tools.gui import APP_NAME, DocumentToolsWindow, OperationWorker, PageThumbnailWorker
 
 
 @pytest.fixture(scope="module")
@@ -350,6 +351,134 @@ def test_pipeline_profile_saves_loads_and_deletes_options_without_paths_or_passw
             window.settings.remove("pipeline_profiles")
         else:
             window.settings.setValue("pipeline_profiles", previous_profiles)
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+def test_pipeline_profile_json_export_import_round_trip_excludes_sensitive_data(
+    qt_app: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    window = DocumentToolsWindow()
+    previous_profiles = window.settings.value("pipeline_profiles", None)
+    try:
+        window.settings.setValue("pipeline_profiles", "{}")
+        window.pipeline_path.setText("private-source.pdf")
+        window.pipeline_password.setText("do-not-export-this")
+        window.pipeline_rotate_enabled.setChecked(True)
+        window.pipeline_rotate_angle.setCurrentIndex(window.pipeline_rotate_angle.findData(180))
+        window.pipeline_rotate_ranges.setText("2, 4-5")
+        window.pipeline_stamp_enabled.setChecked(True)
+        window.pipeline_stamp_text.setText("REVIEW")
+        window.pipeline_numbering.setChecked(True)
+        window.pipeline_stamp_ranges.setText("1-3")
+        window.pipeline_optimize_enabled.setChecked(True)
+        window.pipeline_optimize_mode.setCurrentIndex(window.pipeline_optimize_mode.findData("balanced"))
+        window.pipeline_optimize_quality.setValue(73)
+        profile = window._capture_pipeline_profile()
+        window.settings.setValue("pipeline_profiles", json.dumps({"Portable review": profile}))
+
+        target = tmp_path / "portable-review.json"
+        monkeypatch.setattr(
+            "document_tools.gui.QInputDialog.getItem",
+            lambda *args, **kwargs: ("Portable review", True),
+        )
+        monkeypatch.setattr(
+            "document_tools.gui.QFileDialog.getSaveFileName",
+            lambda *args, **kwargs: (str(target), "JSON files (*.json)"),
+        )
+        window._export_pipeline_profile()
+        document = json.loads(target.read_text(encoding="utf-8"))
+        assert document == {
+            "schema_version": 1,
+            "name": "Portable review",
+            "profile": profile,
+        }
+        serialized = target.read_text(encoding="utf-8")
+        assert "private-source.pdf" not in serialized
+        assert "do-not-export-this" not in serialized
+
+        window.settings.setValue("pipeline_profiles", "{}")
+        monkeypatch.setattr(
+            "document_tools.gui.QFileDialog.getOpenFileName",
+            lambda *args, **kwargs: (str(target), "JSON files (*.json)"),
+        )
+        window._import_pipeline_profile()
+        assert window._read_pipeline_profiles() == {"Portable review": profile}
+        assert window.pipeline_password.text() == "do-not-export-this"
+    finally:
+        if previous_profiles is None:
+            window.settings.remove("pipeline_profiles")
+        else:
+            window.settings.setValue("pipeline_profiles", previous_profiles)
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_pipeline_profile_import_rejects_unrecognized_fields(
+    qt_app: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    window = DocumentToolsWindow()
+    previous_profiles = window.settings.value("pipeline_profiles", None)
+    try:
+        window.settings.setValue("pipeline_profiles", "{}")
+        invalid = tmp_path / "invalid-profile.json"
+        invalid.write_text(
+            json.dumps({
+                "schema_version": 1,
+                "name": "Injected",
+                "profile": {
+                    "rotate_enabled": False,
+                    "rotate_angle": 90,
+                    "rotate_ranges": "",
+                    "stamp_enabled": False,
+                    "stamp_text": "",
+                    "page_numbering": False,
+                    "stamp_ranges": "",
+                    "optimize_enabled": False,
+                    "optimize_mode": "lossless",
+                    "quality": 82,
+                    "password": "should-not-be-accepted",
+                },
+            }),
+            encoding="utf-8",
+        )
+        warnings: list[str] = []
+        monkeypatch.setattr(
+            "document_tools.gui.QFileDialog.getOpenFileName",
+            lambda *args, **kwargs: (str(invalid), "JSON files (*.json)"),
+        )
+        monkeypatch.setattr(
+            "document_tools.gui.QMessageBox.warning",
+            lambda _parent, _title, message: warnings.append(str(message)),
+        )
+        window._import_pipeline_profile()
+        assert window._read_pipeline_profiles() == {}
+        assert warnings
+    finally:
+        if previous_profiles is None:
+            window.settings.remove("pipeline_profiles")
+        else:
+            window.settings.setValue("pipeline_profiles", previous_profiles)
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_external_pdf_errors_have_translatable_user_friendly_messages(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    try:
+        message = OperationWorker._friendly_error_message(PdfReadError("internal parser diagnostic"))
+        assert message == "O PDF contém uma estrutura não suportada ou está danificado. Tente salvar uma nova cópia do PDF antes de processar."
+        window.language_combo.setCurrentIndex(window.language_combo.findData("en"))
+        assert window._t(message) == "The PDF contains an unsupported structure or is damaged. Try saving a fresh copy before processing it."
+        window.language_combo.setCurrentIndex(window.language_combo.findData("es"))
+        assert window._t(message) == "El PDF contiene una estructura no compatible o está dañado. Intenta guardar una copia nueva antes de procesarlo."
+    finally:
+        window.language_combo.setCurrentIndex(window.language_combo.findData("pt"))
         window.close()
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
