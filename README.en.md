@@ -16,7 +16,7 @@ A desktop application for working with PDF files and images locally, built with 
 - **Reorder pages with thumbnails and preview:** every page appears as a thumbnail in a grid; drag to change the order and inspect the selected page in the preview panel. Thumbnails render in the background and track the original page; every page must appear exactly once.
 - **Selective watermarks and page numbers:** apply text, numbering, or both to all pages or only selected ranges (for example, `2-4, 7`). Numbering retains the page's original position in the document. Original content is not rasterized.
 - **Optimize PDF:** choose lossless stream compression/deduplication or balanced JPEG recompression of opaque raster images with adjustable quality. Transparent and inline images are left unchanged.
-- **Batch workflow:** combine rotation, watermark/page numbering, and optimization in one operation, or apply a saved profile to all PDFs in a folder. Each PDF receives an individual result; a failure does not stop the remaining files. Export a CSV report and optionally preserve subfolders.
+- **Batch workflow:** combine rotation, watermark/page numbering, and optimization in one operation, or apply a saved profile to all PDFs in a folder. Each PDF receives an individual result; a failure does not stop the remaining files. Export a CSV report and optionally preserve subfolders. If a batch is interrupted, enable resume to reuse completed PDFs; failed files are retried.
 - **Reusable batch profiles:** save, load, and delete named profiles in local preferences, or export/import them as JSON. Schema 2 automatically migrates older schema 1 profiles, preserving their settings and adding a default output suffix. PDF paths and passwords are never included; unknown fields and invalid options are rejected.
 - **Safer output handling:** the save dialog adds the PDF extension, prevents choosing a source file as the output, and asks before replacing an existing file.
 
@@ -122,4 +122,5 @@ The `--selftest` option initializes the interface in headless mode and exits wit
 
 ### Possible next improvements
 
-- [ ] Allow interrupted folder batches to be paused and resumed without repeating completed PDFs.
+- [x] Resume interrupted folder batches: completed results are reused when the source, destination, profile, and file list are unchanged; failures are retried.
+- [ ] Add manual pause and safe cancellation for running batches.
