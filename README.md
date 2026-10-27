@@ -2,7 +2,7 @@
 
 **Idiomas:** Português (Brasil) · [English](README.en.md) · [Español](README.es.md)
 
-Aplicativo desktop para trabalhar com PDFs e imagens localmente, com interface moderna em português brasileiro. A implementação é em **Python, PySide6, pypdf e Pillow**.
+Aplicativo desktop para trabalhar com PDFs e imagens localmente, desenvolvido com **Python, PySide6, pypdf, Pillow e ReportLab**. A interface pode ser alternada entre português brasileiro, inglês e espanhol; a preferência é salva localmente.
 
 ## Funcionalidades
 
@@ -12,6 +12,9 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, com interface m
 - **Extrair páginas:** salva páginas específicas ou intervalos como `1-3, 5, 8-10`, permite repetir páginas e aceita senha. A estrutura de navegação e as anotações são preservadas na medida do possível, com remapeamento para as páginas mantidas.
 - **Girar páginas:** rotação em 90°, 180° ou 270°, em todas as páginas ou somente nas selecionadas, inclusive em PDFs protegidos por senha.
 - **Dividir PDF:** cria um arquivo PDF individual para cada página, criando a pasta de saída caso necessário. Aceita senha e tenta conservar metadados, marcadores e anotações associados à página. Nomes de destino existentes são preservados; se houver conflito, a operação é interrompida.
+- **Reordenar páginas:** carregue um PDF e arraste as páginas na lista para definir a nova sequência. A numeração identifica a página original, e cada página precisa permanecer exatamente uma vez.
+- **Marca d'água e numeração:** adicione texto diagonal ou centralizado e numeração no rodapé direito ou central, em uma operação só ou combinando os dois. O conteúdo original não é rasterizado.
+- **Otimizar PDF:** modo sem perdas para comprimir streams e remover objetos repetidos; modo equilibrado para recomprimir imagens opacas em JPEG com qualidade ajustável. Imagens com transparência e imagens inline são mantidas sem recompressão.
 - **Proteção de saída:** o diálogo acrescenta a extensão PDF, verifica se o destino é um dos arquivos de origem e pede confirmação antes de substituir um arquivo existente.
 
 ### Imagens
@@ -21,7 +24,7 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, com interface m
 - **CMYK e transparência:** modos que não são aceitos pelo formato de destino são convertidos para formatos compatíveis; a transparência para JPEG/BMP é composta sobre fundo branco.
 
 ### Usabilidade, privacidade e robustez
-- Interface desktop com abas, ordenação por botões ou arrastar e soltar, duplicação intencional de itens, mensagens em português e indicador de processamento. As senhas são digitadas em campos protegidos, não são salvas nas preferências e os campos são limpos ao iniciar a operação.
+- Interface desktop com abas e seletor de idioma (PT-BR/EN/ES), listas reordenáveis, duplicação intencional de itens e indicador de processamento. As senhas são digitadas em campos protegidos, não são salvas nas preferências e os campos são limpos ao iniciar a operação.
 - Opções de resolução (DPI) e margem na conversão de imagens para PDF.
 - Operações demoradas fora da thread principal; a janela não fecha enquanto uma operação está ativa.
 - Botão para abrir a pasta de saída depois de concluir a operação.
@@ -29,7 +32,8 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, com interface m
 - Os arquivos originais não são substituídos pelas operações.
 - Gravação temporária/atômica para operações PDF; a divisão interrompe conflitos sem substituir arquivos preexistentes.
 - Preferência persistente para arquivos gerados em Linux/macOS: somente o usuário (0600, padrão recomendado) ou leitura compartilhada (0644). No Windows, as permissões seguem as regras do sistema.
-- Testes automatizados e auditoria de dependências executados no GitHub Actions. O pipeline também faz um teste de fumaça no executável Windows e publica um checksum SHA-256.
+- **Atenção à qualidade:** o modo equilibrado de otimização pode reduzir a qualidade de imagens e não garante que todos os PDFs fiquem menores; mantenha o original e compare o resultado. A marca d'água usa fonte Helvetica incorporada e pode não aceitar todos os caracteres Unicode.
+- Testes automatizados e auditoria de dependências executados no GitHub Actions. O pipeline valida os pacotes de Windows, Linux e macOS e gera checksums SHA-256.
 
 
 ## Usar no Windows sem instalar Python
@@ -98,18 +102,16 @@ A opção `--selftest` cria a interface em modo sem janela visível e encerra co
 
 ## ROADMAP
 
-### Concluído nesta versão 0.3.0
+### Concluído nesta versão 0.4.0
 
-- [x] **PDFs protegidos por senha:** campos protegidos para extração, rotação e divisão; solicitação pontual da senha para cada PDF protegido durante a união. As senhas não são salvas nas preferências.
-- [x] **Preservação de recursos PDF:** utilização de cópia de documento/páginas do pypdf para tentar preservar marcadores, metadados, anotações e links internos. A preservação depende da estrutura do PDF; formulários complexos e links para páginas removidas ainda exigem conferência.
-- [x] **Imagens multipágina e animadas:** escolha entre importar todas as páginas/quadros ou apenas o primeiro ao criar PDF, incluindo TIFF e formatos animados aceitos pelo Pillow, como GIF e WEBP.
-- [x] **Releases permanentes:** o fluxo de CI foi preparado para gerar uma release no GitHub ao enviar uma tag `v*`, com pacotes e checksums das plataformas suportadas.
-- [x] **Pacotes multiplataforma:** builds de Windows x64, Linux x64 e macOS Apple Silicon configurados no GitHub Actions.
-- [x] **Permissões de saída:** preferência persistente para arquivos gerados em Linux/macOS: 0600 (somente usuário, padrão) ou 0644 (leitura compartilhada).
+- [x] **Interface multilíngue:** seletor de idioma com português brasileiro, inglês e espanhol, incluindo as abas e os principais controles.
+- [x] **Reorganização visual:** arraste as páginas na lista e salve o PDF na nova ordem; todas as páginas são exigidas exatamente uma vez.
+- [x] **Compressão/otimização:** modo sem perdas para streams e objetos duplicados, e modo equilibrado para recompressão JPEG com qualidade configurável. A recompressão pode alterar a aparência das imagens e não garante redução em todos os documentos.
+- [x] **Marca d'água e numeração:** sobreposição de texto sem rasterizar o conteúdo original e numeração de páginas no rodapé.
 
 ### Próximas melhorias possíveis
 
-- [ ] Interface traduzida para inglês e espanhol, além do português brasileiro.
-- [ ] Ferramenta de reorganização visual de páginas por arrastar e soltar antes de salvar.
-- [ ] Compressão/otimização de PDF com escolha explícita entre tamanho e qualidade.
-- [ ] Marca d'água, numeração de páginas e carimbos.
+- [ ] Pré-visualização visual das páginas como miniaturas antes de reorganizá-las.
+- [ ] Opções de exportação em lote para várias tarefas encadeadas.
+- [ ] Seleção de página/faixa para aplicar marca d'água ou numeração apenas em parte do documento.
+- [ ] Interface traduzida de forma completa para todos os diálogos e mensagens de erro.
