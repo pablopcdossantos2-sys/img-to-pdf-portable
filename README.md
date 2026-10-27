@@ -12,8 +12,8 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, desenvolvido co
 - **Extrair páginas:** salva páginas específicas ou intervalos como `1-3, 5, 8-10`, permite repetir páginas e aceita senha. A estrutura de navegação e as anotações são preservadas na medida do possível, com remapeamento para as páginas mantidas.
 - **Girar páginas:** rotação em 90°, 180° ou 270°, em todas as páginas ou somente nas selecionadas, inclusive em PDFs protegidos por senha.
 - **Dividir PDF:** cria um arquivo PDF individual para cada página, criando a pasta de saída caso necessário. Aceita senha e tenta conservar metadados, marcadores e anotações associados à página. Nomes de destino existentes são preservados; se houver conflito, a operação é interrompida.
-- **Reordenar páginas:** carregue um PDF e arraste as páginas na lista para definir a nova sequência. A numeração identifica a página original, e cada página precisa permanecer exatamente uma vez.
-- **Marca d'água e numeração:** adicione texto diagonal ou centralizado e numeração no rodapé direito ou central, em uma operação só ou combinando os dois. O conteúdo original não é rasterizado.
+- **Reordenar páginas com prévia:** carregue um PDF, arraste as páginas e confira a página selecionada no painel de prévia. A prévia acompanha a página de origem mesmo depois de arrastar os itens; cada página precisa permanecer exatamente uma vez.
+- **Marca d'água e numeração seletivas:** adicione texto, numeração ou ambos a todas as páginas ou apenas a intervalos (por exemplo, `2-4, 7`). Ao selecionar um intervalo, a numeração continua indicando a posição original no documento. O conteúdo original não é rasterizado.
 - **Otimizar PDF:** modo sem perdas para comprimir streams e remover objetos repetidos; modo equilibrado para recomprimir imagens opacas em JPEG com qualidade ajustável. Imagens com transparência e imagens inline são mantidas sem recompressão.
 - **Proteção de saída:** o diálogo acrescenta a extensão PDF, verifica se o destino é um dos arquivos de origem e pede confirmação antes de substituir um arquivo existente.
 
@@ -24,7 +24,7 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, desenvolvido co
 - **CMYK e transparência:** modos que não são aceitos pelo formato de destino são convertidos para formatos compatíveis; a transparência para JPEG/BMP é composta sobre fundo branco.
 
 ### Usabilidade, privacidade e robustez
-- Interface desktop com abas e seletor de idioma (PT-BR/EN/ES), listas reordenáveis, duplicação intencional de itens e indicador de processamento. As senhas são digitadas em campos protegidos, não são salvas nas preferências e os campos são limpos ao iniciar a operação.
+- Interface desktop com abas e seletor de idioma (PT-BR/EN/ES), listas reordenáveis, painel de prévia da página selecionada, duplicação intencional de itens e indicador de processamento. Os diálogos principais, prompts de senha, confirmações e erros comuns de página também acompanham o idioma. As senhas são digitadas em campos protegidos, não são salvas nas preferências e os campos são limpos ao iniciar a operação.
 - Opções de resolução (DPI) e margem na conversão de imagens para PDF.
 - Operações demoradas fora da thread principal; a janela não fecha enquanto uma operação está ativa.
 - Botão para abrir a pasta de saída depois de concluir a operação.
@@ -48,7 +48,7 @@ O fluxo **PDF Hub CI, security and packages** testa o projeto e gera pacotes por
 
 O artefato contém o runtime necessário e não exige instalação separada do Python. O Windows pode apresentar um aviso de segurança para arquivos baixados; confirme a origem antes de executar.
 
-> Os artefatos de Actions são temporários e expiram conforme a retenção configurada no GitHub. Releases versionadas são criadas quando uma tag como `v0.4.0` é enviada ao repositório. Os executáveis não são assinados/notarizados digitalmente; Windows SmartScreen e macOS Gatekeeper podem exibir avisos.
+> Os artefatos de Actions são temporários e expiram conforme a retenção configurada no GitHub. Releases versionadas são criadas quando uma tag como `v0.5.0` é enviada ao repositório. Os executáveis não são assinados/notarizados digitalmente; Windows SmartScreen e macOS Gatekeeper podem exibir avisos.
 
 ## Executar a partir do código-fonte
 
@@ -102,16 +102,16 @@ A opção `--selftest` cria a interface em modo sem janela visível e encerra co
 
 ## ROADMAP
 
-### Concluído nesta versão 0.4.0
+### Concluído até a versão 0.5.0
 
 - [x] **Interface multilíngue:** seletor de idioma com português brasileiro, inglês e espanhol, incluindo as abas e os principais controles.
 - [x] **Reorganização visual:** arraste as páginas na lista e salve o PDF na nova ordem; todas as páginas são exigidas exatamente uma vez.
 - [x] **Compressão/otimização:** modo sem perdas para streams e objetos duplicados, e modo equilibrado para recompressão JPEG com qualidade configurável. A recompressão pode alterar a aparência das imagens e não garante redução em todos os documentos.
-- [x] **Marca d'água e numeração:** sobreposição de texto sem rasterizar o conteúdo original e numeração de páginas no rodapé.
+- [x] **Marca d'água e numeração por intervalo:** escolha páginas específicas ou deixe o campo vazio para aplicar ao documento inteiro; a numeração preserva a referência à página original.
+- [x] **Prévia durante a reorganização:** painel que renderiza a página selecionada e acompanha o número original da página após reordenar.
 
 ### Próximas melhorias possíveis
 
-- [ ] Pré-visualização visual das páginas como miniaturas antes de reorganizá-las.
-- [ ] Opções de exportação em lote para várias tarefas encadeadas.
-- [ ] Seleção de página/faixa para aplicar marca d'água ou numeração apenas em parte do documento.
-- [ ] Interface traduzida de forma completa para todos os diálogos e mensagens de erro.
+- [ ] Miniaturas de todas as páginas diretamente na lista de reorganização, além da prévia da página selecionada.
+- [ ] Fluxos em lote para encadear rotação, marca d'água, numeração e otimização em uma única execução.
+- [ ] Traduções para mensagens excepcionais emitidas por bibliotecas externas e formatos PDF incomuns.
