@@ -17,7 +17,7 @@ A desktop application for working with PDF files and images locally, built with 
 - **Selective watermarks and page numbers:** apply text, numbering, or both to all pages or only selected ranges (for example, `2-4, 7`). Numbering retains the page's original position in the document. Original content is not rasterized.
 - **Optimize PDF:** choose lossless stream compression/deduplication or balanced JPEG recompression of opaque raster images with adjustable quality. Transparent and inline images are left unchanged.
 - **Batch workflow:** combine rotation, watermark/page numbering, and optimization in one operation. Steps run in a fixed order, use local temporary files, and only complete the final save if the sequence succeeds.
-- **Reusable batch profiles:** save, load, and delete named profiles in local app preferences. Profiles store processing options only and never include the PDF path or password.
+- **Reusable batch profiles:** save, load, and delete named profiles in local preferences, or export/import them as JSON to move them between computers. The file uses a validated schema version and stores processing options only; PDF paths and passwords are never included. Unknown fields and invalid options are rejected.
 - **Safer output handling:** the save dialog adds the PDF extension, prevents choosing a source file as the output, and asks before replacing an existing file.
 
 ### Image tools
@@ -29,7 +29,7 @@ A desktop application for working with PDF files and images locally, built with 
 
 ### Usability, privacy, and reliability
 
-- Desktop interface with a PT-BR/English/Spanish language selector, reorderable thumbnail grids with a selected-page preview, reusable batch profiles, intentional item duplication, and a processing indicator. Main dialogs, password prompts, confirmations, and common page-range errors follow the selected language. Passwords are entered through masked fields, are not stored in preferences, and the fields are cleared when an operation starts.
+- Desktop interface with a PT-BR/English/Spanish language selector, reorderable thumbnail grids with a selected-page preview, reusable batch profiles, intentional item duplication, and a processing indicator. Main dialogs, password prompts, confirmations, and common page-range errors follow the selected language. Common pypdf parsing, Qt PDF rendering, and image-processing errors receive clearer translated messages without exposing internal diagnostics. Passwords are entered through masked fields, are not stored in preferences, and the fields are cleared when an operation starts.
 - DPI and margin controls when converting images to PDF.
 - Long-running tasks execute outside the main UI thread; the window cannot be closed while a task is running.
 - A button opens the output folder when processing finishes.
@@ -52,7 +52,7 @@ The **PDF Hub CI, security and packages** workflow tests the app and builds port
 
 The artifact includes the runtime and does not require a separate Python installation. Windows may show a security warning for downloaded files; verify the source before running the application.
 
-> GitHub Actions artifacts are temporary and expire according to the configured retention period. Versioned GitHub Releases are created when a tag such as `v0.6.0` is pushed. The executables are not digitally signed/notarized; Windows SmartScreen or macOS Gatekeeper may display a warning.
+> GitHub Actions artifacts are temporary and expire according to the configured retention period. Versioned GitHub Releases are created when a tag such as `v0.7.0` is pushed. The executables are not digitally signed/notarized; Windows SmartScreen or macOS Gatekeeper may display a warning.
 
 ## Run from source
 
@@ -106,7 +106,7 @@ The `--selftest` option initializes the interface in headless mode and exits wit
 
 ## ROADMAP
 
-### Completed through version 0.6.0
+### Completed through version 0.7.0
 
 - [x] **Multilingual interface:** switch between Brazilian Portuguese, English, and Spanish, including tabs and the main controls.
 - [x] **Visual page reordering:** drag pages into a new order and save the PDF; every page is required exactly once.
@@ -114,9 +114,10 @@ The `--selftest` option initializes the interface in headless mode and exits wit
 - [x] **Page-range watermarks and numbering:** choose specific pages or leave the field blank to apply across the document; numbering retains original page references.
 - [x] **Thumbnails while reordering:** a grid shows all pages, rendered in the background, alongside the selected-page preview.
 - [x] **Batch workflow:** combine rotation, watermark/page numbering, and optimization without manually creating intermediate files.
-- [x] **Reusable profiles:** save/load/delete combinations of steps in local preferences; profiles exclude file paths and passwords.
+- [x] **Reusable JSON profiles:** export/import profiles between computers with schema-version validation and rejection of unknown fields; profiles exclude paths and passwords.
+- [x] **Translated library errors:** common PDF-structure, rendering, and image-processing failures are shown in clearer language across all three locales.
 
 ### Possible next improvements
 
-- [ ] Export/import batch workflow profiles as JSON files to move them between computers.
-- [ ] Translate exceptional messages from external libraries and unusual PDF formats.
+- [ ] Apply a saved profile to multiple PDFs in a folder, with per-file success/failure reporting.
+- [ ] Add schema migrations so profiles remain importable as new workflow options are introduced.
