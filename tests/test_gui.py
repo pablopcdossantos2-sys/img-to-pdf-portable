@@ -92,3 +92,41 @@ def test_window_is_branded_pdf_hub_and_exposes_password_fields(qt_app: QApplicat
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         qt_app.processEvents()
+
+def test_language_selector_translates_tabs_into_english_and_spanish(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    try:
+        window.language_combo.setCurrentIndex(window.language_combo.findData("en"))
+        english_tabs = [window.tabs.tabText(i).strip() for i in range(window.tabs.count())]
+        assert "Reorder pages" in english_tabs
+        assert "Watermark and page numbers" in english_tabs
+        assert "Optimize PDF" in english_tabs
+        assert window.windowTitle() == "PDF Hub"
+
+        window.language_combo.setCurrentIndex(window.language_combo.findData("es"))
+        spanish_tabs = [window.tabs.tabText(i).strip() for i in range(window.tabs.count())]
+        assert "Reordenar páginas" in spanish_tabs
+        assert "Marca de agua y numeración" in spanish_tabs
+        assert "Optimizar PDF" in spanish_tabs
+    finally:
+        window.language_combo.setCurrentIndex(window.language_combo.findData("pt"))
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_new_pdf_tools_are_available_in_the_interface(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    try:
+        assert window.reorder_list.dragDropMode() == window.reorder_list.DragDropMode.InternalMove
+        assert window.stamp_numbering.isChecked() is False
+        assert window.optimize_mode.currentData() == "lossless"
+        assert window.optimize_quality.isEnabled() is False
+        window.optimize_mode.setCurrentIndex(window.optimize_mode.findData("balanced"))
+        assert window.optimize_quality.isEnabled() is True
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
