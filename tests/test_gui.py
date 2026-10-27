@@ -5,6 +5,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
+from PySide6.QtCore import QCoreApplication, QEvent
 from PySide6.QtWidgets import QApplication, QLineEdit, QListWidget, QListWidgetItem
 
 from document_tools.gui import APP_NAME, DocumentToolsWindow
@@ -88,3 +89,6 @@ def test_window_is_branded_pdf_hub_and_exposes_password_fields(qt_app: QApplicat
         assert window.output_permissions.currentData() in (0o600, 0o644)
     finally:
         window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
