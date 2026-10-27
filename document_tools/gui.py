@@ -221,6 +221,10 @@ TRANSLATIONS = {
         "{count} imagem(ns) convertida(s) em {directory}.": "{count} image(s) converted in {directory}.",
         "Qualidade": "Quality",
     },
+        "+  Adicionar PDFs": "+  Add PDFs",
+        "Remover selecionados": "Remove selected",
+        "Duplicar selecionados": "Duplicate selected",
+        "Rotação": "Rotation",
     "es": {
         "PDF e imagens • v{version} • organizado, seguro e local": "PDF e imágenes • v{version} • organizado, seguro y local",
         "●  PDF HUB • PROCESSAMENTO LOCAL": "●  PDF HUB • PROCESAMIENTO LOCAL",
@@ -360,7 +364,13 @@ TRANSLATIONS = {
         "Nenhuma imagem nova adicionada.": "No se añadieron imágenes nuevas.",
         "{added} PDF(s) adicionado(s).": "Se añadieron {added} PDF(s).",
         "Nenhum PDF novo adicionado.": "No se añadieron PDF nuevos.",
-    },
+    },        "+  Adicionar PDFs": "+  Añadir PDFs",
+        "Remover selecionados": "Eliminar seleccionados",
+        "Duplicar selecionados": "Duplicar seleccionados",
+        "Rotação": "Rotación",
+        "Selecione pelo menos dois PDFs.": "Selecciona al menos dos PDFs.",
+        "Unir documentos em um único arquivo": "Unir documentos en un solo archivo",
+
 }
 
 
