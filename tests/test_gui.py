@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -10,7 +11,7 @@ from PySide6.QtPdf import QPdfDocument
 from pypdf import PdfWriter
 from PySide6.QtWidgets import QApplication, QAbstractItemView, QLineEdit, QListWidget, QListWidgetItem
 
-from document_tools.gui import APP_NAME, DocumentToolsWindow
+from document_tools.gui import APP_NAME, DocumentToolsWindow, PageThumbnailWorker
 
 
 @pytest.fixture(scope="module")
@@ -104,6 +105,10 @@ def test_language_selector_translates_tabs_into_english_and_spanish(qt_app: QApp
         assert "Watermark and page numbers" in english_tabs
         assert "Optimize PDF" in english_tabs
         assert "Batch workflow" in english_tabs
+        english_buttons = [button.text() for button in window.findChildren(__import__("PySide6").QtWidgets.QPushButton)]
+        assert "Save profile" in english_buttons
+        assert "Load profile" in english_buttons
+        assert "Delete profile" in english_buttons
         assert window.windowTitle() == "PDF Hub"
 
         window.language_combo.setCurrentIndex(window.language_combo.findData("es"))
@@ -112,6 +117,10 @@ def test_language_selector_translates_tabs_into_english_and_spanish(qt_app: QApp
         assert "Marca de agua y numeración" in spanish_tabs
         assert "Optimizar PDF" in spanish_tabs
         assert "Flujo por lotes" in spanish_tabs
+        spanish_buttons = [button.text() for button in window.findChildren(__import__("PySide6").QtWidgets.QPushButton)]
+        assert "Guardar perfil" in spanish_buttons
+        assert "Cargar perfil" in spanish_buttons
+        assert "Eliminar perfil" in spanish_buttons
     finally:
         window.language_combo.setCurrentIndex(window.language_combo.findData("pt"))
         window.close()
@@ -231,6 +240,117 @@ def test_batch_workflow_controls_follow_selected_steps(qt_app: QApplication) -> 
         window.pipeline_optimize_mode.setCurrentIndex(window.pipeline_optimize_mode.findData("balanced"))
         assert window.pipeline_optimize_quality.isEnabled() is True
     finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+def test_reorder_grid_renders_page_thumbnails(qt_app: QApplication, tmp_path) -> None:
+    source = tmp_path / "thumbnails.pdf"
+    writer = PdfWriter()
+    writer.add_blank_page(width=240, height=360)
+    writer.add_blank_page(width=360, height=240)
+    with source.open("wb") as stream:
+        writer.write(stream)
+
+    rendered: list[tuple[int, int, int]] = []
+    errors: list[str] = []
+    worker = PageThumbnailWorker(str(source))
+    worker.thumbnail_ready.connect(
+        lambda page, image: rendered.append((page, image.width(), image.height()))
+    )
+    worker.failed.connect(errors.append)
+    worker.run()
+
+    assert errors == []
+    assert [item[0] for item in rendered] == [1, 2]
+    assert all(width > 0 and height > 0 for _, width, height in rendered)
+
+    window = DocumentToolsWindow()
+    try:
+        assert window.reorder_list.viewMode() == QListWidget.ViewMode.IconMode
+        assert window.reorder_list.iconSize().width() >= 60
+        for page_number, width, height in rendered:
+            item = QListWidgetItem(f"Page {page_number}")
+            item.setData(Qt.ItemDataRole.UserRole, page_number)
+            window.reorder_list.addItem(item)
+            window._reorder_items_by_page[page_number] = item
+            from PySide6.QtGui import QImage
+            image = QImage(width, height, QImage.Format.Format_RGB32)
+            image.fill(0xFFFFFFFF)
+            window._set_reorder_thumbnail(page_number, image)
+            assert not item.icon().isNull()
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_pipeline_profile_saves_loads_and_deletes_options_without_paths_or_passwords(
+    qt_app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window = DocumentToolsWindow()
+    previous_profiles = window.settings.value("pipeline_profiles", None)
+    try:
+        window.settings.setValue("pipeline_profiles", "{}")
+        window.pipeline_path.setText("sensitive-source.pdf")
+        window.pipeline_password.setText("must-not-be-saved")
+        window.pipeline_rotate_enabled.setChecked(True)
+        window.pipeline_rotate_angle.setCurrentIndex(window.pipeline_rotate_angle.findData(270))
+        window.pipeline_rotate_ranges.setText("2-4")
+        window.pipeline_stamp_enabled.setChecked(True)
+        window.pipeline_stamp_text.setText("REVIEW")
+        window.pipeline_numbering.setChecked(True)
+        window.pipeline_stamp_ranges.setText("1, 3-4")
+        window.pipeline_optimize_enabled.setChecked(True)
+        window.pipeline_optimize_mode.setCurrentIndex(window.pipeline_optimize_mode.findData("balanced"))
+        window.pipeline_optimize_quality.setValue(76)
+        expected = window._capture_pipeline_profile()
+
+        monkeypatch.setattr(
+            "document_tools.gui.QInputDialog.getText",
+            lambda *args, **kwargs: ("Print review", True),
+        )
+        window._save_pipeline_profile()
+        profiles = window._read_pipeline_profiles()
+        assert profiles == {"Print review": expected}
+        serialized = str(window.settings.value("pipeline_profiles", "{}"))
+        assert "sensitive-source.pdf" not in serialized
+        assert "must-not-be-saved" not in serialized
+        assert "pipeline_password" not in serialized
+
+        window.pipeline_rotate_enabled.setChecked(False)
+        window.pipeline_rotate_ranges.clear()
+        window.pipeline_stamp_enabled.setChecked(False)
+        window.pipeline_stamp_text.clear()
+        window.pipeline_numbering.setChecked(False)
+        window.pipeline_stamp_ranges.clear()
+        window.pipeline_optimize_enabled.setChecked(False)
+        window.pipeline_optimize_mode.setCurrentIndex(window.pipeline_optimize_mode.findData("lossless"))
+        window.pipeline_optimize_quality.setValue(82)
+        window.pipeline_password.clear()
+
+        monkeypatch.setattr(
+            "document_tools.gui.QInputDialog.getItem",
+            lambda *args, **kwargs: ("Print review", True),
+        )
+        window._load_pipeline_profile()
+        assert window._capture_pipeline_profile() == expected
+        assert window.pipeline_password.text() == ""
+
+        from PySide6.QtWidgets import QMessageBox
+        monkeypatch.setattr(
+            "document_tools.gui.QMessageBox.question",
+            lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
+        )
+        window._delete_pipeline_profile()
+        assert window._read_pipeline_profiles() == {}
+    finally:
+        if previous_profiles is None:
+            window.settings.remove("pipeline_profiles")
+        else:
+            window.settings.setValue("pipeline_profiles", previous_profiles)
         window.close()
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
