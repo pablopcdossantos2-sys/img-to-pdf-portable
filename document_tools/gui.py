@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import re
 import sys
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QFrame,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -33,11 +35,20 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSpinBox,
     QTabWidget,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
 from document_tools import __version__
+from document_tools.batch_processing import BatchFileResult, process_pdf_folder
+from document_tools.errors import friendly_error_message
+from document_tools.profiles import (
+    CURRENT_PROFILE_SCHEMA_VERSION,
+    migrate_local_profile,
+    validate_profile_document,
+)
 from document_tools.pdf_ops import (
     convert_image,
     extract_pages,
@@ -307,6 +318,40 @@ TRANSLATIONS = {
         "A imagem não pôde ser processada. Verifique se o arquivo está íntegro e usa um formato compatível.": "The image could not be processed. Check that the file is intact and uses a supported format.",
         "Não foi possível renderizar o PDF. Ele pode usar recursos não suportados ou estar danificado.": "The PDF could not be rendered. It may use unsupported features or be damaged.",
         "O perfil salvo contém opções inválidas e não pode ser exportado.": "The saved profile contains invalid options and cannot be exported.",
+        "Processar pasta": "Process folder",
+        "Sufixo dos arquivos processados em pasta": "Output filename suffix for folder batches",
+        "Pasta de origem": "Source folder",
+        "Pasta de saída": "Output folder",
+        "Escolher pasta de origem": "Choose source folder",
+        "Escolher pasta de saída": "Choose output folder",
+        "Incluir subpastas": "Include subfolders",
+        "Processar PDFs de uma pasta": "Process PDFs in a folder",
+        "Selecione a pasta de origem e o destino, depois escolha um perfil salvo. Os arquivos originais serão preservados; PDFs com erro não interrompem os demais.": "Choose a source folder and destination, then select a saved profile. Originals are preserved; a failed PDF will not stop the others.",
+        "Sufixo usado nos nomes dos PDFs de saída ao processar uma pasta com este perfil.": "Suffix used in output PDF filenames when processing a folder with this profile.",
+        "Quando ativado, preserva a estrutura de subpastas no destino.": "When enabled, the subfolder structure is preserved in the destination.",
+        "O perfil também define o sufixo dos arquivos de saída. PDFs que exigem senha serão registrados como falha, sem interromper o lote.": "The profile also defines the output filename suffix. PDFs requiring a password are reported as failures without interrupting the batch.",
+        "Aplicar perfil salvo à pasta": "Apply saved profile to folder",
+        "Salvar relatório CSV": "Save CSV report",
+        "Arquivo de origem": "Source file",
+        "Resultado": "Result",
+        "Detalhes": "Details",
+        "Arquivo de saída": "Output file",
+        "Sucesso": "Success",
+        "Falha": "Failure",
+        "Processado com sucesso.": "Processed successfully.",
+        "Selecione uma pasta de origem.": "Select a source folder.",
+        "A pasta selecionada não contém arquivos PDF.": "The selected folder contains no PDF files.",
+        "A pasta de saída não pode ser a pasta de origem nem ficar dentro dela.": "The output folder cannot be the source folder or a folder inside it.",
+        "Nenhum perfil salvo para aplicar.": "No saved profile is available to apply.",
+        "Selecione o perfil a aplicar:": "Select the profile to apply:",
+        "Processando arquivo {completed} de {total}: {name}": "Processing file {completed} of {total}: {name}",
+        "Lote concluído: {success} sucesso(s), {failed} falha(s) de {total} PDF(s).": "Batch complete: {success} succeeded, {failed} failed out of {total} PDF(s).",
+        "Não há relatório para exportar.": "There is no report to export.",
+        "Relatório salvo: {path}": "Report saved: {path}",
+        "Não foi possível salvar o relatório CSV. Verifique a pasta e as permissões.": "Could not save the CSV report. Check the folder and permissions.",
+        "Arquivos CSV (*.csv)": "CSV files (*.csv)",
+        "O sufixo de saída contém caracteres inválidos ou é longo demais.": "The output suffix contains invalid characters or is too long.",
+        "Não foi possível gerar o relatório individual do lote.": "Could not generate the individual batch report.",
     },
     "es": {
         "PDF e imagens • v{version} • organizado, seguro e local": "PDF e imágenes • v{version} • organizado, seguro y local",
@@ -532,6 +577,40 @@ TRANSLATIONS = {
         "A imagem não pôde ser processada. Verifique se o arquivo está íntegro e usa um formato compatível.": "No se pudo procesar la imagen. Comprueba que el archivo esté íntegro y tenga un formato compatible.",
         "Não foi possível renderizar o PDF. Ele pode usar recursos não suportados ou estar danificado.": "No se pudo renderizar el PDF. Puede usar funciones no compatibles o estar dañado.",
         "O perfil salvo contém opções inválidas e não pode ser exportado.": "El perfil guardado contiene opciones no válidas y no se puede exportar.",
+        "Processar pasta": "Procesar carpeta",
+        "Sufixo dos arquivos processados em pasta": "Sufijo de nombres de archivo al procesar carpetas",
+        "Pasta de origem": "Carpeta de origen",
+        "Pasta de saída": "Carpeta de salida",
+        "Escolher pasta de origem": "Elegir carpeta de origen",
+        "Escolher pasta de saída": "Elegir carpeta de salida",
+        "Incluir subpastas": "Incluir subcarpetas",
+        "Processar PDFs de uma pasta": "Procesar PDFs de una carpeta",
+        "Selecione a pasta de origem e o destino, depois escolha um perfil salvo. Os arquivos originais serão preservados; PDFs com erro não interrompem os demais.": "Elige una carpeta de origen y un destino, y después selecciona un perfil guardado. Se conservan los originales; un PDF con errores no detendrá los demás.",
+        "Sufixo usado nos nomes dos PDFs de saída ao processar uma pasta com este perfil.": "Sufijo usado en los nombres de los PDF de salida al procesar una carpeta con este perfil.",
+        "Quando ativado, preserva a estrutura de subpastas no destino.": "Si se activa, se conserva la estructura de subcarpetas en el destino.",
+        "O perfil também define o sufixo dos arquivos de saída. PDFs que exigem senha serão registrados como falha, sem interromper o lote.": "El perfil también define el sufijo de los archivos de salida. Los PDF que requieran contraseña se registrarán como errores, sin interrumpir el lote.",
+        "Aplicar perfil salvo à pasta": "Aplicar perfil guardado a la carpeta",
+        "Salvar relatório CSV": "Guardar informe CSV",
+        "Arquivo de origem": "Archivo de origen",
+        "Resultado": "Resultado",
+        "Detalhes": "Detalles",
+        "Arquivo de saída": "Archivo de salida",
+        "Sucesso": "Correcto",
+        "Falha": "Error",
+        "Processado com sucesso.": "Procesado correctamente.",
+        "Selecione uma pasta de origem.": "Selecciona una carpeta de origen.",
+        "A pasta selecionada não contém arquivos PDF.": "La carpeta seleccionada no contiene archivos PDF.",
+        "A pasta de saída não pode ser a pasta de origem nem ficar dentro dela.": "La carpeta de salida no puede ser la carpeta de origen ni estar dentro de ella.",
+        "Nenhum perfil salvo para aplicar.": "No hay ningún perfil guardado para aplicar.",
+        "Selecione o perfil a aplicar:": "Selecciona el perfil que deseas aplicar:",
+        "Processando arquivo {completed} de {total}: {name}": "Procesando archivo {completed} de {total}: {name}",
+        "Lote concluído: {success} sucesso(s), {failed} falha(s) de {total} PDF(s).": "Lote completado: {success} correcto(s), {failed} error(es) de {total} PDF(s).",
+        "Não há relatório para exportar.": "No hay ningún informe para exportar.",
+        "Relatório salvo: {path}": "Informe guardado: {path}",
+        "Não foi possível salvar o relatório CSV. Verifique a pasta e as permissões.": "No se pudo guardar el informe CSV. Comprueba la carpeta y los permisos.",
+        "Arquivos CSV (*.csv)": "Archivos CSV (*.csv)",
+        "O sufixo de saída contém caracteres inválidos ou é longo demais.": "El sufijo de salida contiene caracteres no válidos o es demasiado largo.",
+        "Não foi possível gerar o relatório individual do lote.": "No se pudo generar el informe individual del lote.",
     }
 }
 
@@ -620,6 +699,34 @@ class OperationWorker(QThread):
         return str(error) or error_type
 
 
+class BatchFolderWorker(QThread):
+    """Process a directory in the background, reporting progress and item results."""
+    progress = Signal(int, int, str)
+    succeeded = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, source_directory: str, output_directory: str, profile: dict[str, object],
+                 *, recursive: bool, file_mode: int) -> None:
+        super().__init__()
+        self._source_directory = source_directory
+        self._output_directory = output_directory
+        self._profile = profile
+        self._recursive = recursive
+        self._file_mode = file_mode
+
+    def run(self) -> None:
+        try:
+            results = process_pdf_folder(
+                self._source_directory, self._output_directory, self._profile,
+                recursive=self._recursive, file_mode=self._file_mode,
+                progress_callback=lambda done, total, name: self.progress.emit(done, total, name),
+            )
+        except Exception as error:
+            self.failed.emit(friendly_error_message(error))
+            return
+        self.succeeded.emit(results)
+
+
 class DocumentToolsWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -633,7 +740,7 @@ class DocumentToolsWindow(QMainWindow):
         self._original_placeholders: dict[QLineEdit, str] = {}
         self._original_combo_items: dict[QComboBox, list[str]] = {}
         self._original_tab_titles: list[str] = []
-        self._worker: OperationWorker | None = None
+        self._worker: QThread | None = None
         self._pending_output_directory: Path | None = None
         self._split_custom_directory = False
         self.reorder_thumbnail_worker: PageThumbnailWorker | None = None
@@ -720,6 +827,7 @@ class DocumentToolsWindow(QMainWindow):
         self.tabs.addTab(self._build_stamp_tab(), "  Marca d'água e numeração  ")
         self.tabs.addTab(self._build_optimize_tab(), "  Otimizar PDF  ")
         self.tabs.addTab(self._build_pipeline_tab(), "  Fluxo em lote  ")
+        self.tabs.addTab(self._build_folder_batch_tab(), "  Processar pasta  ")
         self.tabs.addTab(self._build_convert_tab(), "  Converter imagens  ")
         central_layout.addWidget(self.tabs, 1)
 
@@ -889,6 +997,11 @@ class DocumentToolsWindow(QMainWindow):
                 continue
         for index, original in enumerate(self._original_tab_titles):
             self.tabs.setTabText(index, self._t(original))
+        if hasattr(self, "batch_results_table"):
+            self.batch_results_table.setHorizontalHeaderLabels([
+                self._t("Arquivo de origem"), self._t("Resultado"),
+                self._t("Detalhes"), self._t("Arquivo de saída"),
+            ])
         # Refresh the current status text too, so switching language does not leave stale Portuguese text.
         if self.status_label.text():
             self.status_label.setText(self._t(self.status_label.text()))
@@ -2143,6 +2256,12 @@ class DocumentToolsWindow(QMainWindow):
         self.pipeline_optimize_quality.setValue(82)
         self.pipeline_optimize_quality.setSuffix(" / 100")
         form.addRow("Qualidade das imagens", self.pipeline_optimize_quality)
+        self.pipeline_output_suffix = QLineEdit("-processado")
+        self.pipeline_output_suffix.setPlaceholderText("-processado")
+        self.pipeline_output_suffix.setToolTip(
+            "Sufixo usado nos nomes dos PDFs de saída ao processar uma pasta com este perfil."
+        )
+        form.addRow("Sufixo dos arquivos processados em pasta", self.pipeline_output_suffix)
 
         layout.addLayout(form)
         note = QLabel("Qualquer etapa selecionada será executada na sequência indicada acima.")
@@ -2172,11 +2291,26 @@ class DocumentToolsWindow(QMainWindow):
             return {}
         if not isinstance(parsed, dict):
             return {}
-        return {
-            name: profile
-            for name, profile in parsed.items()
-            if isinstance(name, str) and name.strip() and isinstance(profile, dict)
-        }
+        normalized: dict[str, dict[str, object]] = {}
+        changed = False
+        invalid_entries = False
+        for name, profile in parsed.items():
+            if not isinstance(name, str) or not name.strip() or len(name.strip()) > 80:
+                invalid_entries = True
+                continue
+            try:
+                current_profile = migrate_local_profile(profile)
+            except ValueError:
+                invalid_entries = True
+                continue
+            normalized[name.strip()] = current_profile
+            changed = changed or current_profile != profile
+        # Avoid rewriting settings when any unknown/invalid profile is present.
+        if changed and not invalid_entries:
+            self.settings.setValue(
+                "pipeline_profiles", json.dumps(normalized, ensure_ascii=False, sort_keys=True)
+            )
+        return normalized
 
     def _capture_pipeline_profile(self) -> dict[str, object]:
         """Capture only processing options; never store a PDF path or password."""
@@ -2191,6 +2325,7 @@ class DocumentToolsWindow(QMainWindow):
             "optimize_enabled": self.pipeline_optimize_enabled.isChecked(),
             "optimize_mode": str(self.pipeline_optimize_mode.currentData()),
             "quality": self.pipeline_optimize_quality.value(),
+            "output_suffix": self.pipeline_output_suffix.text(),
         }
 
     def _apply_pipeline_profile(self, profile: dict[str, object]) -> None:
@@ -2223,6 +2358,7 @@ class DocumentToolsWindow(QMainWindow):
         quality = profile.get("quality", 82)
         if isinstance(quality, int) and not isinstance(quality, bool):
             self.pipeline_optimize_quality.setValue(quality)
+        self.pipeline_output_suffix.setText(string("output_suffix", "-processado"))
         self._update_pipeline_controls()
 
     def _save_pipeline_profile(self) -> None:
@@ -2253,7 +2389,12 @@ class DocumentToolsWindow(QMainWindow):
             )
             if answer != QMessageBox.StandardButton.Yes:
                 return
-        profiles[name] = self._capture_pipeline_profile()
+        try:
+            profile = migrate_local_profile(self._capture_pipeline_profile())
+        except ValueError as error:
+            QMessageBox.information(self, self._t("Salvar perfil"), self._t(str(error)))
+            return
+        profiles[name] = profile
         self.settings.setValue(
             "pipeline_profiles", json.dumps(profiles, ensure_ascii=False, sort_keys=True)
         )
@@ -2310,40 +2451,8 @@ class DocumentToolsWindow(QMainWindow):
 
     @staticmethod
     def _validate_pipeline_profile_document(document: object) -> tuple[str, dict[str, object]]:
-        """Validate an exported JSON profile and discard anything outside the schema."""
-        if not isinstance(document, dict):
-            raise ValueError("O arquivo de perfil não contém um objeto JSON.")
-        if set(document) != {"schema_version", "name", "profile"}:
-            raise ValueError("O arquivo contém campos extras ou não reconhecidos.")
-        if type(document.get("schema_version")) is not int or document.get("schema_version") != 1:
-            raise ValueError("A versão do perfil não é compatível.")
-        name = document.get("name")
-        profile = document.get("profile")
-        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 80:
-            raise ValueError("O nome do perfil é inválido.")
-        required = {
-            "rotate_enabled", "rotate_angle", "rotate_ranges",
-            "stamp_enabled", "stamp_text", "page_numbering", "stamp_ranges",
-            "optimize_enabled", "optimize_mode", "quality",
-        }
-        if not isinstance(profile, dict) or set(profile) != required:
-            raise ValueError("O perfil contém opções ausentes ou campos não reconhecidos.")
-        for key in ("rotate_enabled", "stamp_enabled", "page_numbering", "optimize_enabled"):
-            if not isinstance(profile[key], bool):
-                raise ValueError("O perfil contém opções com tipos inválidos.")
-        if not isinstance(profile["rotate_angle"], int) or isinstance(profile["rotate_angle"], bool) or profile["rotate_angle"] not in (90, 180, 270):
-            raise ValueError("O ângulo de rotação do perfil é inválido.")
-        for key, max_length in (("rotate_ranges", 200), ("stamp_text", 500), ("stamp_ranges", 200)):
-            value = profile[key]
-            if not isinstance(value, str) or len(value) > max_length:
-                raise ValueError("O perfil contém texto inválido ou longo demais.")
-        if profile["optimize_mode"] not in ("lossless", "balanced"):
-            raise ValueError("O modo de otimização do perfil é inválido.")
-        quality = profile["quality"]
-        if not isinstance(quality, int) or isinstance(quality, bool) or not 50 <= quality <= 95:
-            raise ValueError("A qualidade do perfil deve ficar entre 50 e 95.")
-        # Copy only the known settings keys; no path, password, or unknown data can persist.
-        return name.strip(), {key: profile[key] for key in required}
+        """Validate a profile and migrate recognized older JSON schemas."""
+        return validate_profile_document(document)
 
     def _export_pipeline_profile(self) -> None:
         profiles = self._read_pipeline_profiles()
@@ -2375,7 +2484,7 @@ class DocumentToolsWindow(QMainWindow):
         output = output.resolve()
         try:
             safe_name, safe_profile = self._validate_pipeline_profile_document({
-                "schema_version": 1,
+                "schema_version": CURRENT_PROFILE_SCHEMA_VERSION,
                 "name": name,
                 "profile": profiles[name],
             })
@@ -2387,7 +2496,7 @@ class DocumentToolsWindow(QMainWindow):
             )
             return
         document = {
-            "schema_version": 1,
+            "schema_version": CURRENT_PROFILE_SCHEMA_VERSION,
             "name": safe_name,
             "profile": safe_profile,
         }
@@ -2534,6 +2643,192 @@ class DocumentToolsWindow(QMainWindow):
         self._run_task(
             self._t("Executando fluxo em lote…"), task, output_location=output
         )
+
+    def _build_folder_batch_tab(self) -> QWidget:
+        page, layout = self._new_page(
+            "Processar PDFs de uma pasta",
+            "Selecione a pasta de origem e o destino, depois escolha um perfil salvo. Os arquivos originais serão preservados; PDFs com erro não interrompem os demais.",
+        )
+        form = QFormLayout()
+        self.batch_source_directory = QLineEdit()
+        self.batch_source_directory.setReadOnly(True)
+        source_row = QHBoxLayout()
+        source_row.addWidget(self.batch_source_directory, 1)
+        choose_source = QPushButton("Escolher pasta de origem")
+        choose_source.clicked.connect(self._select_batch_source_directory)
+        source_row.addWidget(choose_source)
+        source_container = QWidget()
+        source_container.setLayout(source_row)
+        form.addRow("Pasta de origem", source_container)
+
+        self.batch_output_directory = QLineEdit()
+        self.batch_output_directory.setReadOnly(True)
+        output_row = QHBoxLayout()
+        output_row.addWidget(self.batch_output_directory, 1)
+        choose_output = QPushButton("Escolher pasta de saída")
+        choose_output.clicked.connect(self._select_batch_output_directory)
+        output_row.addWidget(choose_output)
+        output_container = QWidget()
+        output_container.setLayout(output_row)
+        form.addRow("Pasta de saída", output_container)
+
+        self.batch_include_subfolders = QCheckBox("Incluir subpastas")
+        self.batch_include_subfolders.setChecked(False)
+        self.batch_include_subfolders.setToolTip("Quando ativado, preserva a estrutura de subpastas no destino.")
+        form.addRow("", self.batch_include_subfolders)
+        layout.addLayout(form)
+        note = QLabel(
+            "O perfil também define o sufixo dos arquivos de saída. PDFs que exigem senha serão registrados como falha, sem interromper o lote."
+        )
+        note.setObjectName("muted")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+
+        actions = QHBoxLayout()
+        self.batch_run_button = QPushButton("Aplicar perfil salvo à pasta")
+        self.batch_run_button.setObjectName("primaryButton")
+        self.batch_run_button.clicked.connect(self._run_pipeline_folder)
+        actions.addWidget(self.batch_run_button)
+        actions.addStretch(1)
+        self.batch_report_button = QPushButton("Salvar relatório CSV")
+        self.batch_report_button.setEnabled(False)
+        self.batch_report_button.clicked.connect(self._export_batch_report)
+        actions.addWidget(self.batch_report_button)
+        layout.addLayout(actions)
+
+        self.batch_results_table = QTableWidget(0, 4)
+        self.batch_results_table.setHorizontalHeaderLabels([
+            "Arquivo de origem", "Resultado", "Detalhes", "Arquivo de saída"
+        ])
+        self.batch_results_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.batch_results_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.batch_results_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.batch_results_table.setAlternatingRowColors(True)
+        self.batch_results_table.setWordWrap(True)
+        self.batch_results_table.verticalHeader().setVisible(False)
+        header = self.batch_results_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.batch_results_table.setMinimumHeight(180)
+        self.batch_results_table.setMaximumHeight(280)
+        layout.addWidget(self.batch_results_table, 1)
+        self.batch_results: list[BatchFileResult] = []
+        return page
+
+    def _select_batch_source_directory(self) -> None:
+        path = self._choose_directory("Escolher pasta de origem")
+        if path:
+            self.batch_source_directory.setText(path)
+
+    def _select_batch_output_directory(self) -> None:
+        path = self._choose_directory("Escolher pasta de saída")
+        if path:
+            self.batch_output_directory.setText(path)
+
+    def _run_pipeline_folder(self) -> None:
+        source = self.batch_source_directory.text().strip()
+        output = self.batch_output_directory.text().strip()
+        if not source:
+            QMessageBox.information(self, self._t("Processar PDFs de uma pasta"), self._t("Selecione uma pasta de origem."))
+            return
+        if not output or not Path(output).is_dir():
+            QMessageBox.information(self, self._t("Processar PDFs de uma pasta"), self._t("Escolha uma pasta de saída existente."))
+            return
+        profiles = self._read_pipeline_profiles()
+        if not profiles:
+            QMessageBox.information(self, self._t("Aplicar perfil salvo à pasta"), self._t("Nenhum perfil salvo para aplicar."))
+            return
+        names = sorted(profiles, key=str.casefold)
+        name, accepted = QInputDialog.getItem(
+            self, self._t("Aplicar perfil salvo à pasta"),
+            self._t("Selecione o perfil a aplicar:"), names, 0, False,
+        )
+        if not accepted or name not in profiles:
+            return
+        worker = BatchFolderWorker(
+            source, output, profiles[name],
+            recursive=self.batch_include_subfolders.isChecked(),
+            file_mode=self._output_file_mode(),
+        )
+        self._worker = worker
+        self._pending_output_directory = Path(output).expanduser().resolve()
+        self.open_directory_button.hide()
+        self.status_label.setText(self._t("Executando fluxo em lote…"))
+        self.progress.setRange(0, 0)
+        self.progress.show()
+        self.tabs.setEnabled(False)
+        worker.progress.connect(self._batch_progress_changed)
+        worker.succeeded.connect(self._batch_operation_succeeded)
+        worker.failed.connect(self._operation_failed)
+        worker.finished.connect(self._operation_finished)
+        worker.start()
+
+    def _batch_progress_changed(self, completed: int, total: int, filename: str) -> None:
+        self.progress.setRange(0, total)
+        self.progress.setValue(completed)
+        self.status_label.setText(self._t("Processando arquivo {completed} de {total}: {name}").format(
+            completed=completed, total=total, name=filename
+        ))
+
+    def _batch_operation_succeeded(self, results: object) -> None:
+        if not isinstance(results, list) or not all(isinstance(item, BatchFileResult) for item in results):
+            self._operation_failed("Não foi possível gerar o relatório individual do lote.")
+            return
+        self.batch_results = results
+        self.batch_results_table.setRowCount(len(results))
+        successes = failures = 0
+        for row, result in enumerate(results):
+            source_item = QTableWidgetItem(Path(result.source_path).name)
+            source_item.setToolTip(result.source_path)
+            self.batch_results_table.setItem(row, 0, source_item)
+            status_item = QTableWidgetItem(self._t("Sucesso" if result.success else "Falha"))
+            status_item.setToolTip(result.message)
+            self.batch_results_table.setItem(row, 1, status_item)
+            self.batch_results_table.setItem(row, 2, QTableWidgetItem(self._t(result.message)))
+            output_item = QTableWidgetItem(result.output_path)
+            output_item.setToolTip(result.output_path)
+            self.batch_results_table.setItem(row, 3, output_item)
+            successes += int(result.success)
+            failures += int(not result.success)
+        self.batch_report_button.setEnabled(bool(results))
+        self.status_label.setText(self._t(
+            "Lote concluído: {success} sucesso(s), {failed} falha(s) de {total} PDF(s)."
+        ).format(success=successes, failed=failures, total=len(results)))
+        self.open_directory_button.setVisible(
+            self._pending_output_directory is not None and self._pending_output_directory.is_dir()
+        )
+
+    def _export_batch_report(self) -> None:
+        if not self.batch_results:
+            QMessageBox.information(self, self._t("Salvar relatório CSV"), self._t("Não há relatório para exportar."))
+            return
+        filename, _ = QFileDialog.getSaveFileName(
+            self, self._t("Salvar relatório CSV"), "relatorio-pdf-hub.csv", self._t("Arquivos CSV (*.csv)")
+        )
+        if not filename:
+            return
+        output = Path(filename).expanduser()
+        if output.suffix.casefold() != ".csv":
+            output = output.with_suffix(".csv")
+        try:
+            with output.open("w", encoding="utf-8-sig", newline="") as stream:
+                writer = csv.writer(stream)
+                writer.writerow([
+                    self._t("Arquivo de origem"), self._t("Resultado"),
+                    self._t("Detalhes"), self._t("Arquivo de saída"),
+                ])
+                for result in self.batch_results:
+                    writer.writerow([
+                        result.source_path, self._t("Sucesso" if result.success else "Falha"),
+                        self._t(result.message), result.output_path,
+                    ])
+        except OSError:
+            QMessageBox.warning(self, self._t("Salvar relatório CSV"),
+                self._t("Não foi possível salvar o relatório CSV. Verifique a pasta e as permissões."))
+            return
+        self.status_label.setText(self._t("Relatório salvo: {path}").format(path=output.resolve()))
 
     def _build_convert_tab(self) -> QWidget:
         page, layout = self._new_page(
