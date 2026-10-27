@@ -117,7 +117,7 @@ The `--selftest` option initializes the interface in headless mode and exits wit
 - [x] **Reusable JSON profiles:** export/import profiles between computers with schema-version validation and rejection of unknown fields; profiles exclude paths and passwords.
 - [x] **Translated library errors:** common PDF-structure, rendering, and image-processing failures are shown in clearer language across all three locales.
 
-- [x] **Folder processing with saved profiles:** process PDFs sequentially, record per-file success/failure, optionally include subfolders, and export a CSV report.
+- [x] **Folder processing with saved profiles:** process PDFs sequentially, record per-file success/failure, optionally include subfolders, and export a CSV report. Full reports persist locally between sessions, with options to load or delete entries; the 50 most recent reports are retained.
 - [x] **Profile schema migrations:** older schema 1 profiles are automatically upgraded to schema 2 with strict validation.
 
 ### Possible next improvements
@@ -125,4 +125,4 @@ The `--selftest` option initializes the interface in headless mode and exits wit
 - [x] Resume interrupted folder batches: completed results are reused when the source, destination, profile, and file list are unchanged; failures are retried.
 - [x] Manual pause and safe cancellation: pause between PDFs and finish the current file before cancelling, preserving progress for resume.
 - [x] Retry only PDFs that failed in a report, preserving successful results and the failed-file selection when resuming.
-- [ ] Save and restore the full report history across application sessions.
+- [x] Save and restore the full report history across application sessions (latest 50 reports, with load and delete actions).

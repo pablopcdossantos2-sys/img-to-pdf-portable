@@ -117,7 +117,7 @@ La opción `--selftest` inicializa la interfaz sin mostrar una ventana y termina
 - [x] **Perfiles JSON reutilizables:** exporta/importa perfiles entre equipos con validación de versión/esquema y rechazo de campos desconocidos; los perfiles excluyen rutas y contraseñas.
 - [x] **Errores de bibliotecas traducidos:** los fallos habituales de estructura PDF, renderizado e imágenes se muestran con mensajes más claros en los tres idiomas.
 
-- [x] **Procesamiento de carpetas con perfil guardado:** procesa los PDF en secuencia, registra el éxito/error por archivo, permite incluir subcarpetas y exporta un informe CSV.
+- [x] **Procesamiento de carpetas con perfil guardado:** procesa los PDF en secuencia, registra el éxito/error por archivo, permite incluir subcarpetas y exporta un informe CSV. El historial completo de informes se guarda localmente entre sesiones, con opciones para cargar o eliminar registros; se conservan los 50 más recientes.
 - [x] **Migraciones de esquema de perfiles:** los perfiles antiguos del esquema 1 se convierten automáticamente al esquema 2 con validación estricta.
 
 ### Posibles mejoras futuras
@@ -125,4 +125,4 @@ La opción `--selftest` inicializa la interfaz sin mostrar una ventana y termina
 - [x] Reanudar lotes interrumpidos: se reutilizan los resultados completados si no cambian el origen, el destino, el perfil ni la lista de archivos; se vuelven a intentar los errores.
 - [x] Pausa manual y cancelación segura: pausa entre PDF y termina el archivo actual antes de cancelar, conservando el progreso para reanudar.
 - [x] Reprocesar solo los PDF que fallaron en un informe, conservando los resultados correctos y la selección de errores al reanudar.
-- [ ] Guardar y restaurar el historial completo de informes entre sesiones de la aplicación.
+- [x] Guardar y restaurar el historial completo de informes entre sesiones de la aplicación (los 50 informes más recientes, con opciones para cargar y eliminar).

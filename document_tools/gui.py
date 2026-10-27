@@ -10,7 +10,7 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QSize, QThread, Signal, Qt, QUrl
+from PySide6.QtCore import QSettings, QSize, QThread, Signal, Qt, QUrl, QStandardPaths
 from PySide6.QtGui import QCloseEvent, QDesktopServices, QFont, QIcon, QImage, QPixmap
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtWidgets import (
@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
 
 from document_tools import __version__
 from document_tools.batch_processing import BatchControl, BatchFileResult, process_pdf_folder
+from document_tools.report_history import delete_batch_report, load_batch_history, save_batch_report
 from document_tools.errors import friendly_error_message
 from document_tools.profiles import (
     CURRENT_PROFILE_SCHEMA_VERSION,
@@ -356,6 +357,19 @@ TRANSLATIONS = {
         "A pasta de saída não pode ser a pasta de origem nem ficar dentro dela.": "The output folder cannot be the source folder or a folder inside it.",
         "Nenhum perfil salvo para aplicar.": "No saved profile is available to apply.",
         "Selecione o perfil a aplicar:": "Select the profile to apply:",
+        "Histórico de relatórios": "Report history",
+        "Relatórios anteriores": "Previous reports",
+        "Carregar relatório": "Load report",
+        "Excluir relatório selecionado": "Delete selected report",
+        "Não há relatórios salvos.": "There are no saved reports.",
+        "Selecione um relatório para carregar.": "Select a report to load.",
+        "Relatório {date} — {total} PDF(s), {failed} falha(s) — perfil: {profile}": "Report {date} — {total} PDF(s), {failed} failure(s) — profile: {profile}",
+        "Histórico de relatórios restaurado.": "Report history restored.",
+        "Relatório histórico carregado.": "Historical report loaded.",
+        "Relatório removido do histórico.": "Report removed from history.",
+        "Não foi possível ler o relatório histórico.": "Could not read the historical report.",
+        "Não foi possível excluir o relatório histórico.": "Could not delete the historical report.",
+        "Não foi possível armazenar o relatório no histórico local.": "Could not save the report to local history.",
         "Processando arquivo {completed} de {total}: {name}": "Processing file {completed} of {total}: {name}",
         "Lote concluído: {success} sucesso(s), {failed} falha(s) de {total} PDF(s).": "Batch complete: {success} succeeded, {failed} failed out of {total} PDF(s).",
         "Não há relatório para exportar.": "There is no report to export.",
@@ -627,6 +641,19 @@ TRANSLATIONS = {
         "A pasta de saída não pode ser a pasta de origem nem ficar dentro dela.": "La carpeta de salida no puede ser la carpeta de origen ni estar dentro de ella.",
         "Nenhum perfil salvo para aplicar.": "No hay ningún perfil guardado para aplicar.",
         "Selecione o perfil a aplicar:": "Selecciona el perfil que deseas aplicar:",
+        "Histórico de relatórios": "Historial de informes",
+        "Relatórios anteriores": "Informes anteriores",
+        "Carregar relatório": "Cargar informe",
+        "Excluir relatório selecionado": "Eliminar el informe seleccionado",
+        "Não há relatórios salvos.": "No hay informes guardados.",
+        "Selecione um relatório para carregar.": "Selecciona un informe para cargar.",
+        "Relatório {date} — {total} PDF(s), {failed} falha(s) — perfil: {profile}": "Informe {date} — {total} PDF(s), {failed} fallos — perfil: {profile}",
+        "Histórico de relatórios restaurado.": "Se restauró el historial de informes.",
+        "Relatório histórico carregado.": "Informe histórico cargado.",
+        "Relatório removido do histórico.": "Informe eliminado del historial.",
+        "Não foi possível ler o relatório histórico.": "No se pudo leer el informe histórico.",
+        "Não foi possível excluir o relatório histórico.": "No se pudo eliminar el informe histórico.",
+        "Não foi possível armazenar o relatório no histórico local.": "No se pudo guardar el informe en el historial local.",
         "Processando arquivo {completed} de {total}: {name}": "Procesando archivo {completed} de {total}: {name}",
         "Lote concluído: {success} sucesso(s), {failed} falha(s) de {total} PDF(s).": "Lote completado: {success} correcto(s), {failed} error(es) de {total} PDF(s).",
         "Não há relatório para exportar.": "No hay ningún informe para exportar.",
@@ -770,6 +797,9 @@ class DocumentToolsWindow(QMainWindow):
         self.setMinimumSize(920, 650)
         self.resize(1160, 810)
         self.settings = QSettings("PDFHub", "PDF Hub")
+        app_data = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
+        self._batch_history_directory = Path(app_data or (Path.home() / ".pdf-hub")) / "batch-reports"
+        self._batch_history: dict[str, dict[str, object]] = {}
         self._language = "pt"
         self._original_ui_texts: dict[QWidget, str] = {}
         self._original_tooltips: dict[QWidget, str] = {}
@@ -781,6 +811,7 @@ class DocumentToolsWindow(QMainWindow):
         self._folder_batch_running = False
         self._folder_batch_tab_index = -1
         self._last_batch_profile: dict[str, object] | None = None
+        self._last_batch_profile_name: str | None = None
         self._last_batch_source_directory: str | None = None
         self._last_batch_output_directory: str | None = None
         self._last_batch_recursive = False
@@ -901,6 +932,7 @@ class DocumentToolsWindow(QMainWindow):
         self.language_combo.setCurrentIndex(language_index if language_index >= 0 else 0)
         self.language_combo.currentIndexChanged.connect(self._change_language)
         self._apply_language(str(self.language_combo.currentData()))
+        self._load_batch_history()
 
     def _t(self, text: str) -> str:
         """Translate a Brazilian Portuguese UI string to the active interface language."""
@@ -1049,6 +1081,9 @@ class DocumentToolsWindow(QMainWindow):
         # Refresh the current status text too, so switching language does not leave stale Portuguese text.
         if self.status_label.text():
             self.status_label.setText(self._t(self.status_label.text()))
+        if hasattr(self, "batch_history_combo"):
+            selected = self.batch_history_combo.currentData()
+            self._refresh_batch_history_combo(selected if isinstance(selected, str) else None)
 
     @staticmethod
     def _stylesheet() -> str:
@@ -1364,6 +1399,9 @@ class DocumentToolsWindow(QMainWindow):
             self.batch_choose_output_button.setEnabled(True)
             self.batch_include_subfolders.setEnabled(True)
             self.batch_resume_checkbox.setEnabled(True)
+            self.batch_history_combo.setEnabled(True)
+            self.batch_history_load_button.setEnabled(True)
+            self.batch_history_delete_button.setEnabled(True)
             self.batch_pause_button.setText(self._t("Pausar lote"))
             self.batch_pause_button.setEnabled(False)
             self.batch_cancel_button.setEnabled(False)
@@ -2776,6 +2814,19 @@ class DocumentToolsWindow(QMainWindow):
         actions.addWidget(self.batch_report_button)
         layout.addLayout(actions)
 
+        history_row = QHBoxLayout()
+        history_row.addWidget(QLabel("Relatórios anteriores"))
+        self.batch_history_combo = QComboBox()
+        self.batch_history_combo.setMinimumWidth(260)
+        history_row.addWidget(self.batch_history_combo, 1)
+        self.batch_history_load_button = QPushButton("Carregar relatório")
+        self.batch_history_load_button.clicked.connect(self._load_selected_batch_history)
+        history_row.addWidget(self.batch_history_load_button)
+        self.batch_history_delete_button = QPushButton("Excluir relatório selecionado")
+        self.batch_history_delete_button.clicked.connect(self._delete_selected_batch_history)
+        history_row.addWidget(self.batch_history_delete_button)
+        layout.addLayout(history_row)
+
         self.batch_results_table = QTableWidget(0, 4)
         self.batch_results_table.setHorizontalHeaderLabels([
             "Arquivo de origem", "Resultado", "Detalhes", "Arquivo de saída"
@@ -2829,6 +2880,7 @@ class DocumentToolsWindow(QMainWindow):
             return
 
         self._last_batch_profile = dict(profiles[name])
+        self._last_batch_profile_name = name
         self._last_batch_source_directory = str(Path(source).expanduser().resolve())
         self._last_batch_output_directory = str(Path(output).expanduser().resolve())
         self._last_batch_recursive = self.batch_include_subfolders.isChecked()
@@ -2911,6 +2963,9 @@ class DocumentToolsWindow(QMainWindow):
         self.batch_include_subfolders.setEnabled(False)
         self.batch_resume_checkbox.setEnabled(False)
         self.batch_report_button.setEnabled(False)
+        self.batch_history_combo.setEnabled(False)
+        self.batch_history_load_button.setEnabled(False)
+        self.batch_history_delete_button.setEnabled(False)
         self.batch_pause_button.setText(self._t("Pausar lote"))
         self.batch_pause_button.setEnabled(True)
         self.batch_cancel_button.setEnabled(True)
@@ -2953,13 +3008,9 @@ class DocumentToolsWindow(QMainWindow):
             completed=completed, total=total, name=filename
         ))
 
-    def _batch_operation_succeeded(self, results: object, cancelled: bool = False) -> None:
-        if not isinstance(results, list) or not all(isinstance(item, BatchFileResult) for item in results):
-            self._operation_failed("Não foi possível gerar o relatório individual do lote.")
-            return
+    def _render_batch_results(self, results: list[BatchFileResult]) -> None:
         self.batch_results = results
         self.batch_results_table.setRowCount(len(results))
-        successes = failures = 0
         for row, result in enumerate(results):
             source_item = QTableWidgetItem(Path(result.source_path).name)
             source_item.setToolTip(result.source_path)
@@ -2971,12 +3022,169 @@ class DocumentToolsWindow(QMainWindow):
             output_item = QTableWidgetItem(result.output_path)
             output_item.setToolTip(result.output_path)
             self.batch_results_table.setItem(row, 3, output_item)
-            successes += int(result.success)
-            failures += int(not result.success)
         self.batch_report_button.setEnabled(bool(results))
         self.batch_reprocess_failures_button.setEnabled(
             any(not item.success for item in results) and self._last_batch_profile is not None
         )
+
+    def _save_current_batch_history(self, results: list[BatchFileResult], *, cancelled: bool) -> None:
+        if not self._last_batch_source_directory or not self._last_batch_output_directory:
+            return
+        report = save_batch_report(
+            self._batch_history_directory,
+            source_directory=self._last_batch_source_directory,
+            output_directory=self._last_batch_output_directory,
+            profile_name=self._last_batch_profile_name or "",
+            profile=self._last_batch_profile or {},
+            recursive=self._last_batch_recursive,
+            file_mode=self._last_batch_file_mode,
+            results=results,
+            cancelled=cancelled,
+        )
+        self._batch_history[str(report["id"])] = report
+        self._batch_history = {
+            str(item["id"]): item for item in load_batch_history(self._batch_history_directory)
+        }
+        self._refresh_batch_history_combo(str(report["id"]))
+
+    def _refresh_batch_history_combo(self, selected_id: str | None = None) -> None:
+        if not hasattr(self, "batch_history_combo"):
+            return
+        records = sorted(
+            self._batch_history.values(),
+            key=lambda item: (float(item.get("created_timestamp", 0)), str(item.get("id", ""))),
+            reverse=True,
+        )
+        combo = self.batch_history_combo
+        combo.blockSignals(True)
+        combo.clear()
+        if not records:
+            combo.addItem(self._t("Não há relatórios salvos."), None)
+        else:
+            for report in records:
+                raw_results = report.get("results", [])
+                results = raw_results if isinstance(raw_results, list) else []
+                total = len(results)
+                failures = sum(
+                    1 for item in results
+                    if isinstance(item, dict) and item.get("success") is False
+                )
+                created_at = str(report.get("created_at", "")).replace("T", " ")
+                label = self._t(
+                    "Relatório {date} — {total} PDF(s), {failed} falha(s) — perfil: {profile}"
+                ).format(
+                    date=created_at, total=total, failed=failures,
+                    profile=str(report.get("profile_name", "")) or "—",
+                )
+                combo.addItem(label, str(report["id"]))
+        if selected_id:
+            index = combo.findData(selected_id)
+            if index >= 0:
+                combo.setCurrentIndex(index)
+        combo.blockSignals(False)
+        has_reports = bool(records) and not self._folder_batch_running
+        combo.setEnabled(has_reports)
+        self.batch_history_load_button.setEnabled(has_reports)
+        self.batch_history_delete_button.setEnabled(has_reports)
+
+    def _load_batch_history(self) -> None:
+        self._batch_history = {
+            str(report["id"]): report
+            for report in load_batch_history(self._batch_history_directory)
+        }
+        self._refresh_batch_history_combo()
+        if self._batch_history:
+            newest = max(
+                self._batch_history.values(),
+                key=lambda item: (float(item.get("created_timestamp", 0)), str(item.get("id", ""))),
+            )
+            self._restore_batch_history_report(newest, activate_tab=False)
+            self.status_label.setText(self._t("Histórico de relatórios restaurado."))
+
+    def _restore_batch_history_report(
+        self, report: dict[str, object], *, activate_tab: bool
+    ) -> None:
+        raw_results = report.get("results", [])
+        if not isinstance(raw_results, list):
+            QMessageBox.warning(
+                self, self._t("Histórico de relatórios"),
+                self._t("Não foi possível ler o relatório histórico."),
+            )
+            return
+        results: list[BatchFileResult] = []
+        for item in raw_results:
+            if not isinstance(item, dict):
+                continue
+            try:
+                results.append(BatchFileResult(
+                    source_path=str(item["source_path"]),
+                    success=bool(item["success"]),
+                    output_path=str(item["output_path"]),
+                    message=str(item["message"]),
+                ))
+            except (KeyError, TypeError):
+                continue
+
+        source = str(report.get("source_directory", ""))
+        output = str(report.get("output_directory", ""))
+        raw_profile = report.get("profile", {})
+        profile = dict(raw_profile) if isinstance(raw_profile, dict) else {}
+        self._last_batch_profile = profile
+        self._last_batch_profile_name = str(report.get("profile_name", ""))
+        self._last_batch_source_directory = source
+        self._last_batch_output_directory = output
+        self._last_batch_recursive = bool(report.get("recursive", False))
+        file_mode = report.get("file_mode", 0o600)
+        self._last_batch_file_mode = file_mode if file_mode in (0o600, 0o644) else 0o600
+        self.batch_source_directory.setText(source)
+        self.batch_output_directory.setText(output)
+        self.batch_include_subfolders.setChecked(self._last_batch_recursive)
+        self.batch_resume_checkbox.setChecked(True)
+        self._pending_output_directory = Path(output).expanduser() if output else None
+        self._render_batch_results(results)
+        self.open_directory_button.setVisible(
+            self._pending_output_directory is not None and self._pending_output_directory.is_dir()
+        )
+        self.status_label.setText(self._t("Relatório histórico carregado."))
+        if activate_tab:
+            self.tabs.setCurrentIndex(self._folder_batch_tab_index)
+
+    def _load_selected_batch_history(self) -> None:
+        report_id = self.batch_history_combo.currentData()
+        if not isinstance(report_id, str) or report_id not in self._batch_history:
+            QMessageBox.information(
+                self, self._t("Histórico de relatórios"),
+                self._t("Selecione um relatório para carregar."),
+            )
+            return
+        self._restore_batch_history_report(self._batch_history[report_id], activate_tab=True)
+
+    def _delete_selected_batch_history(self) -> None:
+        report_id = self.batch_history_combo.currentData()
+        if not isinstance(report_id, str):
+            return
+        try:
+            deleted = delete_batch_report(self._batch_history_directory, report_id)
+        except ValueError:
+            deleted = False
+        except OSError:
+            QMessageBox.warning(
+                self, self._t("Histórico de relatórios"),
+                self._t("Não foi possível excluir o relatório histórico."),
+            )
+            return
+        self._batch_history.pop(report_id, None)
+        self._refresh_batch_history_combo()
+        if deleted:
+            self.status_label.setText(self._t("Relatório removido do histórico."))
+
+    def _batch_operation_succeeded(self, results: object, cancelled: bool = False) -> None:
+        if not isinstance(results, list) or not all(isinstance(item, BatchFileResult) for item in results):
+            self._operation_failed("Não foi possível gerar o relatório individual do lote.")
+            return
+        self._render_batch_results(results)
+        successes = sum(int(item.success) for item in results)
+        failures = len(results) - successes
         if cancelled:
             self.status_label.setText(self._t(
                 "Lote cancelado com segurança após {completed} arquivo(s). O progresso foi preservado; execute novamente com a retomada ativada."
@@ -2988,6 +3196,13 @@ class DocumentToolsWindow(QMainWindow):
         self.open_directory_button.setVisible(
             self._pending_output_directory is not None and self._pending_output_directory.is_dir()
         )
+        try:
+            self._save_current_batch_history(results, cancelled=cancelled)
+        except (OSError, ValueError):
+            QMessageBox.warning(
+                self, self._t("Histórico de relatórios"),
+                self._t("Não foi possível armazenar o relatório no histórico local."),
+            )
 
     def _export_batch_report(self) -> None:
         if not self.batch_results:
