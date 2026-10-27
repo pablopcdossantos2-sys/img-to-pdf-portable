@@ -87,6 +87,20 @@ def test_history_skips_corrupt_or_unsupported_reports(tmp_path: Path) -> None:
     (history_dir / f"batch-report-{unsupported_id}.json").write_text(
         json.dumps(unsupported), encoding="utf-8"
     )
+    malformed_id = "c" * 32
+    malformed = dict(saved)
+    malformed["id"] = malformed_id
+    malformed["created_timestamp"] = "not-a-number"
+    (history_dir / f"batch-report-{malformed_id}.json").write_text(
+        json.dumps(malformed), encoding="utf-8"
+    )
+    invalid_profile_id = "d" * 32
+    invalid_profile = dict(saved)
+    invalid_profile["id"] = invalid_profile_id
+    invalid_profile["profile"] = {"rotate_enabled": True, "unexpected": ["nested"]}
+    (history_dir / f"batch-report-{invalid_profile_id}.json").write_text(
+        json.dumps(invalid_profile), encoding="utf-8"
+    )
 
     loaded = load_batch_history(history_dir)
     assert [report["id"] for report in loaded] == [saved["id"]]

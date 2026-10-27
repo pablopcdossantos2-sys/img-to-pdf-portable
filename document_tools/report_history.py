@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import tempfile
@@ -51,12 +52,27 @@ def _valid_report(report: Any, expected_id: str | None = None) -> bool:
         return False
     if report.get("schema_version") != HISTORY_SCHEMA_VERSION:
         return False
+    if "created_timestamp" in report:
+        timestamp = report["created_timestamp"]
+        if isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)):
+            return False
+        try:
+            if not math.isfinite(float(timestamp)):
+                return False
+        except (OverflowError, ValueError):
+            return False
     if not all(isinstance(report.get(key), str) for key in (
         "created_at", "source_directory", "output_directory", "profile_name"
     )):
         return False
-    if not isinstance(report.get("profile"), dict) or not isinstance(report.get("recursive"), bool):
+    profile = report.get("profile")
+    if not isinstance(profile, dict) or not isinstance(report.get("recursive"), bool):
         return False
+    for key, value in profile.items():
+        if key not in _PROFILE_FIELDS:
+            return False
+        if value is not None and not isinstance(value, (str, bool, int, float)):
+            return False
     if report.get("file_mode") not in (0o600, 0o644):
         return False
     if not isinstance(report.get("cancelled"), bool) or not isinstance(report.get("results"), list):
