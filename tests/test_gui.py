@@ -5,7 +5,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtPdf import QPdfDocument
 from pypdf import PdfWriter
 from PySide6.QtWidgets import QApplication, QAbstractItemView, QLineEdit, QListWidget, QListWidgetItem
@@ -150,16 +150,26 @@ def test_reorder_preview_renders_the_selected_page(qt_app: QApplication, tmp_pat
         assert document.pageCount() == 2
         window.reorder_document = document
 
-        window._preview_reorder_page(0)
+        # The rows are deliberately in reverse order: preview follows the source page
+        # represented by each row, not merely the current row index.
+        for page_number in (2, 1):
+            item = QListWidgetItem(f"Page {page_number}")
+            item.setData(Qt.ItemDataRole.UserRole, page_number)
+            window.reorder_list.addItem(item)
+
+        window.reorder_list.setCurrentRow(0)
         qt_app.processEvents()
         pixmap = window.reorder_preview.pixmap()
         assert pixmap is not None
         assert not pixmap.isNull()
+        assert pixmap.width() > pixmap.height()
         assert window.reorder_preview.text() == ""
 
-        window._preview_reorder_page(1)
+        window.reorder_list.setCurrentRow(1)
         qt_app.processEvents()
-        assert not window.reorder_preview.pixmap().isNull()
+        pixmap = window.reorder_preview.pixmap()
+        assert not pixmap.isNull()
+        assert pixmap.height() > pixmap.width()
     finally:
         if window.reorder_document is not None:
             window.reorder_document.close()
@@ -177,6 +187,20 @@ def test_stamp_range_field_is_present_and_translatable(qt_app: QApplication) -> 
         assert window.stamp_ranges.placeholderText() == "Leave blank to apply to all pages"
         window.language_combo.setCurrentIndex(window.language_combo.findData("es"))
         assert window.stamp_ranges.placeholderText() == "Déjalo vacío para aplicar a todas las páginas"
+    finally:
+        window.language_combo.setCurrentIndex(window.language_combo.findData("pt"))
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+def test_dynamic_page_range_errors_are_translated(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    try:
+        window.language_combo.setCurrentIndex(window.language_combo.findData("en"))
+        assert window._t("O intervalo '4-6' precisa estar entre 1 e 3.") == "Range '4-6' must be between 1 and 3."
+        window.language_combo.setCurrentIndex(window.language_combo.findData("es"))
+        assert window._t("O intervalo '4-6' precisa estar entre 1 e 3.") == "El intervalo '4-6' debe estar entre 1 y 3."
     finally:
         window.language_combo.setCurrentIndex(window.language_combo.findData("pt"))
         window.close()
