@@ -6,6 +6,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtPdf import QPdfDocument
+from pypdf import PdfWriter
 from PySide6.QtWidgets import QApplication, QAbstractItemView, QLineEdit, QListWidget, QListWidgetItem
 
 from document_tools.gui import APP_NAME, DocumentToolsWindow
@@ -126,6 +128,57 @@ def test_new_pdf_tools_are_available_in_the_interface(qt_app: QApplication) -> N
         window.optimize_mode.setCurrentIndex(window.optimize_mode.findData("balanced"))
         assert window.optimize_quality.isEnabled() is True
     finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+def test_reorder_preview_renders_the_selected_page(qt_app: QApplication, tmp_path) -> None:
+    source = tmp_path / "preview.pdf"
+    writer = PdfWriter()
+    writer.add_blank_page(width=240, height=360)
+    writer.add_blank_page(width=360, height=240)
+    with source.open("wb") as stream:
+        writer.write(stream)
+
+    window = DocumentToolsWindow()
+    try:
+        window.show()
+        qt_app.processEvents()
+        document = QPdfDocument(window)
+        document.load(str(source))
+        assert document.pageCount() == 2
+        window.reorder_document = document
+
+        window._preview_reorder_page(0)
+        qt_app.processEvents()
+        pixmap = window.reorder_preview.pixmap()
+        assert pixmap is not None
+        assert not pixmap.isNull()
+        assert window.reorder_preview.text() == ""
+
+        window._preview_reorder_page(1)
+        qt_app.processEvents()
+        assert not window.reorder_preview.pixmap().isNull()
+    finally:
+        if window.reorder_document is not None:
+            window.reorder_document.close()
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_stamp_range_field_is_present_and_translatable(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    try:
+        assert window.stamp_ranges.placeholderText() == "Deixe vazio para aplicar em todas as páginas"
+        window.language_combo.setCurrentIndex(window.language_combo.findData("en"))
+        assert window.stamp_ranges.placeholderText() == "Leave blank to apply to all pages"
+        window.language_combo.setCurrentIndex(window.language_combo.findData("es"))
+        assert window.stamp_ranges.placeholderText() == "Déjalo vacío para aplicar a todas las páginas"
+    finally:
+        window.language_combo.setCurrentIndex(window.language_combo.findData("pt"))
         window.close()
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
