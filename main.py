@@ -21,6 +21,7 @@ def selftest() -> int:
         extract_pages,
         images_to_pdf,
         optimize_pdf,
+        process_pdf_pipeline,
         reorder_pdf_pages,
         stamp_pdf,
     )
@@ -39,12 +40,19 @@ def selftest() -> int:
         reordered_pdf = root / "reordered.pdf"
         stamped_pdf = root / "stamped.pdf"
         optimized_pdf = root / "optimized.pdf"
+        pipeline_pdf = root / "pipeline.pdf"
         with Image.new("RGBA", (24, 16), (60, 120, 200, 180)) as image:
             image.save(image_path)
         images_to_pdf([image_path], image_pdf)
         reorder_pdf_pages(image_pdf, [1], reordered_pdf)
         stamp_pdf(image_pdf, stamped_pdf, watermark_text="PDF Hub", page_numbering=True)
         optimize_pdf(stamped_pdf, optimized_pdf, mode="lossless")
+        process_pdf_pipeline(
+            image_pdf, pipeline_pdf,
+            watermark_text="PDF Hub",
+            page_numbering=True,
+            optimize_mode="lossless",
+        )
 
         encrypted_path = root / "encrypted.pdf"
         writer = PdfWriter()
@@ -63,7 +71,7 @@ def selftest() -> int:
             result = PdfReader(stream)
             if len(result.pages) != 1:
                 return 3
-        for generated in (reordered_pdf, stamped_pdf, optimized_pdf):
+        for generated in (reordered_pdf, stamped_pdf, optimized_pdf, pipeline_pdf):
             with generated.open("rb") as stream:
                 result = PdfReader(stream)
                 if len(result.pages) != 1:
