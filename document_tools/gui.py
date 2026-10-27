@@ -384,6 +384,16 @@ TRANSLATIONS = {
         "Arquivos CSV (*.csv)": "CSV files (*.csv)",
         "O sufixo de saída contém caracteres inválidos ou é longo demais.": "The output suffix contains invalid characters or is too long.",
         "Não foi possível gerar o relatório individual do lote.": "Could not generate the individual batch report.",
+        "Configurações": "Settings",
+        "Defina o idioma, o tema visual e as permissões dos arquivos gerados.": "Choose the interface language, visual theme, and permissions for generated files.",
+        "Modo de aparência": "Appearance",
+        "Modo claro": "Light mode",
+        "Modo escuro": "Dark mode",
+        "Sobre permissões de saída": "About output permissions",
+        "0600 permite leitura e escrita apenas pelo usuário atual. 0644 permite que outros usuários locais leiam o arquivo. Isso afeta os arquivos gerados em Linux/macOS; no Windows, as permissões são gerenciadas pelo sistema.": "0600 allows only the current user to read and write the file. 0644 allows other local users to read it. This applies to files created on Linux/macOS; Windows permissions are managed by the operating system.",
+        "Arraste imagens para esta área ou use “Adicionar imagens”.": "Drop images here or use “Add images”.",
+        "Resolução estimada automaticamente a partir das dimensões em pixels das imagens; você pode ajustá-la manualmente.": "Automatically estimated from the images' pixel dimensions; you can adjust it manually.",
+        "Calculando resolução a partir das imagens.": "Estimating resolution from images.",
     },
     "es": {
         "PDF e imagens • v{version} • organizado, seguro e local": "PDF e imágenes • v{version} • organizado, seguro y local",
@@ -668,6 +678,16 @@ TRANSLATIONS = {
         "Arquivos CSV (*.csv)": "Archivos CSV (*.csv)",
         "O sufixo de saída contém caracteres inválidos ou é longo demais.": "El sufijo de salida contiene caracteres no válidos o es demasiado largo.",
         "Não foi possível gerar o relatório individual do lote.": "No se pudo generar el informe individual del lote.",
+        "Configurações": "Configuración",
+        "Defina o idioma, o tema visual e as permissões dos arquivos gerados.": "Elige el idioma de la interfaz, el tema visual y los permisos de los archivos generados.",
+        "Modo de aparência": "Apariencia",
+        "Modo claro": "Modo claro",
+        "Modo escuro": "Modo oscuro",
+        "Sobre permissões de saída": "Acerca de los permisos de salida",
+        "0600 permite leitura e escrita apenas pelo usuário atual. 0644 permite que outros usuários locais leiam o arquivo. Isso afeta os arquivos gerados em Linux/macOS; no Windows, as permissões são gerenciadas pelo sistema.": "0600 permite que solo el usuario actual lea y escriba el archivo. 0644 permite que otros usuarios locales lo lean. Esto afecta a los archivos creados en Linux/macOS; en Windows, los permisos los gestiona el sistema operativo.",
+        "Arraste imagens para esta área ou use “Adicionar imagens”.": "Arrastra imágenes aquí o usa «Añadir imágenes».",
+        "Resolução estimada automaticamente a partir das dimensões em pixels das imagens; você pode ajustá-la manualmente.": "Resolución estimada automáticamente a partir de las dimensiones en píxeles de las imágenes; puedes ajustarla manualmente.",
+        "Calculando resolução a partir das imagens.": "Calculando la resolución a partir de las imágenes.",
     }
 }
 
@@ -969,12 +989,14 @@ class DocumentToolsWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(APP_NAME)
-        self.setMinimumSize(920, 650)
+        self.setMinimumSize(760, 540)
         self.resize(1160, 810)
         self.settings = QSettings("PDFHub", "PDF Hub")
         app_data = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
         self._batch_history_directory = Path(app_data or (Path.home() / ".pdf-hub")) / "batch-reports"
         self._batch_history: dict[str, dict[str, object]] = {}
+        saved_theme = str(self.settings.value("theme", "light"))
+        self._theme = saved_theme if saved_theme in {"light", "dark"} else "light"
         self._language = "pt"
         self._original_ui_texts: dict[QWidget, str] = {}
         self._original_tooltips: dict[QWidget, str] = {}
@@ -998,8 +1020,8 @@ class DocumentToolsWindow(QMainWindow):
 
         central = QWidget()
         central_layout = QVBoxLayout(central)
-        central_layout.setContentsMargins(28, 22, 28, 18)
-        central_layout.setSpacing(16)
+        central_layout.setContentsMargins(16, 14, 16, 12)
+        central_layout.setSpacing(12)
 
         header = QFrame()
         header.setObjectName("headerCard")
@@ -1007,66 +1029,25 @@ class DocumentToolsWindow(QMainWindow):
         header_layout.setContentsMargins(22, 18, 22, 18)
         header_layout.setSpacing(14)
 
-        brand_mark = QLabel("H")
+        self.setWindowIcon(create_app_icon())
+        brand_mark = QLabel()
         brand_mark.setObjectName("brandMark")
         brand_mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
         brand_mark.setFixedSize(48, 48)
+        brand_mark.setPixmap(self.windowIcon().pixmap(48, 48))
         header_layout.addWidget(brand_mark)
 
         brand_text = QVBoxLayout()
         title = QLabel(APP_NAME)
         title.setObjectName("appTitle")
-        subtitle = QLabel(f"PDF e imagens • v{__version__} • organizado, seguro e local")
+        subtitle = QLabel(f"PDF e imagens • v{__version__} • processamento local")
         subtitle.setObjectName("subtitle")
         brand_text.addWidget(title)
         brand_text.addWidget(subtitle)
         header_layout.addLayout(brand_text, 1)
-
-        local_badge = QLabel("●  PDF HUB • PROCESSAMENTO LOCAL")
-        local_badge.setObjectName("localBadge")
-        local_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header_layout.addWidget(local_badge)
         central_layout.addWidget(header)
 
-        page_title = QLabel("O que vamos organizar hoje?")
-        page_title.setObjectName("pageTitle")
-        central_layout.addWidget(page_title)
-
-        intro = QLabel(
-            "Escolha uma ferramenta abaixo. Os arquivos de origem são preservados."
-        )
-        intro.setObjectName("intro")
-        central_layout.addWidget(intro)
-
-        permission_row = QHBoxLayout()
-        language_label = QLabel("Idioma / Language")
-        self.language_combo = QComboBox()
-        self.language_combo.addItem("Português (Brasil)", "pt")
-        self.language_combo.addItem("English", "en")
-        self.language_combo.addItem("Español", "es")
-        permission_label = QLabel("Permissões de saída (Linux/macOS)")
-        permission_label.setObjectName("muted")
-        permission_label.setToolTip("No Windows, o sistema de permissões é gerenciado pelo próprio sistema operacional.")
-        self.output_permissions = QComboBox()
-        self.output_permissions.addItem("Somente usuário (0600)", 0o600)
-        self.output_permissions.addItem("Compartilhado (0644)", 0o644)
-        try:
-            saved_mode = int(self.settings.value("output_file_mode", 0o600))
-        except (TypeError, ValueError):
-            saved_mode = 0o600
-        saved_index = self.output_permissions.findData(saved_mode)
-        self.output_permissions.setCurrentIndex(saved_index if saved_index >= 0 else 0)
-        self.output_permissions.setToolTip("0600: somente o usuário atual. 0644: outros usuários do sistema podem ler os arquivos.")
-        self.output_permissions.currentIndexChanged.connect(self._save_output_permissions)
-        permission_row.addWidget(permission_label)
-        permission_row.addWidget(self.output_permissions)
-        permission_row.addSpacing(16)
-        permission_row.addWidget(language_label)
-        permission_row.addWidget(self.language_combo)
-        permission_row.addStretch(1)
-        central_layout.addLayout(permission_row)
-
-        self.tabs = QTabWidget()
+        self.tabs = SideNavigationWidget()
         self.tabs.setDocumentMode(True)
         self.tabs.addTab(self._build_image_pdf_tab(), "  Imagens para PDF  ")
         self.tabs.addTab(self._build_merge_tab(), "  Unir PDFs  ")
@@ -1079,6 +1060,7 @@ class DocumentToolsWindow(QMainWindow):
         self.tabs.addTab(self._build_pipeline_tab(), "  Fluxo em lote  ")
         self._folder_batch_tab_index = self.tabs.addTab(self._build_folder_batch_tab(), "  Processar pasta  ")
         self.tabs.addTab(self._build_convert_tab(), "  Converter imagens  ")
+        self.settings_tab_index = self.tabs.addTab(self._build_settings_tab(), "Configurações")
         central_layout.addWidget(self.tabs, 1)
 
         footer = QHBoxLayout()
@@ -1100,12 +1082,15 @@ class DocumentToolsWindow(QMainWindow):
         central_layout.addLayout(footer)
 
         self.setCentralWidget(central)
-        self.setStyleSheet(self._stylesheet())
+        self.setStyleSheet(self._stylesheet(self._theme))
         self._capture_ui_texts()
         saved_language = str(self.settings.value("language", "pt"))
         language_index = self.language_combo.findData(saved_language)
         self.language_combo.setCurrentIndex(language_index if language_index >= 0 else 0)
         self.language_combo.currentIndexChanged.connect(self._change_language)
+        theme_index = self.theme_combo.findData(self._theme)
+        self.theme_combo.setCurrentIndex(theme_index if theme_index >= 0 else 0)
+        self.theme_combo.currentIndexChanged.connect(self._change_theme)
         self._apply_language(str(self.language_combo.currentData()))
         self._load_batch_history()
 
@@ -1200,7 +1185,7 @@ class DocumentToolsWindow(QMainWindow):
         for widget in self.findChildren(QWidget):
             if widget is self.language_combo:
                 continue
-            if isinstance(widget, (QLabel, QPushButton, QCheckBox)):
+            if isinstance(widget, (QLabel, QPushButton, QCheckBox, QToolButton)):
                 self._original_ui_texts[widget] = widget.text()
             if widget.toolTip():
                 self._original_tooltips[widget] = widget.toolTip()
@@ -1224,7 +1209,7 @@ class DocumentToolsWindow(QMainWindow):
         for widget, original in self._original_ui_texts.items():
             try:
                 translated = self._t(original)
-                if isinstance(widget, (QLabel, QPushButton, QCheckBox)):
+                if isinstance(widget, (QLabel, QPushButton, QCheckBox, QToolButton)):
                     widget.setText(translated)
             except RuntimeError:
                 continue
@@ -1641,6 +1626,80 @@ class DocumentToolsWindow(QMainWindow):
 
     def _output_file_mode(self) -> int:
         return int(self.output_permissions.currentData())
+
+    def _build_settings_tab(self) -> QWidget:
+        page, layout = self._new_page(
+            "Configurações",
+            "Defina o idioma, o tema visual e as permissões dos arquivos gerados.",
+        )
+        form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
+
+        self.language_combo = QComboBox()
+        self.language_combo.addItem("Português (Brasil)", "pt")
+        self.language_combo.addItem("English", "en")
+        self.language_combo.addItem("Español", "es")
+        form.addRow("Idioma / Language", self.language_combo)
+
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItem("Modo claro", "light")
+        self.theme_combo.addItem("Modo escuro", "dark")
+        form.addRow("Modo de aparência", self.theme_combo)
+
+        permissions_row = QHBoxLayout()
+        self.output_permissions = QComboBox()
+        self.output_permissions.addItem("Somente usuário (0600)", 0o600)
+        self.output_permissions.addItem("Compartilhado (0644)", 0o644)
+        try:
+            saved_mode = int(self.settings.value("output_file_mode", 0o600))
+        except (TypeError, ValueError):
+            saved_mode = 0o600
+        saved_index = self.output_permissions.findData(saved_mode)
+        self.output_permissions.setCurrentIndex(saved_index if saved_index >= 0 else 0)
+        self.output_permissions.currentIndexChanged.connect(self._save_output_permissions)
+        self.output_permissions.setToolTip(
+            "0600: somente o usuário atual. 0644: outros usuários do sistema podem ler os arquivos."
+        )
+        permissions_row.addWidget(self.output_permissions, 1)
+        self.output_permissions_info = QToolButton()
+        self.output_permissions_info.setObjectName("infoButton")
+        self.output_permissions_info.setText("ⓘ")
+        self.output_permissions_info.setToolTip("Sobre permissões de saída")
+        self.output_permissions_info.setAccessibleName("Sobre permissões de saída")
+        self.output_permissions_info.clicked.connect(self._show_output_permissions_info)
+        permissions_row.addWidget(self.output_permissions_info)
+        permissions_container = QWidget()
+        permissions_container.setLayout(permissions_row)
+        form.addRow("Permissões de saída (Linux/macOS)", permissions_container)
+
+        layout.addLayout(form)
+        explanation = QLabel(
+            "As permissões de saída se aplicam aos arquivos que o PDF Hub cria. "
+            "O modo 0600 é a opção mais restritiva."
+        )
+        explanation.setObjectName("muted")
+        explanation.setWordWrap(True)
+        layout.addWidget(explanation)
+        layout.addStretch(1)
+        return page
+
+    def _show_output_permissions_info(self) -> None:
+        QMessageBox.information(
+            self,
+            self._t("Sobre permissões de saída"),
+            self._t(
+                "0600 permite leitura e escrita apenas pelo usuário atual. 0644 permite que outros usuários locais leiam o arquivo. Isso afeta os arquivos gerados em Linux/macOS; no Windows, as permissões são gerenciadas pelo sistema."
+            ),
+        )
+
+    def _change_theme(self) -> None:
+        selected = str(self.theme_combo.currentData())
+        self._theme = selected if selected in {"light", "dark"} else "light"
+        self.settings.setValue("theme", self._theme)
+        self.setStyleSheet(self._stylesheet(self._theme))
 
     def _build_image_pdf_tab(self) -> QWidget:
         page, layout = self._new_page(
@@ -3548,6 +3607,7 @@ def main() -> int:
     application = QApplication(sys.argv)
     application.setApplicationName(APP_NAME)
     application.setOrganizationName("PDFHub")
+    application.setWindowIcon(create_app_icon())
     application.setFont(QFont("Segoe UI", 10))
     window = DocumentToolsWindow()
     window.show()
