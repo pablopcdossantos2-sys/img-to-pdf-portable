@@ -15,6 +15,10 @@ from document_tools.pdf_ops import (
     merge_pdfs,
     parse_page_ranges,
     pdf_requires_user_password,
+    pdf_page_count,
+    optimize_pdf,
+    reorder_pdf_pages,
+    stamp_pdf,
     rotate_pdf,
     split_pdf,
 )
@@ -305,6 +309,126 @@ def test_pdf_output_permissions_can_be_shared(tmp_path: Path) -> None:
     extract_pages(source, "1", output, file_mode=0o644)
 
     assert output.stat().st_mode & 0o777 == 0o644
+
+
+def test_pdf_page_count_supports_password_protected_pdfs(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "locked.pdf", [120, 130], password="secret")
+
+    assert pdf_page_count(source, password="secret") == 2
+    with pytest.raises(ValueError, match="senha informada.*incorreta"):
+        pdf_page_count(source, password="wrong")
+
+
+def test_reorder_pdf_pages_preserves_requested_order(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [110, 120, 130, 140])
+    output = tmp_path / "reordered.pdf"
+
+    reorder_pdf_pages(source, [4, 2, 1, 3], output)
+
+    reader = read_pdf(output)
+    assert [round(float(page.mediabox.width)) for page in reader.pages] == [140, 120, 110, 130]
+
+
+@pytest.mark.parametrize("order", [[1, 1, 3], [1, 2], [1, 2, 4], []])
+def test_reorder_pdf_pages_rejects_non_permutations(tmp_path: Path, order: list[int]) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [110, 120, 130])
+    output = tmp_path / "reordered.pdf"
+
+    with pytest.raises(ValueError, match="cada página uma única vez"):
+        reorder_pdf_pages(source, order, output)
+
+    assert not output.exists()
+
+
+def test_reorder_pdf_pages_accepts_password(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "locked.pdf", [110, 120], password="secret")
+    output = tmp_path / "reordered.pdf"
+
+    reorder_pdf_pages(source, [2, 1], output, password="secret")
+
+    assert [round(float(page.mediabox.width)) for page in read_pdf(output).pages] == [120, 110]
+
+
+def test_stamp_pdf_applies_watermark_and_page_numbers(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [300, 320])
+    output = tmp_path / "stamped.pdf"
+
+    stamp_pdf(source, output, watermark_text="CONFIDENTIAL", page_numbering=True)
+
+    reader = read_pdf(output)
+    assert len(reader.pages) == 2
+    assert "CONFIDENTIAL" in reader.pages[0].extract_text()
+    assert "1 / 2" in reader.pages[0].extract_text()
+    assert "2 / 2" in reader.pages[1].extract_text()
+
+
+def test_stamp_pdf_rejects_empty_stamp_request(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [300])
+    output = tmp_path / "stamped.pdf"
+
+    with pytest.raises(ValueError, match="Informe o texto da marca"):
+        stamp_pdf(source, output)
+
+    assert not output.exists()
+
+
+def test_stamp_pdf_can_number_pages_without_watermark(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [300])
+    output = tmp_path / "numbered.pdf"
+
+    stamp_pdf(source, output, page_numbering=True)
+
+    assert "1 / 1" in read_pdf(output).pages[0].extract_text()
+
+
+def test_stamp_pdf_accepts_password(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "locked.pdf", [300], password="secret")
+    output = tmp_path / "stamped.pdf"
+
+    stamp_pdf(source, output, watermark_text="TEST", password="secret")
+
+    assert "TEST" in read_pdf(output).pages[0].extract_text()
+
+
+def test_optimize_pdf_lossless_preserves_pages_and_metadata(tmp_path: Path) -> None:
+    source = tmp_path / "source.pdf"
+    writer = PdfWriter()
+    for width in (110, 120, 130):
+        writer.add_blank_page(width=width, height=300)
+    writer.add_metadata({"/Title": "PDF Hub optimize test"})
+    with source.open("wb") as stream:
+        writer.write(stream)
+    output = tmp_path / "optimized.pdf"
+
+    optimize_pdf(source, output, mode="lossless")
+
+    reader = read_pdf(output)
+    assert len(reader.pages) == 3
+    assert reader.metadata.title == "PDF Hub optimize test"
+
+
+def test_optimize_pdf_balanced_recompresses_supported_image_pdfs(tmp_path: Path) -> None:
+    image = tmp_path / "image.png"
+    source = tmp_path / "source.pdf"
+    output = tmp_path / "optimized.pdf"
+    Image.new("RGB", (600, 400), "navy").save(image)
+    images_to_pdf([image], source)
+
+    optimize_pdf(source, output, mode="balanced", quality=75)
+
+    reader = read_pdf(output)
+    assert len(reader.pages) == 1
+    assert output.stat().st_size > 0
+
+
+def test_optimize_pdf_rejects_invalid_mode_and_quality(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [110])
+    output = tmp_path / "optimized.pdf"
+
+    with pytest.raises(ValueError, match="Escolha otimização"):
+        optimize_pdf(source, output, mode="maximum")
+    with pytest.raises(ValueError, match="qualidade JPEG"):
+        optimize_pdf(source, output, mode="balanced", quality=99)
 
 
 def test_convert_image_resizes_and_converts_to_jpeg(tmp_path: Path) -> None:
