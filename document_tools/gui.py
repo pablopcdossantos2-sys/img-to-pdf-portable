@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QFrame,
+    QGridLayout,
     QHeaderView,
     QHBoxLayout,
     QLabel,
@@ -33,17 +34,22 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QProgressBar,
     QPushButton,
+    QScrollArea,
+    QSizePolicy,
     QSpinBox,
-    QTabWidget,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QToolButton,
     QWidget,
 )
+from PySide6.QtGui import QColor, QPainter, QPen
 
 from document_tools import __version__
 from document_tools.batch_processing import BatchControl, BatchFileResult, process_pdf_folder
 from document_tools.report_history import delete_batch_report, load_batch_history, save_batch_report
+from document_tools.image_resolution import recommend_dpi_from_images
 from document_tools.errors import friendly_error_message
 from document_tools.profiles import (
     CURRENT_PROFILE_SCHEMA_VERSION,
@@ -664,6 +670,175 @@ TRANSLATIONS = {
         "Não foi possível gerar o relatório individual do lote.": "No se pudo generar el informe individual del lote.",
     }
 }
+
+
+SUPPORTED_IMAGE_SUFFIXES = {
+    ".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff", ".gif",
+}
+
+
+def create_app_icon() -> QIcon:
+    """Draw a recognizable PDF-document icon without external image assets."""
+    icon = QIcon()
+    for size in (16, 24, 32, 48, 64, 128):
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.scale(size / 64.0, size / 64.0)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#172B4D"))
+        painter.drawRoundedRect(2, 2, 60, 60, 12, 12)
+        painter.setBrush(QColor("#FFFFFF"))
+        painter.drawRoundedRect(14, 7, 37, 48, 4, 4)
+        painter.setPen(QPen(QColor("#CBD5E1"), 2))
+        painter.drawLine(21, 18, 43, 18)
+        painter.drawLine(21, 25, 43, 25)
+        painter.drawLine(21, 32, 36, 32)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#DC2626"))
+        painter.drawRoundedRect(11, 39, 42, 15, 3, 3)
+        painter.setPen(QColor("#FFFFFF"))
+        painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        painter.drawText(11, 39, 42, 15, Qt.AlignmentFlag.AlignCenter, "PDF")
+        painter.end()
+        icon.addPixmap(pixmap)
+    return icon
+
+
+class ImageDropList(QListWidget):
+    """Image list that accepts external images while retaining internal reordering."""
+
+    filesDropped = Signal(list)
+
+    @staticmethod
+    def _paths_from_mime(mime_data) -> list[str]:
+        if not mime_data.hasUrls():
+            return []
+        paths: list[str] = []
+        for url in mime_data.urls():
+            if not url.isLocalFile():
+                continue
+            path = Path(url.toLocalFile()).expanduser()
+            if path.is_file() and path.suffix.casefold() in SUPPORTED_IMAGE_SUFFIXES:
+                paths.append(str(path))
+        return paths
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self.setAlternatingRowColors(False)
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.setDefaultDropAction(Qt.DropAction.MoveAction)
+
+    def dragEnterEvent(self, event) -> None:
+        if self._paths_from_mime(event.mimeData()):
+            event.acceptProposedAction()
+            return
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:
+        if self._paths_from_mime(event.mimeData()):
+            event.acceptProposedAction()
+            return
+        super().dragMoveEvent(event)
+
+    def dropEvent(self, event) -> None:
+        paths = self._paths_from_mime(event.mimeData())
+        if paths:
+            self.filesDropped.emit(paths)
+            event.acceptProposedAction()
+            return
+        super().dropEvent(event)
+
+
+class SideNavigationWidget(QWidget):
+    """Persistent left-side navigation with scrollable content pages."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self._labels: list[str] = []
+        self._buttons: list[QPushButton] = []
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(12)
+
+        self.sidebar = QFrame()
+        self.sidebar.setObjectName("sidePanel")
+        self.sidebar.setMinimumWidth(188)
+        self.sidebar.setMaximumWidth(220)
+        sidebar_layout = QVBoxLayout(self.sidebar)
+        sidebar_layout.setContentsMargins(6, 8, 6, 8)
+
+        nav_scroll = QScrollArea()
+        nav_scroll.setObjectName("navigationScroll")
+        nav_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        nav_scroll.setWidgetResizable(True)
+        self.nav_widget = QWidget()
+        self.nav_layout = QVBoxLayout(self.nav_widget)
+        self.nav_layout.setContentsMargins(2, 2, 2, 2)
+        self.nav_layout.setSpacing(3)
+        self.nav_layout.addStretch(1)
+        nav_scroll.setWidget(self.nav_widget)
+        sidebar_layout.addWidget(nav_scroll, 1)
+
+        self.stack = QStackedWidget()
+        self.stack.setObjectName("pageStack")
+        outer.addWidget(self.sidebar)
+        outer.addWidget(self.stack, 1)
+
+    def setDocumentMode(self, _enabled: bool) -> None:
+        """Compatibility no-op; navigation is not rendered as a tab bar."""
+
+    def addTab(self, widget: QWidget, label: str) -> int:
+        index = self.stack.count()
+        scroll = QScrollArea()
+        scroll.setObjectName("contentScrollArea")
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(widget)
+        self.stack.addWidget(scroll)
+
+        button = QPushButton(label.strip())
+        button.setObjectName("navButton")
+        button.setCheckable(True)
+        button.setMinimumHeight(38)
+        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        button.clicked.connect(lambda _checked=False, current=index: self.setCurrentIndex(current))
+        self.nav_layout.insertWidget(max(0, self.nav_layout.count() - 1), button)
+        self._buttons.append(button)
+        self._labels.append(label.strip())
+        if index == 0:
+            self.setCurrentIndex(0)
+        return index
+
+    def count(self) -> int:
+        return len(self._labels)
+
+    def tabText(self, index: int) -> str:
+        return self._labels[index]
+
+    def setTabText(self, index: int, label: str) -> None:
+        value = label.strip()
+        self._labels[index] = value
+        self._buttons[index].setText(value)
+
+    def setTabEnabled(self, index: int, enabled: bool) -> None:
+        self._buttons[index].setEnabled(enabled)
+        self.stack.widget(index).setEnabled(enabled)
+
+    def setCurrentIndex(self, index: int) -> None:
+        if not 0 <= index < self.count():
+            return
+        self.stack.setCurrentIndex(index)
+        for current, button in enumerate(self._buttons):
+            button.setChecked(current == index)
+
+    def currentIndex(self) -> int:
+        return self.stack.currentIndex()
 
 
 class PageThumbnailWorker(QThread):
