@@ -546,7 +546,24 @@ class DocumentToolsWindow(QMainWindow):
             if core in reverse:
                 source = reverse[core]
                 return leading + mapping.get(source, source) + trailing
-        # Messages that embed file paths or worker errors are translated as a prefix/suffix.
+        # Translate dynamic operation summaries without altering file paths or sizes.
+        dynamic_prefixes = {
+            "en": [
+                ("PDF criado: ", "PDF created: "),
+                ("PDFs unidos: ", "PDFs merged: "),
+                ("Páginas extraídas: ", "Pages extracted: "),
+                ("PDF rotacionado: ", "PDF rotated: "),
+            ],
+            "es": [
+                ("PDF criado: ", "PDF creado: "),
+                ("PDFs unidos: ", "PDFs unidos: "),
+                ("Páginas extraídas: ", "Páginas extraídas: "),
+                ("PDF rotacionado: ", "PDF rotado: "),
+            ],
+        }
+        for source_prefix, translated_prefix in dynamic_prefixes.get(self._language, []):
+            if core.startswith(source_prefix):
+                return leading + translated_prefix + core[len(source_prefix):] + trailing
         for source, translated in mapping.items():
             if "{message}" in source and core.startswith(source.split("{message}")[0]):
                 prefix = source.split("{message}")[0]
@@ -823,11 +840,11 @@ class DocumentToolsWindow(QMainWindow):
         ]
 
     def _choose_multiple(self, title: str, file_filter: str) -> list[str]:
-        paths, _ = QFileDialog.getOpenFileNames(self, title, "", file_filter)
+        paths, _ = QFileDialog.getOpenFileNames(self, self._t(title), "", file_filter)
         return paths
 
     def _choose_pdf(self, title: str = "Escolher PDF") -> str | None:
-        path, _ = QFileDialog.getOpenFileName(self, title, "", PDF_FILTER)
+        path, _ = QFileDialog.getOpenFileName(self, self._t(title), "", PDF_FILTER)
         return path or None
 
     def _choose_output_pdf(
@@ -836,7 +853,7 @@ class DocumentToolsWindow(QMainWindow):
         *,
         source_paths: tuple[str, ...] | list[str] = (),
     ) -> str | None:
-        dialog = QFileDialog(self, "Salvar PDF resultante", suggested_name, PDF_FILTER)
+        dialog = QFileDialog(self, self._t("Salvar PDF resultante"), suggested_name, PDF_FILTER)
         dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
         dialog.setFileMode(QFileDialog.FileMode.AnyFile)
         dialog.setDefaultSuffix("pdf")
@@ -853,21 +870,21 @@ class DocumentToolsWindow(QMainWindow):
         if output in sources:
             QMessageBox.warning(
                 self,
-                "Escolha outro nome",
-                "O arquivo de saída não pode substituir um dos arquivos de origem.",
+                self._t("Escolha outro nome"),
+                self._t("O arquivo de saída não pode substituir um dos arquivos de origem."),
             )
             return None
 
         if output.exists():
             answer = QMessageBox.question(
                 self,
-                "Confirmar substituição",
-                f"O arquivo “{output.name}” já existe. Deseja substituí-lo?",
+                self._t("Confirmar substituição"),
+                self._t("O arquivo “{name}” já existe. Deseja substituí-lo?").format(name=output.name),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
             if answer != QMessageBox.StandardButton.Yes:
-                self.status_label.setText("Operação cancelada. O arquivo existente foi preservado.")
+                self.status_label.setText(self._t("Operação cancelada. O arquivo existente foi preservado."))
                 return None
         return str(output)
 
@@ -884,7 +901,7 @@ class DocumentToolsWindow(QMainWindow):
     ) -> None:
         if self._worker is not None and self._worker.isRunning():
             return
-        self.status_label.setText(description)
+        self.status_label.setText(self._t(description))
         self.open_directory_button.hide()
         self.progress.show()
         self.tabs.setEnabled(False)
@@ -902,7 +919,7 @@ class DocumentToolsWindow(QMainWindow):
         worker.start()
 
     def _operation_succeeded(self, message: str) -> None:
-        self.status_label.setText(message)
+        self.status_label.setText(self._t(message))
         self.open_directory_button.setVisible(
             self._pending_output_directory is not None
             and self._pending_output_directory.is_dir()
@@ -910,8 +927,8 @@ class DocumentToolsWindow(QMainWindow):
 
     def _operation_failed(self, message: str) -> None:
         self.open_directory_button.hide()
-        self.status_label.setText(f"Não foi possível concluir a operação: {message}")
-        QMessageBox.warning(self, "Operação não concluída", message)
+        self.status_label.setText(self._t(f"Não foi possível concluir a operação: {message}"))
+        QMessageBox.warning(self, self._t("Operação não concluída"), self._t(message))
 
     def _operation_finished(self) -> None:
         self.progress.hide()
@@ -925,11 +942,11 @@ class DocumentToolsWindow(QMainWindow):
     def _open_output_directory(self) -> None:
         directory = self._pending_output_directory
         if directory is None or not directory.is_dir():
-            self.status_label.setText("A pasta de saída não está disponível.")
+            self.status_label.setText(self._t("A pasta de saída não está disponível."))
             self.open_directory_button.hide()
             return
         if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(directory))):
-            QMessageBox.information(self, APP_NAME, f"Abra esta pasta manualmente:\n{directory}")
+            QMessageBox.information(self, APP_NAME, self._t("Abra esta pasta manualmente:\n{path}").format(path=directory))
 
     def closeEvent(self, event: QCloseEvent) -> None:
         worker = self._worker
@@ -937,7 +954,7 @@ class DocumentToolsWindow(QMainWindow):
             QMessageBox.information(
                 self,
                 APP_NAME,
-                "Uma operação está em andamento. Aguarde a conclusão antes de fechar o aplicativo.",
+                self._t("Uma operação está em andamento. Aguarde a conclusão antes de fechar o aplicativo."),
             )
             event.ignore()
             return
@@ -1027,7 +1044,8 @@ class DocumentToolsWindow(QMainWindow):
     def _add_images(self) -> None:
         paths = self._choose_multiple("Adicionar imagens", IMAGE_FILTER)
         added = self._add_paths(self.image_list, paths)
-        self.status_label.setText(f"{added} imagem(ns) adicionada(s)." if added else "Nenhuma imagem nova adicionada.")
+        status = self._t("{added} imagem(ns) adicionada(s).").format(added=added) if added else self._t("Nenhuma imagem nova adicionada.")
+        self.status_label.setText(status)
 
     @staticmethod
     def _remove_selected(list_widget: QListWidget) -> None:
@@ -1074,7 +1092,7 @@ class DocumentToolsWindow(QMainWindow):
     def _create_pdf_from_images(self) -> None:
         sources = self._all_paths(self.image_list)
         if not sources:
-            QMessageBox.information(self, "Adicionar imagens", "Adicione pelo menos uma imagem primeiro.")
+            QMessageBox.information(self, self._t("Adicionar imagens"), self._t("Adicione pelo menos uma imagem primeiro."))
             return
         output = self._require_output_pdf("imagens.pdf", source_paths=sources)
         if not output:
@@ -1131,12 +1149,13 @@ class DocumentToolsWindow(QMainWindow):
     def _add_pdfs(self) -> None:
         paths = self._choose_multiple("Adicionar PDFs", PDF_FILTER)
         added = self._add_paths(self.pdf_list, paths)
-        self.status_label.setText(f"{added} PDF(s) adicionado(s)." if added else "Nenhum PDF novo adicionado.")
+        status = self._t("{added} PDF(s) adicionado(s).").format(added=added) if added else self._t("Nenhum PDF novo adicionado.")
+        self.status_label.setText(status)
 
     def _merge_pdfs(self) -> None:
         sources = self._all_paths(self.pdf_list)
         if len(sources) < 2:
-            QMessageBox.information(self, "Unir PDFs", "Adicione pelo menos dois PDFs.")
+            QMessageBox.information(self, self._t("Unir PDFs"), self._t("Adicione pelo menos dois PDFs."))
             return
         output = self._require_output_pdf("documentos-unidos.pdf", source_paths=sources)
         if not output:
@@ -1154,11 +1173,11 @@ class DocumentToolsWindow(QMainWindow):
                     if not accepted:
                         return
                     if not password:
-                        QMessageBox.information(self, "Senha necessária", "Informe uma senha não vazia para continuar.")
+                        QMessageBox.information(self, self._t("Senha necessária"), self._t("Informe uma senha não vazia para continuar."))
                         return
                     passwords[index] = password
         except Exception as error:
-            QMessageBox.warning(self, "Não foi possível verificar o PDF", str(error))
+            QMessageBox.warning(self, self._t("Não foi possível verificar o PDF"), self._t(str(error)))
             return
         file_mode = self._output_file_mode()
         self._run_task(
@@ -1218,7 +1237,7 @@ class DocumentToolsWindow(QMainWindow):
         source = self.extract_path.text().strip()
         ranges = self.extract_ranges.text().strip()
         if not source:
-            QMessageBox.information(self, "Escolher PDF", "Escolha o PDF de origem.")
+            QMessageBox.information(self, self._t("Escolher PDF"), self._t("Escolha o PDF de origem."))
             return
         output = self._require_output_pdf(f"{Path(source).stem}-paginas.pdf", source_paths=[source])
         if not output:
@@ -1285,7 +1304,7 @@ class DocumentToolsWindow(QMainWindow):
     def _rotate_pdf(self) -> None:
         source = self.rotate_path.text().strip()
         if not source:
-            QMessageBox.information(self, "Escolher PDF", "Escolha o PDF de origem.")
+            QMessageBox.information(self, self._t("Escolher PDF"), self._t("Escolha o PDF de origem."))
             return
         angle = (90, 180, 270)[self.rotate_angle.currentIndex()]
         ranges = self.rotate_ranges.text().strip() or None
@@ -1362,7 +1381,7 @@ class DocumentToolsWindow(QMainWindow):
         source = self.split_path.text().strip()
         directory = self.split_directory.text().strip()
         if not source or not directory:
-            QMessageBox.information(self, "Dividir PDF", "Escolha o PDF e uma pasta de saída.")
+            QMessageBox.information(self, self._t("Dividir PDF"), self._t("Escolha o PDF e uma pasta de saída."))
             return
         password = self.split_password.text() or None
         self.split_password.clear()
@@ -1718,7 +1737,8 @@ class DocumentToolsWindow(QMainWindow):
     def _add_convert_images(self) -> None:
         paths = self._choose_multiple("Escolher imagens para converter", IMAGE_FILTER)
         added = self._add_paths(self.convert_list, paths)
-        self.status_label.setText(f"{added} imagem(ns) adicionada(s)." if added else "Nenhuma imagem nova adicionada.")
+        status = self._t("{added} imagem(ns) adicionada(s).").format(added=added) if added else self._t("Nenhuma imagem nova adicionada.")
+        self.status_label.setText(status)
 
     def _select_convert_directory(self) -> None:
         path = self._choose_directory("Escolher pasta para salvar as imagens")
@@ -1729,10 +1749,10 @@ class DocumentToolsWindow(QMainWindow):
         sources = self._all_paths(self.convert_list)
         directory_text = self.convert_directory.text().strip()
         if not sources:
-            QMessageBox.information(self, "Converter imagens", "Adicione pelo menos uma imagem.")
+            QMessageBox.information(self, self._t("Converter imagens"), self._t("Adicione pelo menos uma imagem."))
             return
         if not directory_text or not Path(directory_text).is_dir():
-            QMessageBox.information(self, "Pasta de saída", "Escolha uma pasta de saída existente.")
+            QMessageBox.information(self, self._t("Pasta de saída"), self._t("Escolha uma pasta de saída existente."))
             return
 
         image_format = self.convert_format.currentText()
