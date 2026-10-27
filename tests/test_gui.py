@@ -8,6 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtPdf import QPdfDocument
+from PySide6.QtGui import QImage
 from pypdf import PdfWriter
 from PySide6.QtWidgets import QApplication, QAbstractItemView, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton
 
@@ -117,7 +118,7 @@ def test_language_selector_translates_tabs_into_english_and_spanish(qt_app: QApp
         assert "Marca de agua y numeración" in spanish_tabs
         assert "Optimizar PDF" in spanish_tabs
         assert "Flujo por lotes" in spanish_tabs
-        spanish_buttons = [button.text() for button in window.findChildren(__import__("PySide6").QtWidgets.QPushButton)]
+        spanish_buttons = [button.text() for button in window.findChildren(QPushButton)]
         assert "Guardar perfil" in spanish_buttons
         assert "Cargar perfil" in spanish_buttons
         assert "Eliminar perfil" in spanish_buttons
