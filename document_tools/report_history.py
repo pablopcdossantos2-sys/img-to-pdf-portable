@@ -33,7 +33,9 @@ def _clean_profile(profile: dict[str, Any]) -> dict[str, Any]:
     """Keep known processing options only; paths and credentials are never copied."""
     clean: dict[str, Any] = {}
     for key in _PROFILE_FIELDS:
-        value = profile.get(key)
+        if key not in profile:
+            continue
+        value = profile[key]
         if isinstance(value, (str, bool, int, float)) or value is None:
             clean[key] = value
     return clean
