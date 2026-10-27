@@ -16,6 +16,7 @@ Aplicación de escritorio para trabajar localmente con archivos PDF e imágenes,
 - **Reordenar páginas con vista previa:** carga un PDF, arrastra las filas y revisa la página seleccionada en el panel de vista previa. La vista previa sigue la página de origen al mover las filas; cada página debe aparecer exactamente una vez.
 - **Marcas de agua y numeración selectivas:** aplica texto, numeración o ambos a todas las páginas o solo a intervalos (por ejemplo, `2-4, 7`). La numeración conserva la posición original de la página en el documento. El contenido original no se rasteriza.
 - **Optimizar PDF:** elige compresión de streams sin pérdida y eliminación de objetos duplicados, o recomprensión JPEG equilibrada de imágenes opacas con calidad ajustable. Las imágenes transparentes y las imágenes inline se mantienen sin cambios.
+- **Flujo por lotes:** combina rotación, marca de agua/numeración y optimización en una sola operación. Las etapas siguen un orden fijo, usan archivos temporales locales y solo guardan el resultado final si todo termina correctamente.
 - **Protección de salida:** el cuadro de guardado añade la extensión PDF, impide elegir como destino uno de los archivos de origen y solicita confirmación antes de reemplazar un archivo existente.
 
 ### Herramientas para imágenes
@@ -111,9 +112,9 @@ La opción `--selftest` inicializa la interfaz sin mostrar una ventana y termina
 - [x] **Compresión/optimización PDF:** compresión sin pérdida de streams y eliminación de objetos duplicados, más recomprensión JPEG equilibrada con calidad configurable. La recomprensión puede cambiar la apariencia de las imágenes y no garantiza reducir todos los archivos.
 - [x] **Marcas de agua y numeración por intervalos:** selecciona páginas específicas o deja el campo vacío para aplicar a todo el documento; la numeración conserva la referencia de página original.
 - [x] **Vista previa al reordenar:** el panel renderiza la página seleccionada y sigue su número original después de cambiar el orden.
+- [x] **Flujo por lotes:** combina rotación, marca de agua/numeración y optimización sin crear manualmente archivos intermedios.
 
 ### Posibles mejoras futuras
 
 - [ ] Mostrar miniaturas de todas las páginas directamente en la lista de reordenación, además de la vista previa seleccionada.
-- [ ] Crear flujos por lotes para encadenar rotación, marcas de agua, numeración y optimización en una sola ejecución.
 - [ ] Traducir mensajes excepcionales de bibliotecas externas y formatos PDF poco habituales.
