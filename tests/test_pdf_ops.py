@@ -362,6 +362,44 @@ def test_stamp_pdf_applies_watermark_and_page_numbers(tmp_path: Path) -> None:
     assert "2 / 2" in reader.pages[1].extract_text()
 
 
+def test_stamp_pdf_only_changes_selected_pages_and_keeps_original_numbering(
+    tmp_path: Path,
+) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [300, 320, 340, 360])
+    output = tmp_path / "selected.pdf"
+
+    stamp_pdf(
+        source,
+        output,
+        watermark_text="SELECTED",
+        page_numbering=True,
+        page_ranges="2-3",
+    )
+
+    pages = read_pdf(output).pages
+    assert len(pages) == 4
+    assert "SELECTED" not in (pages[0].extract_text() or "")
+    assert "1 / 4" not in (pages[0].extract_text() or "")
+    assert "SELECTED" in (pages[1].extract_text() or "")
+    assert "2 / 4" in (pages[1].extract_text() or "")
+    assert "SELECTED" in (pages[2].extract_text() or "")
+    assert "3 / 4" in (pages[2].extract_text() or "")
+    assert "SELECTED" not in (pages[3].extract_text() or "")
+    assert "4 / 4" not in (pages[3].extract_text() or "")
+
+
+def test_stamp_pdf_rejects_invalid_page_range_without_creating_output(
+    tmp_path: Path,
+) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [300, 320])
+    output = tmp_path / "invalid-ranges.pdf"
+
+    with pytest.raises(ValueError, match="precisa estar entre 1 e 2"):
+        stamp_pdf(source, output, watermark_text="TEST", page_ranges="2-3")
+
+    assert not output.exists()
+
+
 def test_stamp_pdf_rejects_empty_stamp_request(tmp_path: Path) -> None:
     source = create_pdf(tmp_path / "source.pdf", [300])
     output = tmp_path / "stamped.pdf"
