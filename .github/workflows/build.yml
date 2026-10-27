@@ -102,7 +102,7 @@ jobs:
           $zipHash = (Get-FileHash .\dist\PDF-Hub-Windows-x64.zip -Algorithm SHA256).Hash.ToLower()
           "$zipHash  PDF-Hub-Windows-x64.zip" | Set-Content .\dist\PDF-Hub-Windows-x64.zip.sha256 -NoNewline
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: PDF-Hub-Windows-x64
           path: |
@@ -151,7 +151,7 @@ jobs:
           tar -czf dist/PDF-Hub-Linux-x64.tar.gz -C dist PDFHub PDFHub.sha256
           (cd dist && sha256sum PDF-Hub-Linux-x64.tar.gz > PDF-Hub-Linux-x64.tar.gz.sha256)
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: PDF-Hub-Linux-x64
           path: |
@@ -195,7 +195,7 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "dist/PDF Hub.app" "dist/PDF-Hub-macOS-arm64.zip"
           (cd dist && shasum -a 256 PDF-Hub-macOS-arm64.zip > PDF-Hub-macOS-arm64.zip.sha256)
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: PDF-Hub-macOS-arm64
           path: |
