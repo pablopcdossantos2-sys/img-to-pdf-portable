@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
@@ -282,6 +283,29 @@ TRANSLATIONS = {
         "Os perfis guardam somente as opções do fluxo; não incluem caminho do PDF nem senha.": "Profiles store workflow options only; they do not include the PDF path or password.",
         "Não foi possível gerar miniaturas do PDF.": "Could not render PDF thumbnails.",
         "Visualize todas as páginas e arraste para definir a ordem final. Todas as páginas devem permanecer na lista.": "View all page thumbnails and drag them into the final order. Every page must remain in the list.",
+        "Exportar perfil": "Export profile",
+        "Importar perfil": "Import profile",
+        "Arquivos JSON (*.json)": "JSON files (*.json)",
+        "Nenhum perfil salvo para exportar.": "No saved profiles to export.",
+        "Selecione um perfil para exportar:": "Select a profile to export:",
+        "Não foi possível salvar o arquivo de perfil. Verifique a pasta e as permissões.": "Could not save the profile file. Check the folder and permissions.",
+        "Perfil exportado: {name}": "Profile exported: {name}",
+        "Perfil importado: {name}": "Profile imported: {name}",
+        "O arquivo de perfil não contém um objeto JSON.": "The profile file does not contain a JSON object.",
+        "O arquivo contém campos extras ou não reconhecidos.": "The file contains extra or unrecognized fields.",
+        "A versão do perfil não é compatível.": "The profile version is not compatible.",
+        "O nome do perfil é inválido.": "The profile name is invalid.",
+        "O perfil contém opções ausentes ou campos não reconhecidos.": "The profile has missing options or unrecognized fields.",
+        "O perfil contém opções com tipos inválidos.": "The profile contains options with invalid types.",
+        "O ângulo de rotação do perfil é inválido.": "The profile rotation angle is invalid.",
+        "O perfil contém texto inválido ou longo demais.": "The profile contains invalid or oversized text.",
+        "O modo de otimização do perfil é inválido.": "The profile optimization mode is invalid.",
+        "A qualidade do perfil deve ficar entre 50 e 95.": "The profile quality must be between 50 and 95.",
+        "O arquivo de perfil excede o tamanho máximo permitido.": "The profile file exceeds the maximum allowed size.",
+        "O arquivo não é um perfil JSON válido do PDF Hub. Verifique a versão e as opções do arquivo.": "This is not a valid PDF Hub JSON profile. Check the file version and options.",
+        "O PDF contém uma estrutura não suportada ou está danificado. Tente salvar uma nova cópia do PDF antes de processar.": "The PDF contains an unsupported structure or is damaged. Try saving a fresh copy before processing it.",
+        "A imagem não pôde ser processada. Verifique se o arquivo está íntegro e usa um formato compatível.": "The image could not be processed. Check that the file is intact and uses a supported format.",
+        "Não foi possível renderizar o PDF. Ele pode usar recursos não suportados ou estar danificado.": "The PDF could not be rendered. It may use unsupported features or be damaged.",
     },
     "es": {
         "PDF e imagens • v{version} • organizado, seguro e local": "PDF e imágenes • v{version} • organizado, seguro y local",
@@ -483,6 +507,29 @@ TRANSLATIONS = {
         "Os perfis guardam somente as opções do fluxo; não incluem caminho do PDF nem senha.": "Los perfiles solo guardan opciones del flujo; no incluyen la ruta del PDF ni la contraseña.",
         "Não foi possível gerar miniaturas do PDF.": "No se pudieron generar las miniaturas del PDF.",
         "Visualize todas as páginas e arraste para definir a ordem final. Todas as páginas devem permanecer na lista.": "Visualiza todas las miniaturas y arrástralas al orden final. Deben permanecer todas las páginas en la lista.",
+        "Exportar perfil": "Exportar perfil",
+        "Importar perfil": "Importar perfil",
+        "Arquivos JSON (*.json)": "Archivos JSON (*.json)",
+        "Nenhum perfil salvo para exportar.": "No hay perfiles guardados para exportar.",
+        "Selecione um perfil para exportar:": "Selecciona un perfil para exportar:",
+        "Não foi possível salvar o arquivo de perfil. Verifique a pasta e as permissões.": "No se pudo guardar el archivo de perfil. Comprueba la carpeta y los permisos.",
+        "Perfil exportado: {name}": "Perfil exportado: {name}",
+        "Perfil importado: {name}": "Perfil importado: {name}",
+        "O arquivo de perfil não contém um objeto JSON.": "El archivo de perfil no contiene un objeto JSON.",
+        "O arquivo contém campos extras ou não reconhecidos.": "El archivo contiene campos adicionales o no reconocidos.",
+        "A versão do perfil não é compatível.": "La versión del perfil no es compatible.",
+        "O nome do perfil é inválido.": "El nombre del perfil no es válido.",
+        "O perfil contém opções ausentes ou campos não reconhecidos.": "El perfil tiene opciones ausentes o campos no reconocidos.",
+        "O perfil contém opções com tipos inválidos.": "El perfil contiene opciones con tipos no válidos.",
+        "O ângulo de rotação do perfil é inválido.": "El ángulo de rotación del perfil no es válido.",
+        "O perfil contém texto inválido ou longo demais.": "El perfil contiene texto no válido o demasiado largo.",
+        "O modo de otimização do perfil é inválido.": "El modo de optimización del perfil no es válido.",
+        "A qualidade do perfil deve ficar entre 50 e 95.": "La calidad del perfil debe estar entre 50 y 95.",
+        "O arquivo de perfil excede o tamanho máximo permitido.": "El archivo de perfil supera el tamaño máximo permitido.",
+        "O arquivo não é um perfil JSON válido do PDF Hub. Verifique a versão e as opções do arquivo.": "El archivo no es un perfil JSON válido de PDF Hub. Comprueba la versión y las opciones.",
+        "O PDF contém uma estrutura não suportada ou está danificado. Tente salvar uma nova cópia do PDF antes de processar.": "El PDF contiene una estructura no compatible o está dañado. Intenta guardar una copia nueva antes de procesarlo.",
+        "A imagem não pôde ser processada. Verifique se o arquivo está íntegro e usa um formato compatível.": "No se pudo procesar la imagen. Comprueba que el archivo esté íntegro y tenga un formato compatible.",
+        "Não foi possível renderizar o PDF. Ele pode usar recursos não suportados ou estar danificado.": "No se pudo renderizar el PDF. Puede usar funciones no compatibles o estar dañado.",
     }
 }
 
@@ -555,9 +602,18 @@ class OperationWorker(QThread):
         if isinstance(error, FileExistsError):
             return f"Um arquivo de destino já existe. Escolha outra pasta ou nome. Detalhe: {error}"
         error_type = error.__class__.__name__
+        module_name = error.__class__.__module__
         if error_type in {"UnidentifiedImageError", "DecompressionBombError"}:
             return "A imagem é inválida, muito grande para processar com segurança ou usa um formato não suportado."
-        if error_type in {"PdfReadError", "PdfStreamError", "WrongPasswordError"}:
+        if error_type == "WrongPasswordError":
+            return "Não foi possível interpretar o PDF. Ele pode estar danificado ou protegido por senha."
+        if module_name.startswith("pypdf"):
+            return "O PDF contém uma estrutura não suportada ou está danificado. Tente salvar uma nova cópia do PDF antes de processar."
+        if module_name.startswith("PIL"):
+            return "A imagem não pôde ser processada. Verifique se o arquivo está íntegro e usa um formato compatível."
+        if module_name.startswith("PySide6.QtPdf"):
+            return "Não foi possível renderizar o PDF. Ele pode usar recursos não suportados ou estar danificado."
+        if error_type in {"PdfReadError", "PdfStreamError"}:
             return "Não foi possível interpretar o PDF. Ele pode estar danificado ou protegido por senha."
         return str(error) or error_type
 
@@ -2014,9 +2070,15 @@ class DocumentToolsWindow(QMainWindow):
         load_profile.clicked.connect(self._load_pipeline_profile)
         delete_profile = QPushButton("Excluir perfil")
         delete_profile.clicked.connect(self._delete_pipeline_profile)
+        export_profile = QPushButton("Exportar perfil")
+        export_profile.clicked.connect(self._export_pipeline_profile)
+        import_profile = QPushButton("Importar perfil")
+        import_profile.clicked.connect(self._import_pipeline_profile)
         profile_actions.addWidget(save_profile)
         profile_actions.addWidget(load_profile)
         profile_actions.addWidget(delete_profile)
+        profile_actions.addWidget(export_profile)
+        profile_actions.addWidget(import_profile)
         profile_actions.addStretch(1)
         layout.addLayout(profile_actions)
         profile_note = QLabel(
@@ -2243,6 +2305,138 @@ class DocumentToolsWindow(QMainWindow):
             "pipeline_profiles", json.dumps(profiles, ensure_ascii=False, sort_keys=True)
         )
         self.status_label.setText(self._t("Perfil excluído: {name}").format(name=name))
+
+    @staticmethod
+    def _validate_pipeline_profile_document(document: object) -> tuple[str, dict[str, object]]:
+        """Validate an exported JSON profile and discard anything outside the schema."""
+        if not isinstance(document, dict):
+            raise ValueError("O arquivo de perfil não contém um objeto JSON.")
+        if set(document) != {"schema_version", "name", "profile"}:
+            raise ValueError("O arquivo contém campos extras ou não reconhecidos.")
+        if document.get("schema_version") != 1:
+            raise ValueError("A versão do perfil não é compatível.")
+        name = document.get("name")
+        profile = document.get("profile")
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 80:
+            raise ValueError("O nome do perfil é inválido.")
+        required = {
+            "rotate_enabled", "rotate_angle", "rotate_ranges",
+            "stamp_enabled", "stamp_text", "page_numbering", "stamp_ranges",
+            "optimize_enabled", "optimize_mode", "quality",
+        }
+        if not isinstance(profile, dict) or set(profile) != required:
+            raise ValueError("O perfil contém opções ausentes ou campos não reconhecidos.")
+        for key in ("rotate_enabled", "stamp_enabled", "page_numbering", "optimize_enabled"):
+            if not isinstance(profile[key], bool):
+                raise ValueError("O perfil contém opções com tipos inválidos.")
+        if not isinstance(profile["rotate_angle"], int) or isinstance(profile["rotate_angle"], bool) or profile["rotate_angle"] not in (90, 180, 270):
+            raise ValueError("O ângulo de rotação do perfil é inválido.")
+        for key, max_length in (("rotate_ranges", 200), ("stamp_text", 500), ("stamp_ranges", 200)):
+            value = profile[key]
+            if not isinstance(value, str) or len(value) > max_length:
+                raise ValueError("O perfil contém texto inválido ou longo demais.")
+        if profile["optimize_mode"] not in ("lossless", "balanced"):
+            raise ValueError("O modo de otimização do perfil é inválido.")
+        quality = profile["quality"]
+        if not isinstance(quality, int) or isinstance(quality, bool) or not 50 <= quality <= 95:
+            raise ValueError("A qualidade do perfil deve ficar entre 50 e 95.")
+        # Copy only the known settings keys; no path, password, or unknown data can persist.
+        return name.strip(), {key: profile[key] for key in required}
+
+    def _export_pipeline_profile(self) -> None:
+        profiles = self._read_pipeline_profiles()
+        if not profiles:
+            QMessageBox.information(
+                self, self._t("Exportar perfil"), self._t("Nenhum perfil salvo para exportar.")
+            )
+            return
+        names = sorted(profiles, key=str.casefold)
+        name, accepted = QInputDialog.getItem(
+            self, self._t("Exportar perfil"), self._t("Selecione um perfil para exportar:"), names, 0, False
+        )
+        if not accepted or name not in profiles:
+            return
+        suggested_stem = re.sub(r"[^A-Za-z0-9._ -]+", "_", name).strip().replace(" ", "-")
+        if not suggested_stem:
+            suggested_stem = "pdf-hub-profile"
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            self._t("Exportar perfil"),
+            f"{suggested_stem}.json",
+            self._t("Arquivos JSON (*.json)"),
+        )
+        if not filename:
+            return
+        output = Path(filename).expanduser()
+        if output.suffix.lower() != ".json":
+            output = output.with_suffix(".json")
+        output = output.resolve()
+        document = {
+            "schema_version": 1,
+            "name": name,
+            "profile": profiles[name],
+        }
+        temporary: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=str(output.parent),
+                prefix=".pdf-hub-profile-",
+                suffix=".tmp",
+                delete=False,
+            ) as stream:
+                temporary = Path(stream.name)
+                json.dump(document, stream, ensure_ascii=False, indent=2, sort_keys=True)
+                stream.write("\n")
+            temporary.replace(output)
+        except OSError:
+            QMessageBox.warning(
+                self,
+                self._t("Exportar perfil"),
+                self._t("Não foi possível salvar o arquivo de perfil. Verifique a pasta e as permissões."),
+            )
+            return
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+        self.status_label.setText(self._t("Perfil exportado: {name}").format(name=name))
+
+    def _import_pipeline_profile(self) -> None:
+        filename, _ = QFileDialog.getOpenFileName(
+            self, self._t("Importar perfil"), "", self._t("Arquivos JSON (*.json)")
+        )
+        if not filename:
+            return
+        source = Path(filename).expanduser()
+        try:
+            if source.stat().st_size > 128 * 1024:
+                raise ValueError("O arquivo de perfil excede o tamanho máximo permitido.")
+            document = json.loads(source.read_text(encoding="utf-8"))
+            name, profile = self._validate_pipeline_profile_document(document)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            QMessageBox.warning(
+                self,
+                self._t("Importar perfil"),
+                self._t("O arquivo não é um perfil JSON válido do PDF Hub. Verifique a versão e as opções do arquivo."),
+            )
+            return
+        profiles = self._read_pipeline_profiles()
+        if name in profiles:
+            answer = QMessageBox.question(
+                self,
+                self._t("Importar perfil"),
+                self._t("Já existe um perfil chamado '{name}'. Deseja substituí-lo?").format(name=name),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        profiles[name] = profile
+        self.settings.setValue(
+            "pipeline_profiles", json.dumps(profiles, ensure_ascii=False, sort_keys=True)
+        )
+        self.status_label.setText(self._t("Perfil importado: {name}").format(name=name))
 
     def _update_pipeline_controls(self) -> None:
         rotate_enabled = self.pipeline_rotate_enabled.isChecked()
