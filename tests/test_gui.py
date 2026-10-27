@@ -390,7 +390,7 @@ def test_pipeline_profile_json_export_import_round_trip_excludes_sensitive_data(
         window._export_pipeline_profile()
         document = json.loads(target.read_text(encoding="utf-8"))
         assert document == {
-            "schema_version": 1,
+            "schema_version": 2,
             "name": "Portable review",
             "profile": profile,
         }

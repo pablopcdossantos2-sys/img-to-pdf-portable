@@ -16,8 +16,8 @@ A desktop application for working with PDF files and images locally, built with 
 - **Reorder pages with thumbnails and preview:** every page appears as a thumbnail in a grid; drag to change the order and inspect the selected page in the preview panel. Thumbnails render in the background and track the original page; every page must appear exactly once.
 - **Selective watermarks and page numbers:** apply text, numbering, or both to all pages or only selected ranges (for example, `2-4, 7`). Numbering retains the page's original position in the document. Original content is not rasterized.
 - **Optimize PDF:** choose lossless stream compression/deduplication or balanced JPEG recompression of opaque raster images with adjustable quality. Transparent and inline images are left unchanged.
-- **Batch workflow:** combine rotation, watermark/page numbering, and optimization in one operation. Steps run in a fixed order, use local temporary files, and only complete the final save if the sequence succeeds.
-- **Reusable batch profiles:** save, load, and delete named profiles in local preferences, or export/import them as JSON to move them between computers. The file uses a validated schema version and stores processing options only; PDF paths and passwords are never included. Unknown fields and invalid options are rejected.
+- **Batch workflow:** combine rotation, watermark/page numbering, and optimization in one operation, or apply a saved profile to all PDFs in a folder. Each PDF receives an individual result; a failure does not stop the remaining files. Export a CSV report and optionally preserve subfolders.
+- **Reusable batch profiles:** save, load, and delete named profiles in local preferences, or export/import them as JSON. Schema 2 automatically migrates older schema 1 profiles, preserving their settings and adding a default output suffix. PDF paths and passwords are never included; unknown fields and invalid options are rejected.
 - **Safer output handling:** the save dialog adds the PDF extension, prevents choosing a source file as the output, and asks before replacing an existing file.
 
 ### Image tools
@@ -52,7 +52,7 @@ The **PDF Hub CI, security and packages** workflow tests the app and builds port
 
 The artifact includes the runtime and does not require a separate Python installation. Windows may show a security warning for downloaded files; verify the source before running the application.
 
-> GitHub Actions artifacts are temporary and expire according to the configured retention period. Versioned GitHub Releases are created when a tag such as `v0.7.0` is pushed. The executables are not digitally signed/notarized; Windows SmartScreen or macOS Gatekeeper may display a warning.
+> GitHub Actions artifacts are temporary and expire according to the configured retention period. Versioned GitHub Releases are created when a tag such as `v0.8.0` is pushed. The executables are not digitally signed/notarized; Windows SmartScreen or macOS Gatekeeper may display a warning.
 
 ## Run from source
 
@@ -106,7 +106,7 @@ The `--selftest` option initializes the interface in headless mode and exits wit
 
 ## ROADMAP
 
-### Completed through version 0.7.0
+### Completed through version 0.8.0
 
 - [x] **Multilingual interface:** switch between Brazilian Portuguese, English, and Spanish, including tabs and the main controls.
 - [x] **Visual page reordering:** drag pages into a new order and save the PDF; every page is required exactly once.
@@ -117,7 +117,9 @@ The `--selftest` option initializes the interface in headless mode and exits wit
 - [x] **Reusable JSON profiles:** export/import profiles between computers with schema-version validation and rejection of unknown fields; profiles exclude paths and passwords.
 - [x] **Translated library errors:** common PDF-structure, rendering, and image-processing failures are shown in clearer language across all three locales.
 
+- [x] **Folder processing with saved profiles:** process PDFs sequentially, record per-file success/failure, optionally include subfolders, and export a CSV report.
+- [x] **Profile schema migrations:** older schema 1 profiles are automatically upgraded to schema 2 with strict validation.
+
 ### Possible next improvements
 
-- [ ] Apply a saved profile to multiple PDFs in a folder, with per-file success/failure reporting.
-- [ ] Add schema migrations so profiles remain importable as new workflow options are introduced.
+- [ ] Allow interrupted folder batches to be paused and resumed without repeating completed PDFs.

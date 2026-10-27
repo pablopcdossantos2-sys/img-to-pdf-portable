@@ -16,8 +16,8 @@ Aplicación de escritorio para trabajar localmente con archivos PDF e imágenes,
 - **Reordenar páginas con miniaturas y vista previa:** cada página aparece como miniatura en una cuadrícula; arrastra para cambiar el orden y revisa la página seleccionada en el panel de vista previa. Las miniaturas se generan en segundo plano y siguen la página original. Cada página debe aparecer exactamente una vez.
 - **Marcas de agua y numeración selectivas:** aplica texto, numeración o ambos a todas las páginas o solo a intervalos (por ejemplo, `2-4, 7`). La numeración conserva la posición original de la página en el documento. El contenido original no se rasteriza.
 - **Optimizar PDF:** elige compresión de streams sin pérdida y eliminación de objetos duplicados, o recomprensión JPEG equilibrada de imágenes opacas con calidad ajustable. Las imágenes transparentes y las imágenes inline se mantienen sin cambios.
-- **Flujo por lotes:** combina rotación, marca de agua/numeración y optimización en una sola operación. Las etapas siguen un orden fijo, usan archivos temporales locales y solo guardan el resultado final si todo termina correctamente.
-- **Perfiles reutilizables por lotes:** guarda, carga y elimina perfiles con nombre en las preferencias locales, o expórtalos/importarlos como JSON para transferirlos entre equipos. El archivo usa una versión de esquema validada y solo contiene opciones de procesamiento; nunca incluye rutas de PDF ni contraseñas. Se rechazan campos desconocidos y opciones no válidas.
+- **Flujo por lotes:** combina rotación, marca de agua/numeración y optimización en una sola operación, o aplica un perfil guardado a todos los PDF de una carpeta. Cada PDF obtiene un resultado individual; un error no detiene los demás archivos. El informe se puede exportar a CSV y es posible conservar subcarpetas.
+- **Perfiles reutilizables por lotes:** guarda, carga y elimina perfiles con nombre en las preferencias locales, o expórtalos/importarlos como JSON. El esquema 2 migra automáticamente los perfiles antiguos del esquema 1, conserva sus opciones y añade un sufijo de salida predeterminado. Nunca incluye rutas de PDF ni contraseñas; se rechazan campos desconocidos y opciones no válidas.
 - **Protección de salida:** el cuadro de guardado añade la extensión PDF, impide elegir como destino uno de los archivos de origen y solicita confirmación antes de reemplazar un archivo existente.
 
 ### Herramientas para imágenes
@@ -52,7 +52,7 @@ El flujo **PDF Hub CI, security and packages** prueba la aplicación y genera pa
 
 El artefacto incluye el entorno de ejecución y no requiere instalar Python por separado. Windows puede mostrar una advertencia de seguridad para archivos descargados; verifica el origen antes de ejecutar la aplicación.
 
-> Los artefactos de GitHub Actions son temporales y caducan según el periodo de retención configurado. Las versiones permanentes se generan al enviar una etiqueta como `v0.7.0`. Los ejecutables no tienen firma digital/notarización; Windows SmartScreen o macOS Gatekeeper pueden mostrar una advertencia.
+> Los artefactos de GitHub Actions son temporales y caducan según el periodo de retención configurado. Las versiones permanentes se generan al enviar una etiqueta como `v0.8.0`. Los ejecutables no tienen firma digital/notarización; Windows SmartScreen o macOS Gatekeeper pueden mostrar una advertencia.
 
 ## Ejecutar desde el código fuente
 
@@ -106,7 +106,7 @@ La opción `--selftest` inicializa la interfaz sin mostrar una ventana y termina
 
 ## ROADMAP
 
-### Completado hasta la versión 0.7.0
+### Completado hasta la versión 0.8.0
 
 - [x] **Interfaz multilingüe:** cambia entre portugués brasileño, inglés y español, incluidas las pestañas y los controles principales.
 - [x] **Reordenación visual:** arrastra las páginas al nuevo orden y guarda el PDF; cada página debe aparecer exactamente una vez.
@@ -117,7 +117,9 @@ La opción `--selftest` inicializa la interfaz sin mostrar una ventana y termina
 - [x] **Perfiles JSON reutilizables:** exporta/importa perfiles entre equipos con validación de versión/esquema y rechazo de campos desconocidos; los perfiles excluyen rutas y contraseñas.
 - [x] **Errores de bibliotecas traducidos:** los fallos habituales de estructura PDF, renderizado e imágenes se muestran con mensajes más claros en los tres idiomas.
 
+- [x] **Procesamiento de carpetas con perfil guardado:** procesa los PDF en secuencia, registra el éxito/error por archivo, permite incluir subcarpetas y exporta un informe CSV.
+- [x] **Migraciones de esquema de perfiles:** los perfiles antiguos del esquema 1 se convierten automáticamente al esquema 2 con validación estricta.
+
 ### Posibles mejoras futuras
 
-- [ ] Aplicar un perfil guardado a varios PDFs de una carpeta, con un informe individual de éxito/error.
-- [ ] Añadir migraciones de esquema para mantener importables los perfiles cuando se incorporen nuevas opciones.
+- [ ] Permitir pausar y reanudar lotes interrumpidos sin repetir los PDF ya completados.
