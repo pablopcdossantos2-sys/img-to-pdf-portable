@@ -36,7 +36,7 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, desenvolvido co
 - Testes automatizados e auditoria de dependências executados no GitHub Actions. O pipeline valida os pacotes de Windows, Linux e macOS e gera checksums SHA-256.
 
 
-## Usar no Windows sem instalar Python
+## Baixar pacotes portáteis
 
 O fluxo **PDF Hub CI, security and packages** testa o projeto e gera pacotes portáteis para Windows x64, Linux x64 e macOS Apple Silicon. Em pushes para `main`, consulte [Actions](https://github.com/pablopcdossantos2-sys/img-to-pdf-portable/actions) para baixar artefatos de validação; releases permanentes são geradas a partir de tags `v*`.
 
@@ -48,7 +48,7 @@ O fluxo **PDF Hub CI, security and packages** testa o projeto e gera pacotes por
 
 O artefato contém o runtime necessário e não exige instalação separada do Python. O Windows pode apresentar um aviso de segurança para arquivos baixados; confirme a origem antes de executar.
 
-> Os artefatos de Actions são temporários e expiram conforme a retenção configurada no GitHub. Releases versionadas são criadas quando uma tag como `v0.3.0` é enviada ao repositório. Os executáveis não são assinados/notarizados digitalmente; Windows SmartScreen e macOS Gatekeeper podem exibir avisos.
+> Os artefatos de Actions são temporários e expiram conforme a retenção configurada no GitHub. Releases versionadas são criadas quando uma tag como `v0.4.0` é enviada ao repositório. Os executáveis não são assinados/notarizados digitalmente; Windows SmartScreen e macOS Gatekeeper podem exibir avisos.
 
 ## Executar a partir do código-fonte
 
