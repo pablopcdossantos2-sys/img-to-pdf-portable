@@ -620,6 +620,7 @@ def stamp_pdf(
     *,
     watermark_text: str | None = None,
     page_numbering: bool = False,
+    page_ranges: str | None = None,
     watermark_position: str = "diagonal",
     page_number_position: str = "bottom-right",
     font_size: int = 34,
@@ -651,8 +652,15 @@ def stamp_pdf(
             writer.append(reader, import_outline=True)
             _copy_metadata(reader, writer)
             total_pages = len(writer.pages)
+            selected_indexes = (
+                set(range(total_pages))
+                if page_ranges is None or not page_ranges.strip()
+                else set(parse_page_ranges(page_ranges, total_pages))
+            )
 
             for index, page in enumerate(writer.pages, start=1):
+                if index - 1 not in selected_indexes:
+                    continue
                 width = float(page.mediabox.width)
                 height = float(page.mediabox.height)
                 overlay_stream = BytesIO()
