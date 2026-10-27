@@ -4,6 +4,8 @@
 
 Aplicativo desktop para trabalhar com PDFs e imagens localmente, desenvolvido com **Python, PySide6, pypdf, Pillow e ReportLab**. A interface pode ser alternada entre português brasileiro, inglês e espanhol; a preferência é salva localmente.
 
+**Download:** [Baixar o PDF Hub (Windows, Linux ou macOS)](https://github.com/pablopcdossantos2-sys/img-to-pdf-portable/releases/latest).
+
 ## Funcionalidades
 
 ### PDFs

@@ -4,6 +4,8 @@
 
 Aplicación de escritorio para trabajar localmente con archivos PDF e imágenes, desarrollada con **Python, PySide6, pypdf, Pillow y ReportLab**. La interfaz se puede cambiar entre portugués brasileño, inglés y español; la preferencia se guarda localmente.
 
+**Descarga:** [Descargar PDF Hub para Windows, Linux o macOS](https://github.com/pablopcdossantos2-sys/img-to-pdf-portable/releases/latest).
+
 ## Funcionalidades
 
 ### Herramientas para PDF
