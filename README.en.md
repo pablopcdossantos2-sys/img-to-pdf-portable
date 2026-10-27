@@ -108,26 +108,3 @@ The executable is created at `dist/PDFHub.exe`. To check that the packaged app c
 ```
 
 The `--selftest` option initializes the interface in headless mode and exits with a success code if startup works.
-
-## ROADMAP
-
-### Completed through version 0.8.0
-
-- [x] **Multilingual interface:** switch between Brazilian Portuguese, English, and Spanish, including tabs and the main controls.
-- [x] **Visual page reordering:** drag pages into a new order and save the PDF; every page is required exactly once.
-- [x] **PDF compression/optimization:** lossless stream compression and duplicate-object removal, plus balanced JPEG recompression with configurable quality. Recompression may change image appearance and does not guarantee every file will shrink.
-- [x] **Page-range watermarks and numbering:** choose specific pages or leave the field blank to apply across the document; numbering retains original page references.
-- [x] **Thumbnails while reordering:** a grid shows all pages, rendered in the background, alongside the selected-page preview.
-- [x] **Batch workflow:** combine rotation, watermark/page numbering, and optimization without manually creating intermediate files.
-- [x] **Reusable JSON profiles:** export/import profiles between computers with schema-version validation and rejection of unknown fields; profiles exclude paths and passwords.
-- [x] **Translated library errors:** common PDF-structure, rendering, and image-processing failures are shown in clearer language across all three locales.
-
-- [x] **Folder processing with saved profiles:** process PDFs sequentially, record per-file success/failure, optionally include subfolders, and export a CSV report. Full reports persist locally between sessions, with options to load or delete entries; the 50 most recent reports are retained.
-- [x] **Profile schema migrations:** older schema 1 profiles are automatically upgraded to schema 2 with strict validation.
-
-### Possible next improvements
-
-- [x] Resume interrupted folder batches: completed results are reused when the source, destination, profile, and file list are unchanged; failures are retried.
-- [x] Manual pause and safe cancellation: pause between PDFs and finish the current file before cancelling, preserving progress for resume.
-- [x] Retry only PDFs that failed in a report, preserving successful results and the failed-file selection when resuming.
-- [x] Save and restore the full report history across application sessions (latest 50 reports, with load and delete actions).
