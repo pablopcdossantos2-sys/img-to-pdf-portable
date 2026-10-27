@@ -598,7 +598,6 @@ def optimize_pdf(
                         converted = image.convert("RGB")
                         image_file.replace(
                             converted,
-                            format="JPEG",
                             quality=quality,
                             optimize=True,
                         )
@@ -606,8 +605,8 @@ def optimize_pdf(
                         if converted is not None:
                             converted.close()
             writer.compress_identical_objects(
-                remove_identicals=True,
-                remove_orphans=True,
+                remove_duplicates=True,
+                remove_unreferenced=True,
             )
             writer.write(temporary)
 
