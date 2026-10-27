@@ -14,6 +14,7 @@ from document_tools.pdf_ops import (
     images_to_pdf,
     merge_pdfs,
     parse_page_ranges,
+    process_pdf_pipeline,
     pdf_requires_user_password,
     pdf_page_count,
     optimize_pdf,
@@ -564,3 +565,60 @@ def test_atomic_pdf_save_preserves_existing_destination_when_writer_fails(
 
     assert destination.read_bytes() == original_content
     assert list(tmp_path.glob(".document-tools-*.pdf")) == []
+
+def test_process_pdf_pipeline_chains_rotation_stamping_and_optimization(
+    tmp_path: Path,
+) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [110, 120, 130, 140])
+    original = source.read_bytes()
+    output = tmp_path / "pipeline.pdf"
+
+    process_pdf_pipeline(
+        source,
+        output,
+        rotate_angle=90,
+        rotate_ranges="2",
+        watermark_text="BATCH",
+        page_numbering=True,
+        stamp_ranges="3",
+        optimize_mode="lossless",
+    )
+
+    pages = read_pdf(output).pages
+    assert len(pages) == 4
+    assert int(pages[1].get("/Rotate", 0)) == 90
+    assert "BATCH" not in (pages[0].extract_text() or "")
+    assert "BATCH" in (pages[2].extract_text() or "")
+    assert "3 / 4" in (pages[2].extract_text() or "")
+    assert "BATCH" not in (pages[3].extract_text() or "")
+    assert source.read_bytes() == original
+
+
+def test_process_pdf_pipeline_requires_at_least_one_operation(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [110])
+    output = tmp_path / "pipeline.pdf"
+
+    with pytest.raises(ValueError, match="Selecione pelo menos uma etapa"):
+        process_pdf_pipeline(source, output)
+
+    assert not output.exists()
+
+
+def test_process_pdf_pipeline_preserves_existing_output_on_failed_final_stage(
+    tmp_path: Path,
+) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [110, 120])
+    output = create_pdf(tmp_path / "existing.pdf", [210])
+    original = output.read_bytes()
+
+    with pytest.raises(ValueError, match="precisa estar entre 1 e 2"):
+        process_pdf_pipeline(
+            source,
+            output,
+            rotate_angle=90,
+            watermark_text="BATCH",
+            stamp_ranges="2-3",
+        )
+
+    assert output.read_bytes() == original
+    assert not list(tmp_path.glob("pdf-hub-pipeline-*"))
