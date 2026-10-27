@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 import document_tools.batch_processing as batch
-from document_tools.batch_processing import CHECKPOINT_FILENAME, process_pdf_folder
+from document_tools.batch_processing import BatchControl, CHECKPOINT_FILENAME, process_pdf_folder
 
 
 def make_profile() -> dict[str, object]:
@@ -149,7 +149,7 @@ def test_folder_batch_rejects_output_inside_source_and_empty_folder(tmp_path: Pa
     output = tmp_path / "output"
     output.mkdir()
     with pytest.raises(ValueError, match="não contém arquivos PDF"):
-        process_pdf_folder(source, output)
+        process_pdf_folder(source, output, make_profile())
 
 
 def test_batch_requires_at_least_one_active_operation(tmp_path: Path) -> None:
@@ -161,3 +161,63 @@ def test_batch_requires_at_least_one_active_operation(tmp_path: Path) -> None:
     profile["rotate_enabled"] = False
     with pytest.raises(ValueError, match="pelo menos uma etapa"):
         process_pdf_folder(source, output, profile)
+
+
+
+def test_cancel_preserves_checkpoint_and_resume_skips_completed_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source, output = tmp_path / "input", tmp_path / "output"
+    source.mkdir()
+    output.mkdir()
+    for name in ("a.pdf", "b.pdf", "c.pdf"):
+        (source / name).write_bytes(name.encode("ascii"))
+    processed: list[str] = []
+
+    def fake_pipeline(input_path, output_path, **kwargs):
+        processed.append(Path(input_path).name)
+        Path(output_path).write_bytes(b"processed")
+        return Path(output_path)
+
+    monkeypatch.setattr(batch, "process_pdf_pipeline", fake_pipeline)
+    control = BatchControl()
+
+    def request_cancel_after_first(done: int, total: int, name: str) -> None:
+        if done == 1:
+            control.cancel()
+
+    partial = process_pdf_folder(
+        source, output, make_profile(), resume=True, control=control,
+        progress_callback=request_cancel_after_first,
+    )
+    assert len(partial) == 1
+    assert partial[0].success
+    assert control.was_stopped
+    assert (output / CHECKPOINT_FILENAME).is_file()
+    assert processed == ["a.pdf"]
+
+    resumed = process_pdf_folder(source, output, make_profile(), resume=True, control=BatchControl())
+    assert len(resumed) == 3 and all(item.success for item in resumed)
+    assert resumed[0].message == "Concluído antes da interrupção; resultado reutilizado."
+    assert processed == ["a.pdf", "b.pdf", "c.pdf"]
+    assert not (output / CHECKPOINT_FILENAME).exists()
+
+
+def test_cancel_releases_a_paused_batch_control() -> None:
+    import threading
+
+    control = BatchControl()
+    control.pause()
+    entered = threading.Event()
+    outcome: list[bool] = []
+
+    def wait_for_resume() -> None:
+        entered.set()
+        outcome.append(control.wait_until_resumed())
+
+    worker = threading.Thread(target=wait_for_resume, daemon=True)
+    worker.start()
+    assert entered.wait(timeout=2)
+    control.cancel()
+    worker.join(timeout=2)
+    assert not worker.is_alive()
+    assert outcome == [False]
+    assert control.was_stopped is False

@@ -42,7 +42,7 @@ from PySide6.QtWidgets import (
 )
 
 from document_tools import __version__
-from document_tools.batch_processing import BatchFileResult, process_pdf_folder
+from document_tools.batch_processing import BatchControl, BatchFileResult, process_pdf_folder
 from document_tools.errors import friendly_error_message
 from document_tools.profiles import (
     CURRENT_PROFILE_SCHEMA_VERSION,
@@ -328,6 +328,13 @@ TRANSLATIONS = {
         "Retomar lote interrompido, se aplicável": "Resume an interrupted batch when possible",
         "Usa resultados salvos somente quando a origem, o destino, o perfil e a lista de PDFs não mudaram. Desmarque para iniciar do zero.": "Reuse saved results only when the source, destination, profile, and PDF list are unchanged. Uncheck to start from scratch.",
         "Concluído antes da interrupção; resultado reutilizado.": "Completed before the interruption; reusing this result.",
+        "Pausar lote": "Pause batch",
+        "Retomar lote": "Resume batch",
+        "Cancelar lote": "Cancel batch",
+        "Pausa solicitada; o PDF atual será concluído antes de pausar.": "Pause requested; the current PDF will finish before pausing.",
+        "Retomando lote…": "Resuming batch…",
+        "Cancelamento solicitado; o PDF atual será concluído antes de parar.": "Cancellation requested; the current PDF will finish before stopping.",
+        "Lote cancelado com segurança após {completed} arquivo(s). O progresso foi preservado; execute novamente com a retomada ativada.": "Batch safely cancelled after {completed} file(s). Progress was preserved; run it again with resume enabled.",
         "Processar PDFs de uma pasta": "Process PDFs in a folder",
         "Selecione a pasta de origem e o destino, depois escolha um perfil salvo. Os arquivos originais serão preservados; PDFs com erro não interrompem os demais.": "Choose a source folder and destination, then select a saved profile. Originals are preserved; a failed PDF will not stop the others.",
         "Sufixo usado nos nomes dos PDFs de saída ao processar uma pasta com este perfil.": "Suffix used in output PDF filenames when processing a folder with this profile.",
@@ -590,6 +597,13 @@ TRANSLATIONS = {
         "Retomar lote interrompido, se aplicável": "Reanudar un lote interrumpido cuando sea posible",
         "Usa resultados salvos somente quando a origem, o destino, o perfil e a lista de PDFs não mudaram. Desmarque para iniciar do zero.": "Reutiliza resultados guardados solo si no cambiaron el origen, el destino, el perfil ni la lista de PDF. Desmarca para empezar desde cero.",
         "Concluído antes da interrupção; resultado reutilizado.": "Completado antes de la interrupción; se reutiliza este resultado.",
+        "Pausar lote": "Pausar lote",
+        "Retomar lote": "Reanudar lote",
+        "Cancelar lote": "Cancelar lote",
+        "Pausa solicitada; o PDF atual será concluído antes de pausar.": "Pausa solicitada; el PDF actual terminará antes de pausar.",
+        "Retomando lote…": "Reanudando lote…",
+        "Cancelamento solicitado; o PDF atual será concluído antes de parar.": "Cancelación solicitada; el PDF actual terminará antes de detenerse.",
+        "Lote cancelado com segurança após {completed} arquivo(s). O progresso foi preservado; execute novamente com a retomada ativada.": "Lote cancelado de forma segura tras {completed} archivo(s). Se guardó el progreso; vuelve a ejecutarlo con la reanudación activada.",
         "Processar PDFs de uma pasta": "Procesar PDFs de una carpeta",
         "Selecione a pasta de origem e o destino, depois escolha um perfil salvo. Os arquivos originais serão preservados; PDFs com erro não interrompem os demais.": "Elige una carpeta de origen y un destino, y después selecciona un perfil guardado. Se conservan los originales; un PDF con errores no detendrá los demás.",
         "Sufixo usado nos nomes dos PDFs de saída ao processar uma pasta com este perfil.": "Sufijo usado en los nombres de los PDF de salida al procesar una carpeta con este perfil.",
@@ -708,11 +722,11 @@ class OperationWorker(QThread):
 class BatchFolderWorker(QThread):
     """Process a directory in the background, reporting progress and item results."""
     progress = Signal(int, int, str)
-    succeeded = Signal(object)
+    succeeded = Signal(object, bool)
     failed = Signal(str)
 
     def __init__(self, source_directory: str, output_directory: str, profile: dict[str, object],
-                 *, recursive: bool, file_mode: int, resume: bool) -> None:
+                 *, recursive: bool, file_mode: int, resume: bool, control: BatchControl) -> None:
         super().__init__()
         self._source_directory = source_directory
         self._output_directory = output_directory
@@ -720,6 +734,7 @@ class BatchFolderWorker(QThread):
         self._recursive = recursive
         self._file_mode = file_mode
         self._resume = resume
+        self._control = control
 
     def run(self) -> None:
         try:
@@ -728,11 +743,12 @@ class BatchFolderWorker(QThread):
                 recursive=self._recursive, file_mode=self._file_mode,
                 progress_callback=lambda done, total, name: self.progress.emit(done, total, name),
                 resume=self._resume,
+                control=self._control,
             )
         except Exception as error:
             self.failed.emit(friendly_error_message(error))
             return
-        self.succeeded.emit(results)
+        self.succeeded.emit(results, self._control.was_stopped)
 
 
 class DocumentToolsWindow(QMainWindow):
@@ -749,6 +765,9 @@ class DocumentToolsWindow(QMainWindow):
         self._original_combo_items: dict[QComboBox, list[str]] = {}
         self._original_tab_titles: list[str] = []
         self._worker: QThread | None = None
+        self._batch_control: BatchControl | None = None
+        self._folder_batch_running = False
+        self._folder_batch_tab_index = -1
         self._pending_output_directory: Path | None = None
         self._split_custom_directory = False
         self.reorder_thumbnail_worker: PageThumbnailWorker | None = None
@@ -835,7 +854,7 @@ class DocumentToolsWindow(QMainWindow):
         self.tabs.addTab(self._build_stamp_tab(), "  Marca d'água e numeração  ")
         self.tabs.addTab(self._build_optimize_tab(), "  Otimizar PDF  ")
         self.tabs.addTab(self._build_pipeline_tab(), "  Fluxo em lote  ")
-        self.tabs.addTab(self._build_folder_batch_tab(), "  Processar pasta  ")
+        self._folder_batch_tab_index = self.tabs.addTab(self._build_folder_batch_tab(), "  Processar pasta  ")
         self.tabs.addTab(self._build_convert_tab(), "  Converter imagens  ")
         central_layout.addWidget(self.tabs, 1)
 
@@ -1320,7 +1339,21 @@ class DocumentToolsWindow(QMainWindow):
 
     def _operation_finished(self) -> None:
         self.progress.hide()
-        self.tabs.setEnabled(True)
+        if self._folder_batch_running:
+            for tab_index in range(self.tabs.count()):
+                self.tabs.setTabEnabled(tab_index, True)
+            self.batch_run_button.setEnabled(True)
+            self.batch_choose_source_button.setEnabled(True)
+            self.batch_choose_output_button.setEnabled(True)
+            self.batch_include_subfolders.setEnabled(True)
+            self.batch_resume_checkbox.setEnabled(True)
+            self.batch_pause_button.setText(self._t("Pausar lote"))
+            self.batch_pause_button.setEnabled(False)
+            self.batch_cancel_button.setEnabled(False)
+            self._folder_batch_running = False
+            self._batch_control = None
+        else:
+            self.tabs.setEnabled(True)
         worker = self._worker
         if worker is not None:
             worker.wait()
@@ -2662,9 +2695,9 @@ class DocumentToolsWindow(QMainWindow):
         self.batch_source_directory.setReadOnly(True)
         source_row = QHBoxLayout()
         source_row.addWidget(self.batch_source_directory, 1)
-        choose_source = QPushButton("Escolher pasta de origem")
-        choose_source.clicked.connect(self._select_batch_source_directory)
-        source_row.addWidget(choose_source)
+        self.batch_choose_source_button = QPushButton("Escolher pasta de origem")
+        self.batch_choose_source_button.clicked.connect(self._select_batch_source_directory)
+        source_row.addWidget(self.batch_choose_source_button)
         source_container = QWidget()
         source_container.setLayout(source_row)
         form.addRow("Pasta de origem", source_container)
@@ -2673,9 +2706,9 @@ class DocumentToolsWindow(QMainWindow):
         self.batch_output_directory.setReadOnly(True)
         output_row = QHBoxLayout()
         output_row.addWidget(self.batch_output_directory, 1)
-        choose_output = QPushButton("Escolher pasta de saída")
-        choose_output.clicked.connect(self._select_batch_output_directory)
-        output_row.addWidget(choose_output)
+        self.batch_choose_output_button = QPushButton("Escolher pasta de saída")
+        self.batch_choose_output_button.clicked.connect(self._select_batch_output_directory)
+        output_row.addWidget(self.batch_choose_output_button)
         output_container = QWidget()
         output_container.setLayout(output_row)
         form.addRow("Pasta de saída", output_container)
@@ -2703,6 +2736,14 @@ class DocumentToolsWindow(QMainWindow):
         self.batch_run_button.setObjectName("primaryButton")
         self.batch_run_button.clicked.connect(self._run_pipeline_folder)
         actions.addWidget(self.batch_run_button)
+        self.batch_pause_button = QPushButton("Pausar lote")
+        self.batch_pause_button.setEnabled(False)
+        self.batch_pause_button.clicked.connect(self._toggle_batch_pause)
+        actions.addWidget(self.batch_pause_button)
+        self.batch_cancel_button = QPushButton("Cancelar lote")
+        self.batch_cancel_button.setEnabled(False)
+        self.batch_cancel_button.clicked.connect(self._cancel_batch)
+        actions.addWidget(self.batch_cancel_button)
         actions.addStretch(1)
         self.batch_report_button = QPushButton("Salvar relatório CSV")
         self.batch_report_button.setEnabled(False)
@@ -2761,24 +2802,63 @@ class DocumentToolsWindow(QMainWindow):
         )
         if not accepted or name not in profiles:
             return
+        self._batch_control = BatchControl()
         worker = BatchFolderWorker(
             source, output, profiles[name],
             recursive=self.batch_include_subfolders.isChecked(),
             file_mode=self._output_file_mode(),
             resume=self.batch_resume_checkbox.isChecked(),
+            control=self._batch_control,
         )
         self._worker = worker
+        self._folder_batch_running = True
         self._pending_output_directory = Path(output).expanduser().resolve()
         self.open_directory_button.hide()
         self.status_label.setText(self._t("Executando fluxo em lote…"))
         self.progress.setRange(0, 0)
         self.progress.show()
-        self.tabs.setEnabled(False)
+        for tab_index in range(self.tabs.count()):
+            self.tabs.setTabEnabled(tab_index, tab_index == self._folder_batch_tab_index)
+        self.batch_run_button.setEnabled(False)
+        self.batch_choose_source_button.setEnabled(False)
+        self.batch_choose_output_button.setEnabled(False)
+        self.batch_include_subfolders.setEnabled(False)
+        self.batch_resume_checkbox.setEnabled(False)
+        self.batch_report_button.setEnabled(False)
+        self.batch_pause_button.setText(self._t("Pausar lote"))
+        self.batch_pause_button.setEnabled(True)
+        self.batch_cancel_button.setEnabled(True)
         worker.progress.connect(self._batch_progress_changed)
         worker.succeeded.connect(self._batch_operation_succeeded)
         worker.failed.connect(self._operation_failed)
         worker.finished.connect(self._operation_finished)
         worker.start()
+
+    def _toggle_batch_pause(self) -> None:
+        control = self._batch_control
+        if control is None or not self._folder_batch_running:
+            return
+        if control.is_paused:
+            control.resume()
+            self.batch_pause_button.setText(self._t("Pausar lote"))
+            self.status_label.setText(self._t("Retomando lote…"))
+        else:
+            control.pause()
+            self.batch_pause_button.setText(self._t("Retomar lote"))
+            self.status_label.setText(self._t(
+                "Pausa solicitada; o PDF atual será concluído antes de pausar."
+            ))
+
+    def _cancel_batch(self) -> None:
+        control = self._batch_control
+        if control is None or not self._folder_batch_running:
+            return
+        control.cancel()
+        self.batch_pause_button.setEnabled(False)
+        self.batch_cancel_button.setEnabled(False)
+        self.status_label.setText(self._t(
+            "Cancelamento solicitado; o PDF atual será concluído antes de parar."
+        ))
 
     def _batch_progress_changed(self, completed: int, total: int, filename: str) -> None:
         self.progress.setRange(0, total)
@@ -2787,7 +2867,7 @@ class DocumentToolsWindow(QMainWindow):
             completed=completed, total=total, name=filename
         ))
 
-    def _batch_operation_succeeded(self, results: object) -> None:
+    def _batch_operation_succeeded(self, results: object, cancelled: bool = False) -> None:
         if not isinstance(results, list) or not all(isinstance(item, BatchFileResult) for item in results):
             self._operation_failed("Não foi possível gerar o relatório individual do lote.")
             return
@@ -2808,9 +2888,14 @@ class DocumentToolsWindow(QMainWindow):
             successes += int(result.success)
             failures += int(not result.success)
         self.batch_report_button.setEnabled(bool(results))
-        self.status_label.setText(self._t(
-            "Lote concluído: {success} sucesso(s), {failed} falha(s) de {total} PDF(s)."
-        ).format(success=successes, failed=failures, total=len(results)))
+        if cancelled:
+            self.status_label.setText(self._t(
+                "Lote cancelado com segurança após {completed} arquivo(s). O progresso foi preservado; execute novamente com a retomada ativada."
+            ).format(completed=len(results)))
+        else:
+            self.status_label.setText(self._t(
+                "Lote concluído: {success} sucesso(s), {failed} falha(s) de {total} PDF(s)."
+            ).format(success=successes, failed=failures, total=len(results)))
         self.open_directory_button.setVisible(
             self._pending_output_directory is not None and self._pending_output_directory.is_dir()
         )

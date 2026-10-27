@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -27,6 +28,53 @@ class BatchFileResult:
 
 
 ProgressCallback = Callable[[int, int, str], None]
+
+
+class BatchControl:
+    """Thread-safe pause and cancel requests, checked between PDFs."""
+
+    def __init__(self) -> None:
+        self._condition = threading.Condition()
+        self._pause_requested = False
+        self._cancel_requested = False
+        self._stopped = False
+
+    def pause(self) -> None:
+        with self._condition:
+            if not self._cancel_requested:
+                self._pause_requested = True
+
+    def resume(self) -> None:
+        with self._condition:
+            self._pause_requested = False
+            self._condition.notify_all()
+
+    def cancel(self) -> None:
+        with self._condition:
+            self._cancel_requested = True
+            self._pause_requested = False
+            self._condition.notify_all()
+
+    def wait_until_resumed(self) -> bool:
+        """Block while paused; return False when cancellation has been requested."""
+        with self._condition:
+            while self._pause_requested and not self._cancel_requested:
+                self._condition.wait()
+            return not self._cancel_requested
+
+    @property
+    def is_paused(self) -> bool:
+        with self._condition:
+            return self._pause_requested and not self._cancel_requested
+
+    @property
+    def was_stopped(self) -> bool:
+        with self._condition:
+            return self._stopped
+
+    def mark_stopped(self) -> None:
+        with self._condition:
+            self._stopped = True
 
 
 def _unique_output_path(directory: Path, stem: str, suffix: str) -> Path:
@@ -157,6 +205,7 @@ def process_pdf_folder(
     file_mode: int = 0o600,
     progress_callback: ProgressCallback | None = None,
     resume: bool = False,
+    control: BatchControl | None = None,
 ) -> list[BatchFileResult]:
     """Apply a profile to each PDF, optionally resuming an interrupted batch.
 
@@ -210,6 +259,9 @@ def process_pdf_folder(
     results: list[BatchFileResult] = []
     total = len(sources)
     for completed, source in enumerate(sources, start=1):
+        if control is not None and not control.wait_until_resumed():
+            control.mark_stopped()
+            break
         relative = source.relative_to(source_root).as_posix()
         stored = previous.get(relative)
         if stored is not None and stored.get("success") is True:
@@ -246,6 +298,11 @@ def process_pdf_folder(
         results.append(result)
         if progress_callback is not None:
             progress_callback(completed, total, source.name)
+
+    # On user cancellation, keep the last atomic checkpoint for the next run.
+    # The current PDF is always allowed to finish before this boundary is checked.
+    if control is not None and control.was_stopped:
+        return results
 
     # Mark completion before cleanup. If cleanup is blocked, the completed
     # checkpoint is ignored on the next run instead of suppressing a new batch.
