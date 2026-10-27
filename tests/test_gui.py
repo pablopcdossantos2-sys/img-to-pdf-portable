@@ -12,7 +12,7 @@ from PySide6.QtPdf import QPdfDocument
 from PySide6.QtGui import QImage
 from pypdf import PdfWriter
 from pypdf.errors import PdfReadError
-from PySide6.QtWidgets import QApplication, QAbstractItemView, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton
+from PySide6.QtWidgets import QApplication, QAbstractItemView, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QScrollArea
 from PIL import Image as PILImage
 
 from document_tools.gui import APP_NAME, DocumentToolsWindow, ImageDropList, OperationWorker, PageThumbnailWorker, SideNavigationWidget
@@ -518,12 +518,33 @@ def test_external_pdf_errors_have_translatable_user_friendly_messages(qt_app: QA
 
 
 
+def test_stylesheet_preserves_complete_palette_tokens_and_thumbnail_tiles(qt_app: QApplication) -> None:
+    for theme in ("light", "dark"):
+        stylesheet = DocumentToolsWindow._stylesheet(theme)
+        # No template tokens should leak into Qt stylesheets: partial substitutions
+        # used to create invalid colors such as "#0B1220_MUTED".
+        assert "$" not in stylesheet
+        assert "#172B4D_TEXT" not in stylesheet
+        assert "#0B1220_MUTED" not in stylesheet
+        assert "#263755_TEXT" not in stylesheet
+        assert "QLabel#appTitle { color: #FFFFFF;" in stylesheet
+        assert "QLabel#subtitle { color:" in stylesheet
+        assert "QListWidget#reorderPageList::item" in stylesheet
+        assert "background: #FFFFFF; color:" in stylesheet
+        assert "QLabel#pagePreview" in stylesheet
+
+
 def test_settings_theme_icon_and_left_navigation(qt_app: QApplication) -> None:
     window = DocumentToolsWindow()
     previous_theme = window.settings.value("theme", None)
     previous_language = window.language_combo.currentData()
     try:
         assert isinstance(window.tabs, SideNavigationWidget)
+        assert window.tabs.sidebar.minimumWidth() >= 276
+        navigation_scroll = window.tabs.findChild(QScrollArea, "navigationScroll")
+        assert navigation_scroll is not None
+        assert navigation_scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        assert window.reorder_list.objectName() == "reorderPageList"
         assert not window.windowIcon().isNull()
         assert window.tabs.tabText(window.settings_tab_index) == "Configurações"
         assert window.output_permissions.currentData() in (0o600, 0o644)
