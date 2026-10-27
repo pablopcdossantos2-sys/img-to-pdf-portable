@@ -16,7 +16,7 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, desenvolvido co
 - **Marca d'água e numeração seletivas:** adicione texto, numeração ou ambos a todas as páginas ou apenas a intervalos (por exemplo, `2-4, 7`). Ao selecionar um intervalo, a numeração continua indicando a posição original no documento. O conteúdo original não é rasterizado.
 - **Otimizar PDF:** modo sem perdas para comprimir streams e remover objetos repetidos; modo equilibrado para recomprimir imagens opacas em JPEG com qualidade ajustável. Imagens com transparência e imagens inline são mantidas sem recompressão.
 - **Fluxo em lote:** combine rotação, marca d'água/numeração e otimização em uma única operação. As etapas seguem uma ordem definida, usam temporários locais e só concluem a gravação final quando a sequência termina sem erro.
-- **Perfis de fluxo em lote:** salve, carregue e exclua perfis nomeados nas preferências locais do aplicativo. Um perfil guarda apenas as opções de processamento; não guarda o caminho do PDF nem a senha.
+- **Perfis de fluxo em lote:** salve, carregue e exclua perfis nomeados nas preferências locais. Também é possível exportar/importar perfis em JSON para transferi-los entre computadores. O arquivo tem versão de esquema validada e contém apenas opções de processamento; caminho do PDF e senha nunca são incluídos. Campos desconhecidos ou opções inválidas são recusados.
 - **Proteção de saída:** o diálogo acrescenta a extensão PDF, verifica se o destino é um dos arquivos de origem e pede confirmação antes de substituir um arquivo existente.
 
 ### Imagens
@@ -26,7 +26,7 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, desenvolvido co
 - **CMYK e transparência:** modos que não são aceitos pelo formato de destino são convertidos para formatos compatíveis; a transparência para JPEG/BMP é composta sobre fundo branco.
 
 ### Usabilidade, privacidade e robustez
-- Interface desktop com abas e seletor de idioma (PT-BR/EN/ES), listas reordenáveis, grade de miniaturas com prévia da página selecionada e perfis reutilizáveis de fluxo em lote, duplicação intencional de itens e indicador de processamento. Os diálogos principais, prompts de senha, confirmações e erros comuns de página também acompanham o idioma. As senhas são digitadas em campos protegidos, não são salvas nas preferências e os campos são limpos ao iniciar a operação.
+- Interface desktop com abas e seletor de idioma (PT-BR/EN/ES), listas reordenáveis, grade de miniaturas com prévia da página selecionada e perfis reutilizáveis de fluxo em lote, duplicação intencional de itens e indicador de processamento. Os diálogos principais, prompts de senha, confirmações e erros comuns de página também acompanham o idioma. Erros de parsing do pypdf, renderização Qt PDF e processamento de imagens recebem mensagens genéricas mais claras e traduzidas, sem expor diagnósticos internos. As senhas são digitadas em campos protegidos, não são salvas nas preferências e os campos são limpos ao iniciar a operação.
 - Opções de resolução (DPI) e margem na conversão de imagens para PDF.
 - Operações demoradas fora da thread principal; a janela não fecha enquanto uma operação está ativa.
 - Botão para abrir a pasta de saída depois de concluir a operação.
@@ -50,7 +50,7 @@ O fluxo **PDF Hub CI, security and packages** testa o projeto e gera pacotes por
 
 O artefato contém o runtime necessário e não exige instalação separada do Python. O Windows pode apresentar um aviso de segurança para arquivos baixados; confirme a origem antes de executar.
 
-> Os artefatos de Actions são temporários e expiram conforme a retenção configurada no GitHub. Releases versionadas são criadas quando uma tag como `v0.6.0` é enviada ao repositório. Os executáveis não são assinados/notarizados digitalmente; Windows SmartScreen e macOS Gatekeeper podem exibir avisos.
+> Os artefatos de Actions são temporários e expiram conforme a retenção configurada no GitHub. Releases versionadas são criadas quando uma tag como `v0.7.0` é enviada ao repositório. Os executáveis não são assinados/notarizados digitalmente; Windows SmartScreen e macOS Gatekeeper podem exibir avisos.
 
 ## Executar a partir do código-fonte
 
@@ -104,7 +104,7 @@ A opção `--selftest` cria a interface em modo sem janela visível e encerra co
 
 ## ROADMAP
 
-### Concluído até a versão 0.6.0
+### Concluído até a versão 0.7.0
 
 - [x] **Interface multilíngue:** seletor de idioma com português brasileiro, inglês e espanhol, incluindo as abas e os principais controles.
 - [x] **Reorganização visual:** arraste as páginas na lista e salve o PDF na nova ordem; todas as páginas são exigidas exatamente uma vez.
@@ -112,9 +112,10 @@ A opção `--selftest` cria a interface em modo sem janela visível e encerra co
 - [x] **Marca d'água e numeração por intervalo:** escolha páginas específicas ou deixe o campo vazio para aplicar ao documento inteiro; a numeração preserva a referência à página original.
 - [x] **Miniaturas durante a reorganização:** grade com miniaturas de todas as páginas, carregadas em segundo plano, além da prévia da página selecionada.
 - [x] **Fluxo em lote:** combine rotação, marca d'água/numeração e otimização sem gerar manualmente arquivos intermediários.
-- [x] **Perfis reutilizáveis:** salve/carregue/exclua combinações de etapas nas preferências locais. Os perfis não incluem caminhos de arquivos nem senhas.
+- [x] **Perfis reutilizáveis em JSON:** exporte e importe perfis entre computadores com validação de versão/esquema e rejeição de campos não reconhecidos; os perfis excluem caminhos e senhas.
+- [x] **Erros de bibliotecas traduzidos:** erros comuns de estrutura PDF, renderização e imagem são convertidos em mensagens mais claras nas três línguas.
 
 ### Próximas melhorias possíveis
 
-- [ ] Exportar e importar perfis de fluxo em lote em arquivos JSON para transferi-los entre computadores.
-- [ ] Traduções para mensagens excepcionais emitidas por bibliotecas externas e formatos PDF incomuns.
+- [ ] Aplicar um perfil salvo a vários PDFs de uma pasta em sequência, com relatório individual de sucesso/falha.
+- [ ] Criar migrações de esquema para que perfis antigos continuem importáveis quando novas opções de fluxo forem adicionadas.
