@@ -16,7 +16,7 @@ Aplicación de escritorio para trabajar localmente con archivos PDF e imágenes,
 - **Reordenar páginas con miniaturas y vista previa:** cada página aparece como miniatura en una cuadrícula; arrastra para cambiar el orden y revisa la página seleccionada en el panel de vista previa. Las miniaturas se generan en segundo plano y siguen la página original. Cada página debe aparecer exactamente una vez.
 - **Marcas de agua y numeración selectivas:** aplica texto, numeración o ambos a todas las páginas o solo a intervalos (por ejemplo, `2-4, 7`). La numeración conserva la posición original de la página en el documento. El contenido original no se rasteriza.
 - **Optimizar PDF:** elige compresión de streams sin pérdida y eliminación de objetos duplicados, o recomprensión JPEG equilibrada de imágenes opacas con calidad ajustable. Las imágenes transparentes y las imágenes inline se mantienen sin cambios.
-- **Flujo por lotes:** combina rotación, marca de agua/numeración y optimización en una sola operación, o aplica un perfil guardado a todos los PDF de una carpeta. Cada PDF obtiene un resultado individual; un error no detiene los demás archivos. El informe se puede exportar a CSV y es posible conservar subcarpetas.
+- **Flujo por lotes:** combina rotación, marca de agua/numeración y optimización en una sola operación, o aplica un perfil guardado a todos los PDF de una carpeta. Cada PDF obtiene un resultado individual; un error no detiene los demás archivos. El informe se puede exportar a CSV y es posible conservar subcarpetas. Si se interrumpe un lote, activa la reanudación para reutilizar los PDF ya completados; los archivos que fallaron se vuelven a intentar.
 - **Perfiles reutilizables por lotes:** guarda, carga y elimina perfiles con nombre en las preferencias locales, o expórtalos/importarlos como JSON. El esquema 2 migra automáticamente los perfiles antiguos del esquema 1, conserva sus opciones y añade un sufijo de salida predeterminado. Nunca incluye rutas de PDF ni contraseñas; se rechazan campos desconocidos y opciones no válidas.
 - **Protección de salida:** el cuadro de guardado añade la extensión PDF, impide elegir como destino uno de los archivos de origen y solicita confirmación antes de reemplazar un archivo existente.
 
@@ -122,4 +122,5 @@ La opción `--selftest` inicializa la interfaz sin mostrar una ventana y termina
 
 ### Posibles mejoras futuras
 
-- [ ] Permitir pausar y reanudar lotes interrumpidos sin repetir los PDF ya completados.
+- [x] Reanudar lotes interrumpidos: se reutilizan los resultados completados si no cambian el origen, el destino, el perfil ni la lista de archivos; se vuelven a intentar los errores.
+- [ ] Añadir pausa manual y cancelación segura de los lotes en ejecución.
