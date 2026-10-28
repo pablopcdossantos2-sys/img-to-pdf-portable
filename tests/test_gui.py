@@ -7,7 +7,7 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QCoreApplication, QEvent, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QSize, Qt
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtGui import QImage
 from pypdf import PdfWriter
@@ -187,7 +187,7 @@ def test_reorder_titles_are_below_thumbnails_and_layout_is_stable(qt_app: QAppli
         window.theme_combo.setCurrentIndex(window.theme_combo.findData("dark"))
         dark_pixmap = window.tabs._reorder_pages_button.icon().pixmap(QSize(24, 24))
         assert not dark_pixmap.isNull()
-        assert light_pixmap.toImage() != dark_pixmap.toImage()
+        assert light_pixmap.toImage().pixelColor(10, 12) != dark_pixmap.toImage().pixelColor(10, 12)
     finally:
         window.close()
         window.deleteLater()
