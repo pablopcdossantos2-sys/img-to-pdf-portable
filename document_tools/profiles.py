@@ -22,6 +22,38 @@ def _validate_suffix(value: object) -> str:
     return value
 
 
+def _validate_page_range_syntax(specification: str) -> None:
+    """Validate page-range syntax without expanding ranges or assuming a PDF length."""
+    if not specification.strip():
+        return
+    intervals: list[tuple[int, int | None, str]] = []
+    for raw_segment in specification.split(","):
+        segment = raw_segment.strip()
+        if not segment:
+            raise ValueError("Há um item vazio na lista de páginas.")
+        pieces = [part.strip() for part in segment.split("-")]
+        if len(pieces) == 1 and pieces[0].isdecimal():
+            start = end = int(pieces[0])
+        elif (
+            len(pieces) == 2
+            and pieces[0].isdecimal()
+            and (pieces[1].isdecimal() or pieces[1] == "")
+        ):
+            start = int(pieces[0])
+            end = int(pieces[1]) if pieces[1] else None
+        else:
+            raise ValueError(f"Intervalo de páginas inválido: '{segment}'.")
+        if start < 1 or (end is not None and (end < start or end < 1)):
+            raise ValueError(f"Intervalo de páginas inválido: '{segment}'.")
+        for previous_start, previous_end, _previous_segment in intervals:
+            overlap_start = max(start, previous_start)
+            current_end = end if end is not None else float("inf")
+            prior_end = previous_end if previous_end is not None else float("inf")
+            if overlap_start <= min(current_end, prior_end):
+                raise ValueError(f"A página {overlap_start} foi informada mais de uma vez.")
+        intervals.append((start, end, segment))
+
+
 def validate_profile_options(profile: object, schema_version: int) -> dict[str, object]:
     """Validate one schema and return current-schema values, migrating schema 1."""
     expected = PROFILE_FIELDS_V1 if schema_version == 1 else PROFILE_FIELDS_V2
@@ -42,6 +74,16 @@ def validate_profile_options(profile: object, schema_version: int) -> dict[str, 
     quality = profile["quality"]
     if not isinstance(quality, int) or isinstance(quality, bool) or not 50 <= quality <= 95:
         raise ValueError("A qualidade do perfil deve ficar entre 50 e 95.")
+    _validate_page_range_syntax(profile["rotate_ranges"])
+    _validate_page_range_syntax(profile["stamp_ranges"])
+    stamp_text = profile["stamp_text"]
+    if stamp_text:
+        try:
+            stamp_text.encode("cp1252")
+        except UnicodeEncodeError as error:
+            raise ValueError(
+                "A marca d'água contém caracteres não suportados pela fonte padrão. Use caracteres latinos e símbolos compatíveis."
+            ) from error
     normalized = {key: profile[key] for key in PROFILE_FIELDS_V1}
     normalized["output_suffix"] = DEFAULT_OUTPUT_SUFFIX if schema_version == 1 else _validate_suffix(profile["output_suffix"])
     return normalized
