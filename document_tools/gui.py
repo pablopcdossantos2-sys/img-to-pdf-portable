@@ -736,7 +736,15 @@ def create_app_icon() -> QIcon:
 
 
 TRANSLATIONS["en"].update({
-    "PDF para imagens": "PDF to images",
+    "Excluir páginas": "Delete pages",
+    "Excluir páginas de um PDF": "Delete pages from a PDF",
+    "Informe as páginas que deseja remover. O PDF original será preservado e o resultado será salvo em outro arquivo.": "Enter the pages to remove. The original PDF will be preserved and the result saved to a separate file.",
+    "Páginas a excluir": "Pages to delete",
+    "Ex.: 2, 4-6, 9": "e.g. 2, 4-6, 9",
+    "Use números ou intervalos, como 2, 4-6. É necessário manter pelo menos uma página no PDF resultante.": "Enter page numbers or ranges, such as 2, 4-6. At least one page must remain in the output PDF.",
+    "Escolher PDF para excluir páginas": "Choose PDF to delete pages",
+    "Informe as páginas que deseja excluir.": "Enter the pages you want to delete.",
+    "A exclusão precisa manter pelo menos uma página no PDF.": "At least one page must remain in the PDF.",    "PDF para imagens": "PDF to images",
     "Exportar páginas de PDF como imagens": "Export PDF pages as images",
     "Exporte todas as páginas ou apenas os intervalos escolhidos como arquivos PNG/JPEG.": "Export every page or selected ranges as PNG/JPEG image files.",
     "PDF de origem para exportar": "Source PDF to export",
@@ -793,7 +801,15 @@ TRANSLATIONS["en"].update({
     "{count} arquivos criados em: {directory}": "{count} files created in: {directory}"
 });
 TRANSLATIONS["es"].update({
-    "PDF para imagens": "PDF a imágenes",
+    "Excluir páginas": "Eliminar páginas",
+    "Excluir páginas de um PDF": "Eliminar páginas de un PDF",
+    "Informe as páginas que deseja remover. O PDF original será preservado e o resultado será salvo em outro arquivo.": "Indica las páginas que deseas eliminar. El PDF original se conservará y el resultado se guardará en otro archivo.",
+    "Páginas a excluir": "Páginas que eliminar",
+    "Ex.: 2, 4-6, 9": "Ej.: 2, 4-6, 9",
+    "Use números ou intervalos, como 2, 4-6. É necessário manter pelo menos uma página no PDF resultante.": "Introduce números o intervalos, como 2, 4-6. Debe quedar al menos una página en el PDF resultante.",
+    "Escolher PDF para excluir páginas": "Elegir PDF para eliminar páginas",
+    "Informe as páginas que deseja excluir.": "Indica las páginas que deseas eliminar.",
+    "A exclusão precisa manter pelo menos uma página no PDF.": "Debe quedar al menos una página en el PDF.",    "PDF para imagens": "PDF a imágenes",
     "Exportar páginas de PDF como imagens": "Exportar páginas PDF como imágenes",
     "Exporte todas as páginas ou apenas os intervalos escolhidos como arquivos PNG/JPEG.": "Exporta todas las páginas o solo los intervalos elegidos como archivos PNG/JPEG.",
     "PDF de origem para exportar": "PDF de origen para exportar",
