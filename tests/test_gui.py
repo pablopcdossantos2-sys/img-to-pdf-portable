@@ -899,3 +899,46 @@ def test_window_preserves_space_for_controls_and_aligned_file_pickers(qt_app: QA
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         qt_app.processEvents()
+
+
+def test_pdfsam_mix_and_repeated_insert_tools_are_available_and_translated(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    previous_language = window.language_combo.currentData()
+    try:
+        pt_tabs = [window.tabs.tabText(i).strip() for i in range(window.tabs.count())]
+        assert "Misturar PDFs" in pt_tabs
+        assert "Inserir páginas" in pt_tabs
+        assert window.mix_first_password.echoMode() == QLineEdit.EchoMode.Password
+        assert window.mix_second_password.echoMode() == QLineEdit.EchoMode.Password
+        assert window.insert_target_password.echoMode() == QLineEdit.EchoMode.Password
+        assert window.insert_source_password.echoMode() == QLineEdit.EchoMode.Password
+
+        for field_name in (
+            "mix_first_path",
+            "mix_second_path",
+            "insert_target_path",
+            "insert_source_path",
+        ):
+            field = getattr(window, field_name)
+            row_layout = field.parentWidget().layout()
+            assert row_layout is not None, field_name
+            margins = row_layout.contentsMargins()
+            assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (0, 0, 0, 0)
+
+        window.language_combo.setCurrentIndex(window.language_combo.findData("en"))
+        en_tabs = [window.tabs.tabText(i).strip() for i in range(window.tabs.count())]
+        assert "Mix PDFs" in en_tabs
+        assert "Insert pages" in en_tabs
+
+        window.language_combo.setCurrentIndex(window.language_combo.findData("es"))
+        es_tabs = [window.tabs.tabText(i).strip() for i in range(window.tabs.count())]
+        assert "Mezclar PDF" in es_tabs
+        assert "Insertar páginas" in es_tabs
+    finally:
+        previous_index = window.language_combo.findData(previous_language)
+        if previous_index >= 0:
+            window.language_combo.setCurrentIndex(previous_index)
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
