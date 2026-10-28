@@ -4158,6 +4158,7 @@ class DocumentToolsWindow(QMainWindow):
         browse_dir = QPushButton("Escolher pasta")
         browse_dir.clicked.connect(self._select_convert_directory)
         out_row = QHBoxLayout()
+        out_row.setContentsMargins(0, 0, 0, 0)
         out_row.addWidget(self.convert_directory, 1)
         out_row.addWidget(browse_dir)
         out_container = QWidget()
