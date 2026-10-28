@@ -161,12 +161,25 @@ def _candidate_files(directory: Path) -> list[Path]:
         path for path in directory.glob(f"{_FILENAME_PREFIX}*.json")
         if _ID_PATTERN.fullmatch(path.stem.removeprefix(_FILENAME_PREFIX))
     ]
-    def modified(path: Path) -> tuple[int, str]:
+    def modified(path: Path) -> tuple[float, str]:
+        # Use the report's own timestamp for pruning and display ordering. File mtimes
+        # can change when the history directory is backed up or restored.
         try:
-            timestamp = path.stat().st_mtime_ns
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            timestamp = payload.get("created_timestamp") if isinstance(payload, dict) else None
+            if (
+                isinstance(timestamp, (int, float))
+                and not isinstance(timestamp, bool)
+                and math.isfinite(float(timestamp))
+            ):
+                return float(timestamp), path.name
+        except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
+            pass
+        try:
+            timestamp = path.stat().st_mtime
         except OSError:
-            timestamp = 0
-        return timestamp, path.name
+            timestamp = 0.0
+        return float(timestamp), path.name
     return sorted(paths, key=modified, reverse=True)
 
 
