@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import tempfile
 from io import BytesIO
 from pathlib import Path
 from typing import Callable, Sequence
 
 from PIL import Image, ImageOps
-from pypdf import PdfReader, PdfWriter
+from pypdf import PdfReader, PdfWriter, Transformation
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
 
@@ -62,6 +64,16 @@ def parse_page_ranges(
     return indexes
 
 
+def _same_existing_file(first: Path, second: Path) -> bool:
+    """Detect aliases of the same existing file, including case-insensitive volumes."""
+    if first == second:
+        return True
+    try:
+        return first.exists() and second.exists() and os.path.samefile(first, second)
+    except OSError:
+        return False
+
+
 def _normalise_pdf_paths(
     source_paths: Sequence[str | Path],
     output_path: str | Path,
@@ -74,7 +86,7 @@ def _normalise_pdf_paths(
         raise ValueError("O arquivo de saída precisa ter a extensão .pdf.")
     if not output.parent.is_dir():
         raise FileNotFoundError("A pasta de destino não existe.")
-    if output in sources:
+    if any(_same_existing_file(output, source) for source in sources):
         raise ValueError("O arquivo de saída não pode substituir um arquivo de origem.")
     missing = [str(path) for path in sources if not path.is_file()]
     if missing:
@@ -109,7 +121,27 @@ def _atomic_pdf_save(
         if overwrite:
             os.replace(temporary, output)
         else:
-            os.link(temporary, output)
+            try:
+                os.link(temporary, output)
+            except FileExistsError:
+                raise
+            except OSError:
+                # Hard links are unavailable on some removable/network filesystems.
+                # O_EXCL keeps the no-overwrite guarantee when falling back to a copy.
+                descriptor = os.open(
+                    output,
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                    file_mode,
+                )
+                try:
+                    with os.fdopen(descriptor, "wb") as destination_stream:
+                        with temporary.open("rb") as source_stream:
+                            shutil.copyfileobj(source_stream, destination_stream)
+                        destination_stream.flush()
+                        os.fsync(destination_stream.fileno())
+                except Exception:
+                    output.unlink(missing_ok=True)
+                    raise
             temporary.unlink()
     finally:
         temporary.unlink(missing_ok=True)
@@ -158,9 +190,34 @@ def _copy_metadata(reader: PdfReader, writer: PdfWriter) -> None:
             writer.add_metadata(safe_metadata)
 
 
+def _normalise_high_bit_depth(image: Image.Image) -> Image.Image:
+    """Convert high-bit-depth grayscale data to 8-bit without saturating it to white."""
+    if image.mode.startswith("I;16"):
+        grayscale = image.convert("I")
+        try:
+            return grayscale.point(lambda value: value / 257).convert("L")
+        finally:
+            grayscale.close()
+    if image.mode in {"I", "F"}:
+        low, high = image.getextrema()
+        if not (float(low) == float(low) and float(high) == float(high)):
+            return Image.new("L", image.size, 0)
+        if high > low:
+            if image.mode == "I" and low >= 0 and high <= 65535:
+                scale = 255.0 / 65535.0
+                return image.point(lambda value: value * scale).convert("L")
+            scale = 255.0 / float(high - low)
+            return image.point(lambda value: (value - low) * scale).convert("L")
+        if image.mode == "I" and 0 <= low <= 65535:
+            return Image.new("L", image.size, round(float(low) / 257))
+        return Image.new("L", image.size, 0)
+    return image
+
+
 def _flatten_to_rgb(image: Image.Image) -> Image.Image:
     """Composite transparency over white and return an independent RGB image."""
-    rgba = image.convert("RGBA")
+    normalized = _normalise_high_bit_depth(image)
+    rgba = normalized.convert("RGBA")
     flattened = Image.new("RGB", rgba.size, "white")
     try:
         flattened.paste(rgba, (0, 0), rgba.getchannel("A"))
@@ -169,6 +226,8 @@ def _flatten_to_rgb(image: Image.Image) -> Image.Image:
         raise
     finally:
         rgba.close()
+        if normalized is not image:
+            normalized.close()
     return flattened
 
 
@@ -685,6 +744,12 @@ def split_pdf(
 
 def _format_image_for_output(image: Image.Image, image_format: str) -> Image.Image:
     """Return a copy with a pixel mode supported by the requested output format."""
+    normalized = _normalise_high_bit_depth(image)
+    if normalized is not image:
+        try:
+            return _format_image_for_output(normalized, image_format)
+        finally:
+            normalized.close()
     has_transparency = image.mode in ALPHA_MODES or "transparency" in image.info
     if image_format in {"JPEG", "BMP"} and has_transparency:
         return _flatten_to_rgb(image)
@@ -727,7 +792,7 @@ def convert_image(
         raise ValueError(f"A extensão de saída não corresponde ao formato {image_format}.")
     if not source.is_file():
         raise FileNotFoundError(f"Imagem não encontrada: {source}")
-    if source == output:
+    if _same_existing_file(source, output):
         raise ValueError("O arquivo de saída não pode substituir a imagem de origem.")
     if not output.parent.is_dir():
         raise FileNotFoundError("A pasta de destino não existe.")
@@ -752,6 +817,11 @@ def convert_image(
             icc_profile = opened.info.get("icc_profile")
             image = ImageOps.exif_transpose(opened)
             image.load()
+            normalized = _normalise_high_bit_depth(image)
+            if normalized is not image:
+                if image is not opened:
+                    image.close()
+                image = normalized
             if max_width or max_height:
                 bounds = (max_width or image.width, max_height or image.height)
                 image.thumbnail(bounds, Image.Resampling.LANCZOS)
@@ -867,27 +937,44 @@ def optimize_pdf(
             # pypdf's documented image replacement flow uses a writer cloned from the reader.
             writer = PdfWriter(clone_from=reader)
             for page in writer.pages:
-                images = list(page.images)
                 page.compress_content_streams(level=9)
                 if mode != "balanced":
                     continue
+                try:
+                    images = list(page.images)
+                except Exception:
+                    # Image extraction is optional for optimization; a broken or unusual
+                    # XObject must not make the entire document fail.
+                    continue
                 for image_file in images:
-                    if image_file.is_inline or not image_file.is_displayed:
+                    try:
+                        if image_file.is_inline or not image_file.is_displayed:
+                            continue
+                        image = image_file.image
+                        if image is None:
+                            continue
+                        # Do not rasterize alpha images; pypdf preserves supported source modes.
+                        if image.mode in {"RGBA", "LA", "PA"} or "transparency" in image.info:
+                            continue
+                        before_size = len(image_file.data)
+                        replacement = BytesIO()
+                        image.save(replacement, format="JPEG", quality=quality, optimize=True)
+                        replacement_size = replacement.tell()
+                        replacement.close()
+                        if replacement_size >= before_size:
+                            continue
+                        image_file.replace(image, quality=quality, optimize=True)
+                    except Exception:
+                        # Keep the original resource when pypdf/Pillow cannot process it.
                         continue
-                    image = image_file.image
-                    if image is None:
-                        continue
-                    # Do not rasterize alpha images; pypdf preserves supported source modes.
-                    if image.mode in {"RGBA", "LA", "PA"} or "transparency" in image.info:
-                        continue
-                    # Pass the image extracted from the output document directly, so the
-                    # selected JPEG quality is actually applied to its image XObject.
-                    image_file.replace(image, quality=quality, optimize=True)
             writer.compress_identical_objects(
                 remove_duplicates=True,
                 remove_unreferenced=True,
             )
             writer.write(temporary)
+        # Optimization is optional: never replace a document with a larger one.
+        if temporary.stat().st_size > source.stat().st_size:
+            shutil.copyfile(source, temporary)
 
     _atomic_pdf_save(output, write, file_mode=file_mode)
     return output
@@ -909,6 +996,13 @@ def stamp_pdf(
 ) -> Path:
     """Overlay a text watermark and/or page numbers without rasterizing the source pages."""
     watermark = (watermark_text or "").strip()
+    if watermark:
+        try:
+            watermark.encode("cp1252")
+        except UnicodeEncodeError as error:
+            raise ValueError(
+                "A marca d'água contém caracteres não suportados pela fonte padrão. Use caracteres latinos e símbolos compatíveis."
+            ) from error
     if not watermark and not page_numbering:
         raise ValueError("Informe o texto da marca d'água ou ative a numeração de páginas.")
     if not 8 <= font_size <= 120:
@@ -940,8 +1034,15 @@ def stamp_pdf(
             for index, page in enumerate(writer.pages, start=1):
                 if index - 1 not in selected_indexes:
                     continue
-                width = float(page.mediabox.width)
-                height = float(page.mediabox.height)
+                # Resolve /Rotate into the content before laying out the overlay.
+                # This makes text upright and lets the visible crop box determine placement.
+                if int(page.rotation or 0) % 360:
+                    page.transfer_rotation_to_content()
+                visible_box = page.cropbox
+                width = float(visible_box.width)
+                height = float(visible_box.height)
+                origin_x = float(visible_box.left)
+                origin_y = float(visible_box.bottom)
                 overlay_stream = BytesIO()
                 overlay_canvas = canvas.Canvas(
                     overlay_stream,
@@ -953,7 +1054,25 @@ def stamp_pdf(
                 overlay_canvas.setFillAlpha(opacity)
 
                 if watermark:
-                    overlay_canvas.setFont("Helvetica-Bold", font_size)
+                    font_name = "Helvetica-Bold"
+                    margin = min(18.0, max(3.0, width * 0.04), max(3.0, height * 0.04))
+                    if watermark_position == "diagonal":
+                        angle = 35
+                        max_text_width = min(
+                            max(1.0, (width - 2 * margin) / abs(__import__("math").cos(__import__("math").radians(angle)))),
+                            max(1.0, (height - 2 * margin) / abs(__import__("math").sin(__import__("math").radians(angle)))),
+                        )
+                    else:
+                        max_text_width = max(1.0, width - 2 * margin)
+                    requested_width = stringWidth(watermark, font_name, font_size)
+                    fitted_size = float(font_size)
+                    if requested_width > max_text_width:
+                        fitted_size = font_size * max_text_width / requested_width
+                    if fitted_size < 8:
+                        raise ValueError(
+                            "O texto da marca d'água é longo demais para caber na página. Reduza o texto ou use uma posição central."
+                        )
+                    overlay_canvas.setFont(font_name, fitted_size)
                     if watermark_position == "diagonal":
                         overlay_canvas.translate(width / 2, height / 2)
                         overlay_canvas.rotate(35)
@@ -961,23 +1080,34 @@ def stamp_pdf(
                     elif watermark_position == "center":
                         overlay_canvas.drawCentredString(width / 2, height / 2, watermark)
                     else:
-                        overlay_canvas.drawCentredString(width / 2, 32, watermark)
+                        overlay_canvas.drawCentredString(width / 2, min(32.0, max(8.0, height * 0.04)), watermark)
 
                 if page_numbering:
                     overlay_canvas.setFillAlpha(1)
-                    overlay_canvas.setFont("Helvetica", max(9, min(16, font_size // 2)))
                     page_label = f"{index} / {total_pages}"
+                    label_font_size = float(max(9, min(16, font_size // 2)))
+                    label_width = stringWidth(page_label, "Helvetica", label_font_size)
+                    available_label_width = max(1.0, width - 2 * min(28.0, width * 0.08))
+                    if label_width > available_label_width:
+                        label_font_size *= available_label_width / label_width
+                    overlay_canvas.setFont("Helvetica", label_font_size)
+                    bottom_margin = min(18.0, max(4.0, height * 0.04))
                     if page_number_position == "bottom-center":
-                        overlay_canvas.drawCentredString(width / 2, 18, page_label)
+                        overlay_canvas.drawCentredString(width / 2, bottom_margin, page_label)
                     else:
-                        overlay_canvas.drawRightString(width - 28, 18, page_label)
+                        overlay_canvas.drawRightString(width - min(28.0, width * 0.08), bottom_margin, page_label)
 
                 overlay_canvas.restoreState()
                 overlay_canvas.showPage()
                 overlay_canvas.save()
                 overlay_stream.seek(0)
                 overlay_reader = PdfReader(overlay_stream, strict=False)
-                page.merge_page(overlay_reader.pages[0], over=True, expand=False)
+                page.merge_transformed_page(
+                    overlay_reader.pages[0],
+                    Transformation().translate(tx=origin_x, ty=origin_y),
+                    over=True,
+                    expand=False,
+                )
                 overlay_stream.close()
 
             writer.write(temporary)
