@@ -52,3 +52,31 @@ def test_profile_rejects_unknown_fields_in_every_schema() -> None:
     old["password"] = "never-accept"
     with pytest.raises(ValueError, match="campos não reconhecidos"):
         validate_profile_document({"schema_version": 1, "name": "Injected", "profile": old})
+
+
+
+@pytest.mark.parametrize("key,value", [
+    ("rotate_ranges", "abc"),
+    ("stamp_ranges", "1,,3"),
+    ("rotate_ranges", "1-3, 3-5"),
+])
+def test_profile_rejects_invalid_page_range_syntax(key: str, value: str) -> None:
+    profile = schema_one_profile()
+    profile[key] = value
+    with pytest.raises(ValueError):
+        validate_profile_document({
+            "schema_version": 1,
+            "name": "Invalid ranges",
+            "profile": profile,
+        })
+
+
+def test_profile_rejects_watermark_text_not_supported_by_standard_font() -> None:
+    profile = schema_one_profile()
+    profile["stamp_text"] = "Review 🐾"
+    with pytest.raises(ValueError, match="marca d'água contém caracteres não suportados"):
+        validate_profile_document({
+            "schema_version": 1,
+            "name": "Invalid watermark",
+            "profile": profile,
+        })
