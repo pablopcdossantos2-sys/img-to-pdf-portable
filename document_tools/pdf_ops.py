@@ -208,9 +208,8 @@ def _normalise_high_bit_depth(image: Image.Image) -> Image.Image:
         if not (float(low) == float(low) and float(high) == float(high)):
             return Image.new("L", image.size, 0)
         if high > low:
-            if image.mode == "I" and low >= 0 and high <= 65535:
-                scale = 255.0 / 65535.0
-                return image.point(lambda value: value * scale).convert("L")
+            # Normalize by this image's dynamic range. This preserves ordinary
+            # 0..255 values in Pillow's "I" mode instead of crushing them to black.
             scale = 255.0 / float(high - low)
             return image.point(lambda value: (value - low) * scale).convert("L")
         if image.mode == "I" and 0 <= low <= 65535:
