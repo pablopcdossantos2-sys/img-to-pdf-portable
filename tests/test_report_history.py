@@ -147,13 +147,13 @@ def test_history_pruning_uses_report_timestamp_not_filesystem_mtime(
 def test_save_report_with_surrogate_path(tmp_path: Path, monkeypatch) -> None:
     if os.name == "nt":
         return
-    legacy_path = os.fsdecode(b"/legacy/a\\xe7.pdf")
+    legacy_path = os.fsdecode(bytes([47, 108, 101, 103, 97, 99, 121, 47, 97, 0xE7, 46, 112, 100, 102]))
     saved = save_one(
         tmp_path / "history",
         results=[FakeResult(legacy_path, False, "", "Malformed PDF")],
     )
     history_file = tmp_path / "history" / f"batch-report-{saved['id']}.json"
-    assert "\\\\udce7" in history_file.read_text(encoding="utf-8")
+    assert chr(92) + "udce7" in history_file.read_text(encoding="utf-8")
     loaded = load_batch_history(tmp_path / "history")
     assert loaded[0]["results"][0]["source_path"] == legacy_path
 
