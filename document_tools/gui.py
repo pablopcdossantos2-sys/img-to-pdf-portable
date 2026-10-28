@@ -963,12 +963,18 @@ TRANSLATIONS["en"].update({
     "O texto da marca d'água é longo demais para caber na página. Reduza o texto ou use uma posição central.": "The watermark is too long to fit on the page. Shorten the text or use a centered position.",
     "Não foi possível concluir a operação. Os detalhes internos foram ocultados.": "The operation could not be completed. Internal details were hidden.",
     "Um arquivo de destino já existe. Escolha outra pasta ou nome.": "A destination file already exists. Choose another folder or name.",
+    "A senha do PDF está incorreta ou não foi informada.": "The PDF password is incorrect or was not provided.",
+    "Não foi possível verificar se o PDF exige senha. O arquivo pode estar danificado.": "Could not determine whether the PDF requires a password. The file may be damaged.",
+    "A página ultrapassa o limite seguro de pixels. Reduza a resolução de saída.": "The page exceeds the safe pixel limit. Reduce the output resolution.",
 })
 TRANSLATIONS["es"].update({
     "A marca d'água contém caracteres não suportados pela fonte padrão. Use caracteres latinos e símbolos compatíveis.": "La marca de agua contiene caracteres no compatibles con la fuente integrada. Usa caracteres latinos y símbolos compatibles.",
     "O texto da marca d'água é longo demais para caber na página. Reduza o texto ou use uma posição central.": "La marca de agua es demasiado larga para caber en la página. Acorta el texto o usa una posición centrada.",
     "Não foi possível concluir a operação. Os detalhes internos foram ocultados.": "No se pudo completar la operación. Se ocultaron los detalles internos.",
     "Um arquivo de destino já existe. Escolha outra pasta ou nome.": "Ya existe un archivo de destino. Elige otra carpeta o nombre.",
+    "A senha do PDF está incorreta ou não foi informada.": "La contraseña del PDF es incorrecta o no se proporcionó.",
+    "Não foi possível verificar se o PDF exige senha. O arquivo pode estar danificado.": "No se pudo determinar si el PDF requiere contraseña. El archivo puede estar dañado.",
+    "A página ultrapassa o limite seguro de pixels. Reduza a resolução de saída.": "La página supera el límite seguro de píxeles. Reduce la resolución de salida.",
 })
 
 class ReorderablePageList(QListWidget):
