@@ -177,7 +177,7 @@ def test_reorder_titles_are_below_thumbnails_and_layout_is_stable(qt_app: QAppli
         delegate.initStyleOption(option, window.reorder_list.model().index(0, 0))
         assert option.decorationPosition == QStyleOptionViewItem.Position.Top
         assert window.reorder_list.layoutMode() == QListWidget.LayoutMode.SinglePass
-        assert window.reorder_list.resizeMode() == QListWidget.ResizeMode.Fixed
+        assert window.reorder_list.resizeMode() == QListWidget.ResizeMode.Adjust
         assert window.reorder_list.dragDropMode() == QAbstractItemView.DragDropMode.DragDrop
 
         window.theme_combo.setCurrentIndex(window.theme_combo.findData("light"))
