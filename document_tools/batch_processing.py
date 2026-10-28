@@ -21,10 +21,13 @@ _JOURNAL_VERSION = 1
 _RESUMED_MESSAGE = "Concluído antes da interrupção; resultado reutilizado."
 
 
-def _batch_state_paths(output_root: Path, fingerprint: str) -> tuple[Path, Path]:
-    """Use separate durable state files for each source/profile/inventory fingerprint."""
+def _batch_state_paths(
+    output_root: Path, fingerprint: str, selected_paths: list[str]
+) -> tuple[Path, Path]:
+    """Isolate state by source/profile/inventory and exact selected work list."""
     stem = CHECKPOINT_FILENAME.removesuffix(".json")
-    token = fingerprint[:16]
+    selection = json.dumps(selected_paths, ensure_ascii=True, separators=(",", ":"))
+    token = hashlib.sha256(f"{fingerprint}\\0{selection}".encode("utf-8")).hexdigest()[:16]
     return (
         output_root / f"{stem}-{token}.json",
         output_root / f"{stem}-{token}.jsonl",
@@ -404,7 +407,6 @@ def process_pdf_folder(
 
     suffix = str(settings["output_suffix"])
     fingerprint = _batch_fingerprint(source_root, output_root, recursive, settings, all_sources)
-    checkpoint_path, journal_path = _batch_state_paths(output_root, fingerprint)
     legacy_checkpoint_path = output_root / CHECKPOINT_FILENAME
     legacy_checkpoint_loaded = False
     sources_by_relative = {
@@ -428,6 +430,7 @@ def process_pdf_folder(
         if not requested_paths:
             raise ValueError("Não há PDFs selecionados para reprocessar.")
 
+    checkpoint_path, journal_path = _batch_state_paths(output_root, fingerprint, requested_paths)
     previous: dict[str, dict[str, object]] = {}
     checkpoint_selection: list[str] | None = None
     checkpoint_to_read = checkpoint_path
@@ -446,6 +449,7 @@ def process_pdf_folder(
         ):
             requested_paths = checkpoint_selection
             previous = checkpoint_results
+            legacy_checkpoint_loaded = checkpoint_to_read == legacy_checkpoint_path
 
     work_sources = [sources_by_relative[path] for path in requested_paths]
     if not work_sources:
