@@ -37,7 +37,10 @@ def recommend_dpi_from_images(
                 # The DPI estimate needs dimensions and EXIF orientation, not pixels.
                 opened.seek(0)
                 width, height = opened.size
-                if opened.getexif().get(0x0112) in (5, 6, 7, 8):
+                # Pillow's PNG EXIF reader can call load() to parse metadata.
+                # JPEG EXIF lives in the header, so read its orientation without
+                # decoding the raster; other formats keep their stored dimensions.
+                if opened.format == "JPEG" and opened.getexif().get(0x0112) in (5, 6, 7, 8):
                     width, height = height, width
         except (OSError, ValueError, EOFError, Image.DecompressionBombError):
             continue
