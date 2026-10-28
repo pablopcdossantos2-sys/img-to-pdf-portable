@@ -360,3 +360,34 @@ def test_checkpoint_writes_are_batched_during_large_folders(
     assert all(item.success for item in results)
     assert write_calls == 2  # initial state + after the 10th processed item
     assert not (output / batch.CHECKPOINT_FILENAME).exists()
+
+
+def test_checkpoint_write_failure_does_not_abort_batch_or_lose_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source, output = tmp_path / "input", tmp_path / "output"
+    source.mkdir()
+    output.mkdir()
+    for index in range(12):
+        (source / f"{index:02d}.pdf").write_bytes(b"source")
+
+    def fake_pipeline(_input_path, output_path, **_kwargs):
+        Path(output_path).write_bytes(b"processed")
+        return Path(output_path)
+
+    writes = 0
+
+    def failing_checkpoint(*_args, **_kwargs):
+        nonlocal writes
+        writes += 1
+        if writes >= 2:
+            raise OSError("simulated disk-full error")
+
+    monkeypatch.setattr(batch, "process_pdf_pipeline", fake_pipeline)
+    monkeypatch.setattr(batch, "_write_checkpoint", failing_checkpoint)
+
+    results = process_pdf_folder(source, output, make_profile())
+
+    assert len(results) == 12
+    assert all(result.success for result in results)
+    assert len(list(output.glob("*-processed.pdf"))) == 12
