@@ -108,6 +108,7 @@ TRANSLATIONS = {
         "Escolha os documentos e defina quantas páginas de cada arquivo serão usadas em cada bloco.": "Choose the documents and set how many pages from each file are used in each block.",
         "Primeiro PDF": "First PDF",
         "Segundo PDF": "Second PDF",
+        "Páginas do PDF selecionado (opcional)": "Pages from the selected PDF (optional)",
         "Páginas do primeiro PDF (opcional)": "Pages from the first PDF (optional)",
         "Páginas do segundo PDF (opcional)": "Pages from the second PDF (optional)",
         "Senha do primeiro PDF (opcional)": "First PDF password (optional)",
@@ -459,6 +460,7 @@ TRANSLATIONS = {
         "Escolha os documentos e defina quantas páginas de cada arquivo serão usadas em cada bloco.": "Elige los documentos y define cuántas páginas de cada archivo se usarán en cada bloque.",
         "Primeiro PDF": "Primer PDF",
         "Segundo PDF": "Segundo PDF",
+        "Páginas do PDF selecionado (opcional)": "Páginas del PDF seleccionado (opcional)",
         "Páginas do primeiro PDF (opcional)": "Páginas del primer PDF (opcional)",
         "Páginas do segundo PDF (opcional)": "Páginas del segundo PDF (opcional)",
         "Senha do primeiro PDF (opcional)": "Contraseña del primer PDF (opcional)",
@@ -2141,6 +2143,7 @@ class DocumentToolsWindow(QMainWindow):
             duplicate = QListWidgetItem(original.text())
             duplicate.setToolTip(original.toolTip())
             duplicate.setData(Qt.ItemDataRole.UserRole, original.data(Qt.ItemDataRole.UserRole))
+            duplicate.setData(Qt.ItemDataRole.UserRole + 1, original.data(Qt.ItemDataRole.UserRole + 1))
             list_widget.insertItem(row + 1, duplicate)
             duplicate.setSelected(True)
 
@@ -2194,6 +2197,20 @@ class DocumentToolsWindow(QMainWindow):
         self.pdf_list = self._new_list(extended=True)
         layout.addWidget(self.pdf_list, 1)
 
+        self.merge_page_ranges = QLineEdit()
+        self.merge_page_ranges.setEnabled(False)
+        self.merge_page_ranges.setPlaceholderText(
+            "Deixe em branco para usar todas as páginas; exemplo: 1-3, 5."
+        )
+        merge_ranges_form = QFormLayout()
+        merge_ranges_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        merge_ranges_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        merge_ranges_form.setHorizontalSpacing(12)
+        merge_ranges_form.addRow("Páginas do PDF selecionado (opcional)", self.merge_page_ranges)
+        layout.addLayout(merge_ranges_form)
+        self.pdf_list.currentItemChanged.connect(self._load_merge_selected_range)
+        self.merge_page_ranges.textEdited.connect(self._save_merge_selected_range)
+
         buttons = QGridLayout()
         add = QPushButton("+  Adicionar PDFs")
         add.setObjectName("secondaryButton")
@@ -2231,8 +2248,21 @@ class DocumentToolsWindow(QMainWindow):
     def _add_pdfs(self) -> None:
         paths = self._choose_multiple("Adicionar PDFs", PDF_FILTER)
         added = self._add_paths(self.pdf_list, paths)
+        if added and self.pdf_list.currentRow() < 0 and self.pdf_list.count():
+            self.pdf_list.setCurrentRow(0)
         status = self._t("{added} PDF(s) adicionado(s).").format(added=added) if added else self._t("Nenhum PDF novo adicionado.")
         self.status_label.setText(status)
+
+    def _load_merge_selected_range(self, current, _previous=None) -> None:
+        self.merge_page_ranges.setEnabled(current is not None)
+        self.merge_page_ranges.setText(
+            str(current.data(Qt.ItemDataRole.UserRole + 1) or "") if current is not None else ""
+        )
+
+    def _save_merge_selected_range(self, value: str) -> None:
+        current = self.pdf_list.currentItem()
+        if current is not None:
+            current.setData(Qt.ItemDataRole.UserRole + 1, value.strip())
 
     def _merge_pdfs(self) -> None:
         sources = self._all_paths(self.pdf_list)
@@ -2261,10 +2291,14 @@ class DocumentToolsWindow(QMainWindow):
         except Exception as error:
             QMessageBox.warning(self, self._t("Não foi possível verificar o PDF"), self._t(str(error)))
             return
+        page_ranges = [
+            str(self.pdf_list.item(index).data(Qt.ItemDataRole.UserRole + 1) or "").strip() or None
+            for index in range(self.pdf_list.count())
+        ]
         file_mode = self._output_file_mode()
         self._run_task(
             "Unindo os PDFs…",
-            lambda: f"PDFs unidos: {merge_pdfs(sources, output, passwords=passwords, file_mode=file_mode)}",
+            lambda: f"PDFs unidos: {merge_pdfs(sources, output, passwords=passwords, page_ranges=page_ranges, file_mode=file_mode)}",
             output_location=output,
         )
 
