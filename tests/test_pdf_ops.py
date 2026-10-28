@@ -1006,3 +1006,75 @@ def test_normalizing_integer_mode_preserves_existing_8_bit_grayscale_values() ->
         if normalized is not image:
             normalized.close()
         image.close()
+
+
+
+@pytest.mark.parametrize("rotation", [0, 90, 180, 270])
+def test_stamp_pdf_handles_rotated_pages_and_nonzero_box_origin(
+    tmp_path: Path, rotation: int
+) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [595, 595])
+    writer = PdfWriter()
+    reader = read_pdf(source)
+    page = reader.pages[0]
+    page.mediabox.lower_left = (100, 100)
+    page.mediabox.upper_right = (695, 942)
+    page.cropbox.lower_left = (120, 130)
+    page.cropbox.upper_right = (675, 920)
+    page.rotate(rotation)
+    writer.add_page(page)
+    with (tmp_path / "offset.pdf").open("wb") as stream:
+        writer.write(stream)
+
+    output = tmp_path / f"stamped-{rotation}.pdf"
+    stamp_pdf(tmp_path / "offset.pdf", output, page_numbering=True)
+
+    result = read_pdf(output)
+    assert len(result.pages) == 1
+    assert int(result.pages[0].rotation or 0) == 0
+    assert "1" in (result.pages[0].extract_text() or "")
+    box = result.pages[0].cropbox
+    assert float(box.width) > 0 and float(box.height) > 0
+
+
+def test_16_bit_grayscale_png_keeps_tonal_range_in_pdf_and_jpeg(tmp_path: Path) -> None:
+    source = tmp_path / "gradient.png"
+    gradient = Image.new("I;16", (256, 32))
+    gradient.putdata([round(x * 65535 / 255) for _y in range(32) for x in range(256)])
+    gradient.save(source)
+    gradient.close()
+
+    output_pdf = tmp_path / "gradient.pdf"
+    images_to_pdf([source], output_pdf)
+    output_jpeg = tmp_path / "gradient.jpg"
+    convert_image(source, output_jpeg, "JPEG")
+
+    with Image.open(output_jpeg) as converted:
+        grayscale = converted.convert("L")
+        low, high = grayscale.getextrema()
+        assert high - low > 180
+        grayscale.close()
+
+    # The PDF must contain a non-white image resource after conversion.
+    page = read_pdf(output_pdf).pages[0]
+    assert page.images
+    with Image.open(BytesIO(page.images[0].data)) as embedded:
+        grayscale = embedded.convert("L")
+        low, high = grayscale.getextrema()
+        assert high - low > 180
+        grayscale.close()
+
+
+def test_stamp_rejects_unsupported_unicode_and_fits_long_text(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [595])
+    with pytest.raises(ValueError, match="caracteres não suportados"):
+        stamp_pdf(source, tmp_path / "unsupported.pdf", watermark_text="Секретно")
+
+    output = tmp_path / "long.pdf"
+    stamp_pdf(
+        source, output,
+        watermark_text="ESTE DOCUMENTO E CONFIDENCIAL E DE USO INTERNO",
+        watermark_position="center",
+        font_size=60,
+    )
+    assert "ESTE DOCUMENTO" in (read_pdf(output).pages[0].extract_text() or "")
