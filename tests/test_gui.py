@@ -942,3 +942,31 @@ def test_pdfsam_mix_and_repeated_insert_tools_are_available_and_translated(qt_ap
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         qt_app.processEvents()
+
+
+def test_merge_page_ranges_are_saved_per_input_and_copied_when_duplicating(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    try:
+        for name in ("first.pdf", "second.pdf"):
+            item = QListWidgetItem(name)
+            item.setData(Qt.ItemDataRole.UserRole, name)
+            window.pdf_list.addItem(item)
+
+        window.pdf_list.setCurrentRow(0)
+        assert window.merge_page_ranges.isEnabled()
+        window._save_merge_selected_range("2-")
+        window.pdf_list.setCurrentRow(1)
+        window._save_merge_selected_range("1, 3")
+        window.pdf_list.setCurrentRow(0)
+        assert window.merge_page_ranges.text() == "2-"
+        assert window.pdf_list.currentItem().data(Qt.ItemDataRole.UserRole + 1) == "2-"
+
+        window.pdf_list.item(0).setSelected(True)
+        DocumentToolsWindow._duplicate_selected(window.pdf_list)
+        duplicate = window.pdf_list.item(1)
+        assert duplicate.data(Qt.ItemDataRole.UserRole + 1) == "2-"
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
