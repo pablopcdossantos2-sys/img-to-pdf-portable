@@ -61,7 +61,7 @@ def test_recommend_dpi_swaps_axes_for_exif_orientation_6(tmp_path: Path) -> None
 def test_recommend_dpi_does_not_decode_pixels(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    source = create_image(tmp_path / "header-only.png", (2480, 3508))
+    source = create_image(tmp_path / "header-only.jpg", (2480, 3508))
     def forbidden(*_args, **_kwargs):
         raise AssertionError("DPI estimation should read metadata only")
     monkeypatch.setattr(Image.Image, "load", forbidden)
