@@ -31,3 +31,10 @@ def test_existing_output_error_does_not_include_file_path() -> None:
     message = friendly_error_message(FileExistsError("/private/user/document.pdf"))
     assert message == "Um arquivo de destino já existe. Escolha outra pasta ou nome."
     assert "/private/user" not in message
+
+
+def test_unicode_error_is_friendly() -> None:
+    error = UnicodeEncodeError("utf-8", chr(0xDCFF), 0, 1, "surrogates not allowed")
+    message = friendly_error_message(error)
+    assert "Renomeie o arquivo" in message
+    assert "surrogates not allowed" not in message
