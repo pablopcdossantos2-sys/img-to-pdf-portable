@@ -15,6 +15,8 @@ from document_tools.pdf_ops import (
     extract_pages,
     images_to_pdf,
     merge_pdfs,
+    mix_pdfs,
+    insert_pages_repeatedly,
     parse_page_ranges,
     process_pdf_pipeline,
     pdf_requires_user_password,
@@ -123,6 +125,80 @@ def test_merge_pdfs_preserves_document_order_and_outline(tmp_path: Path) -> None
         120, 130, 220, 230, 240
     ]
     assert reader.outline
+
+
+def test_mix_pdfs_interleaves_selected_pages_and_can_reverse_second_pdf(tmp_path: Path) -> None:
+    first = create_pdf(tmp_path / "first.pdf", [110, 120, 130])
+    second = create_pdf(tmp_path / "second.pdf", [210, 220, 230, 240])
+    output = tmp_path / "mixed.pdf"
+
+    mix_pdfs(
+        first,
+        second,
+        output,
+        first_page_ranges="1, 3",
+        second_page_ranges="1-3",
+        reverse_second=True,
+    )
+
+    widths = [round(float(page.mediabox.width)) for page in read_pdf(output).pages]
+    assert widths == [110, 230, 130, 220, 210]
+
+
+def test_mix_pdfs_supports_different_block_sizes_and_passwords(tmp_path: Path) -> None:
+    first = create_pdf(tmp_path / "first-locked.pdf", [110, 120, 130, 140], password="first-secret")
+    second = create_pdf(tmp_path / "second-locked.pdf", [210, 220, 230], password="second-secret")
+    output = tmp_path / "mixed.pdf"
+
+    mix_pdfs(
+        first,
+        second,
+        output,
+        first_pace=2,
+        second_pace=1,
+        first_password="first-secret",
+        second_password="second-secret",
+    )
+
+    widths = [round(float(page.mediabox.width)) for page in read_pdf(output).pages]
+    assert widths == [110, 120, 210, 130, 140, 220, 230]
+
+
+def test_insert_pages_repeatedly_inserts_selected_pages_after_each_interval(tmp_path: Path) -> None:
+    target = create_pdf(tmp_path / "target.pdf", [110, 120, 130, 140, 150])
+    insert = create_pdf(tmp_path / "insert.pdf", [210, 220, 230])
+    output = tmp_path / "with-insertions.pdf"
+
+    insert_pages_repeatedly(
+        target,
+        insert,
+        output,
+        every_n_pages=2,
+        insert_page_ranges="3, 1",
+    )
+
+    widths = [round(float(page.mediabox.width)) for page in read_pdf(output).pages]
+    assert widths == [110, 120, 230, 210, 130, 140, 230, 210, 150]
+
+
+def test_insert_pages_repeatedly_accepts_passwords_and_rejects_invalid_interval(tmp_path: Path) -> None:
+    target = create_pdf(tmp_path / "target-locked.pdf", [110, 120], password="target-secret")
+    insert = create_pdf(tmp_path / "insert-locked.pdf", [210], password="insert-secret")
+    output = tmp_path / "with-insertions.pdf"
+
+    insert_pages_repeatedly(
+        target,
+        insert,
+        output,
+        every_n_pages=1,
+        target_password="target-secret",
+        insert_password="insert-secret",
+    )
+    widths = [round(float(page.mediabox.width)) for page in read_pdf(output).pages]
+    assert widths == [110, 210, 120, 210]
+
+    with pytest.raises(ValueError, match="positivo"):
+        insert_pages_repeatedly(target, insert, tmp_path / "invalid.pdf", every_n_pages=0)
 
 
 def test_extract_pages_keeps_requested_order(tmp_path: Path) -> None:
