@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from document_tools.report_history import (
     MAX_HISTORY_REPORTS,
+    _prune_history,
     delete_batch_report,
     load_batch_history,
     save_batch_report,
@@ -120,3 +123,18 @@ def test_history_delete_removes_only_selected_report_and_rejects_invalid_ids(tmp
         pass
     else:
         raise AssertionError("Invalid report identifiers must be rejected.")
+
+
+def test_history_pruning_uses_report_timestamp_not_filesystem_mtime(tmp_path: Path) -> None:
+    history_dir = tmp_path / "history"
+    ids = [str(save_one(history_dir, f"{index}.pdf")["id"]) for index in range(MAX_HISTORY_REPORTS + 1)]
+    oldest = history_dir / f"batch-report-{ids[0]}.json"
+    newest = history_dir / f"batch-report-{ids[-1]}.json"
+
+    now = time.time()
+    os.utime(oldest, (now, now))
+    os.utime(newest, (now - 100_000, now - 100_000))
+    _prune_history(history_dir)
+
+    assert not oldest.exists()
+    assert newest.exists()
