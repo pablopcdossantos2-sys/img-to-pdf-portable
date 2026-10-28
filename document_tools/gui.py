@@ -3552,6 +3552,33 @@ class DocumentToolsWindow(QMainWindow):
             )
         return normalized
 
+    def _write_pipeline_profiles(self, profiles: dict[str, dict[str, object]]) -> None:
+        """Persist recognized profiles without deleting entries from newer/unknown schemas."""
+        raw = self.settings.value("pipeline_profiles", "{}")
+        try:
+            parsed = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            # Do not replace malformed settings automatically; that could destroy data
+            # which a newer application version may still be able to recover.
+            return
+        if not isinstance(parsed, dict):
+            return
+
+        preserved: dict[str, object] = {}
+        for name, profile in parsed.items():
+            if not isinstance(name, str) or not name.strip() or len(name.strip()) > 80:
+                preserved[name] = profile
+                continue
+            try:
+                migrate_local_profile(profile)
+            except ValueError:
+                preserved[name] = profile
+
+        preserved.update(profiles)
+        self.settings.setValue(
+            "pipeline_profiles", json.dumps(preserved, ensure_ascii=False, sort_keys=True)
+        )
+
     def _capture_pipeline_profile(self) -> dict[str, object]:
         """Capture only processing options; never store a PDF path or password."""
         return {
@@ -3635,9 +3662,7 @@ class DocumentToolsWindow(QMainWindow):
             QMessageBox.information(self, self._t("Salvar perfil"), self._t(str(error)))
             return
         profiles[name] = profile
-        self.settings.setValue(
-            "pipeline_profiles", json.dumps(profiles, ensure_ascii=False, sort_keys=True)
-        )
+        self._write_pipeline_profiles(profiles)
         self.status_label.setText(self._t("Perfil salvo: {name}").format(name=name))
 
     def _load_pipeline_profile(self) -> None:
@@ -3684,9 +3709,7 @@ class DocumentToolsWindow(QMainWindow):
         if answer != QMessageBox.StandardButton.Yes:
             return
         profiles.pop(name, None)
-        self.settings.setValue(
-            "pipeline_profiles", json.dumps(profiles, ensure_ascii=False, sort_keys=True)
-        )
+        self._write_pipeline_profiles(profiles)
         self.status_label.setText(self._t("Perfil excluído: {name}").format(name=name))
 
     @staticmethod
@@ -3797,9 +3820,7 @@ class DocumentToolsWindow(QMainWindow):
             if answer != QMessageBox.StandardButton.Yes:
                 return
         profiles[name] = profile
-        self.settings.setValue(
-            "pipeline_profiles", json.dumps(profiles, ensure_ascii=False, sort_keys=True)
-        )
+        self._write_pipeline_profiles(profiles)
         self.status_label.setText(self._t("Perfil importado: {name}").format(name=name))
 
     def _update_pipeline_controls(self) -> None:
