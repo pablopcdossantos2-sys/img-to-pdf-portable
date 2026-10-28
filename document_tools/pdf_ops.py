@@ -311,6 +311,38 @@ def extract_pages(
     return output
 
 
+def delete_pages(
+    input_path: str | Path,
+    page_ranges: str,
+    output_path: str | Path,
+    *,
+    password: str | None = None,
+    file_mode: int = 0o600,
+) -> Path:
+    """Remove selected pages while retaining the remaining pages and compatible structures."""
+    sources, output = _normalise_pdf_paths([input_path], output_path)
+    source = sources[0]
+    _validate_file_mode(file_mode)
+
+    def write(temporary: Path) -> None:
+        with source.open("rb") as stream:
+            reader = _open_reader(source, stream, password=password)
+            remove_indexes = set(parse_page_ranges(page_ranges, len(reader.pages)))
+            keep_indexes = [
+                index for index in range(len(reader.pages))
+                if index not in remove_indexes
+            ]
+            if not keep_indexes:
+                raise ValueError("A exclusão precisa manter pelo menos uma página no PDF.")
+            writer = PdfWriter()
+            writer.append(reader, pages=keep_indexes, import_outline=True)
+            _copy_metadata(reader, writer)
+            writer.write(temporary)
+
+    _atomic_pdf_save(output, write, file_mode=file_mode)
+    return output
+
+
 def rotate_pdf(
     input_path: str | Path,
     output_path: str | Path,
