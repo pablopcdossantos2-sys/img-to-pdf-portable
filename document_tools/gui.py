@@ -352,6 +352,8 @@ TRANSLATIONS = {
         "Informe um nome para o perfil.": "Enter a name for the profile.",
         "O nome do perfil deve ter até 80 caracteres.": "Profile names must be 80 characters or fewer.",
         "Já existe um perfil chamado '{name}'. Deseja substituí-lo?": "A profile named '{name}' already exists. Replace it?",
+        "O perfil '{name}' já existe, mas usa um esquema que esta versão não reconhece. Substituí-lo pode impedir que versões mais novas recuperem suas opções. Deseja continuar?": "The profile '{name}' already exists, but its schema is not recognized by this version. Replacing it may prevent newer versions from recovering its options. Continue?",
+        "Lote pausado após {completed} de {total} arquivo(s).": "Batch paused after {completed} of {total} file(s).",
         "Deseja excluir o perfil '{name}'?": "Delete the profile '{name}'?",
         "Perfil salvo: {name}": "Profile saved: {name}",
         "Perfil carregado: {name}": "Profile loaded: {name}",
@@ -687,7 +689,9 @@ TRANSLATIONS = {
         "Nenhum perfil salvo ainda.": "Aún no hay perfiles guardados.",
         "Informe um nome para o perfil.": "Escribe un nombre para el perfil.",
         "O nome do perfil deve ter até 80 caracteres.": "El nombre del perfil debe tener 80 caracteres o menos.",
-        "Já existe um perfil chamado '{name}'. Deseja substituí-lo?": "Ya existe un perfil llamado '{name}'. ¿Quieres reemplazarlo?",
+        "Já existe un perfil llamado '{name}'. ¿Quieres reemplazarlo?": "Ya existe un perfil llamado '{name}'. ¿Quieres reemplazarlo?",
+        "O perfil '{name}' já existe, mas usa um esquema que esta versão não reconhece. Substituí-lo pode impedir que versões mais novas recuperem suas opções. Deseja continuar?": "El perfil '{name}' ya existe, pero esta versión no reconoce su esquema. Reemplazarlo puede impedir que versiones más nuevas recuperen sus opciones. ¿Quieres continuar?",
+        "Lote pausado após {completed} de {total} arquivo(s).": "Lote en pausa tras {completed} de {total} archivo(s).",
         "Deseja excluir o perfil '{name}'?": "¿Quieres eliminar el perfil '{name}'?",
         "Perfil salvo: {name}": "Perfil guardado: {name}",
         "Perfil carregado: {name}": "Perfil cargado: {name}",
@@ -1449,6 +1453,7 @@ class DocumentToolsWindow(QMainWindow):
         self._folder_batch_tab_index = -1
         self._last_batch_profile: dict[str, object] | None = None
         self._last_batch_profile_name: str | None = None
+        self._pending_batch_context: dict[str, object] | None = None
         self._last_batch_source_directory: str | None = None
         self._last_batch_output_directory: str | None = None
         self._last_batch_recursive = False
@@ -1926,6 +1931,41 @@ class DocumentToolsWindow(QMainWindow):
     def _default_save_path(self, filename: str) -> str:
         return str(self._desktop_directory() / filename)
 
+    def _choose_output_file(
+        self,
+        title: str,
+        suggested_name: str,
+        suffix: str,
+        file_filter: str,
+    ) -> Path | None:
+        """Normalize the final filename before checking whether it already exists."""
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            self._t(title),
+            self._default_save_path(suggested_name),
+            self._t(file_filter),
+            options=QFileDialog.Option.DontConfirmOverwrite,
+        )
+        if not filename:
+            return None
+        output = Path(filename).expanduser()
+        normalized_suffix = suffix if suffix.startswith(".") else f".{suffix}"
+        if output.suffix.casefold() != normalized_suffix.casefold():
+            output = output.with_suffix(normalized_suffix)
+        output = output.resolve()
+        if output.exists():
+            answer = QMessageBox.question(
+                self,
+                self._t("Confirmar substituição"),
+                self._t("O arquivo “{name}” já existe. Deseja substituí-lo?").format(name=output.name),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                self.status_label.setText(self._t("Operação cancelada. O arquivo existente foi preservado."))
+                return None
+        return output
+
     def _choose_output_pdf(
         self,
         suggested_name: str,
@@ -2041,6 +2081,9 @@ class DocumentToolsWindow(QMainWindow):
             )
             self._folder_batch_running = False
             self._batch_control = None
+            # If the worker failed before emitting a result, discard the staged context
+            # and keep the previous successful batch available for failure-only retry.
+            self._pending_batch_context = None
         else:
             self.tabs.setEnabled(True)
         worker = self._worker
@@ -3759,6 +3802,44 @@ class DocumentToolsWindow(QMainWindow):
             )
         return normalized
 
+    def _stored_profile_names(self) -> set[str]:
+        """Return raw stored profile names, including entries this version cannot parse."""
+        raw = self.settings.value("pipeline_profiles", "{}")
+        try:
+            parsed = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            return set()
+        if not isinstance(parsed, dict):
+            return set()
+        return {
+            name.strip()
+            for name in parsed
+            if isinstance(name, str) and name.strip() and len(name.strip()) <= 80
+        }
+
+    def _confirm_pipeline_profile_replacement(
+        self, name: str, profiles: dict[str, dict[str, object]], title: str
+    ) -> bool:
+        stored_names = self._stored_profile_names()
+        if name not in profiles and name not in stored_names:
+            return True
+        prompt = (
+            self._t("Já existe um perfil chamado '{name}'. Deseja substituí-lo?").format(name=name)
+            if name in profiles
+            else self._t(
+                "O perfil '{name}' já existe, mas usa um esquema que esta versão não reconhece. "
+                "Substituí-lo pode impedir que versões mais novas recuperem suas opções. Deseja continuar?"
+            ).format(name=name)
+        )
+        answer = QMessageBox.question(
+            self,
+            self._t(title),
+            prompt,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return answer == QMessageBox.StandardButton.Yes
+
     def _write_pipeline_profiles(self, profiles: dict[str, dict[str, object]]) -> bool:
         """Persist recognized profiles without deleting entries from newer/unknown schemas."""
         raw = self.settings.value("pipeline_profiles", "{}")
@@ -3779,7 +3860,10 @@ class DocumentToolsWindow(QMainWindow):
             try:
                 migrate_local_profile(profile)
             except ValueError:
-                preserved[name] = profile
+                # If the user explicitly confirmed replacement, discard the unknown
+                # schema under that normalized name instead of leaving two entries.
+                if name.strip() not in profiles:
+                    preserved[name] = profile
 
         preserved.update(profiles)
         self.settings.setValue(
@@ -3854,16 +3938,8 @@ class DocumentToolsWindow(QMainWindow):
             )
             return
         profiles = self._read_pipeline_profiles()
-        if name in profiles:
-            answer = QMessageBox.question(
-                self,
-                self._t("Salvar perfil"),
-                self._t("Já existe um perfil chamado '{name}'. Deseja substituí-lo?").format(name=name),
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if answer != QMessageBox.StandardButton.Yes:
-                return
+        if not self._confirm_pipeline_profile_replacement(name, profiles, "Salvar perfil"):
+            return
         try:
             profile = migrate_local_profile(self._capture_pipeline_profile())
         except ValueError as error:
@@ -3953,18 +4029,11 @@ class DocumentToolsWindow(QMainWindow):
         suggested_stem = re.sub(r"[^A-Za-z0-9._ -]+", "_", name).strip().replace(" ", "-")
         if not suggested_stem:
             suggested_stem = "pdf-hub-profile"
-        filename, _ = QFileDialog.getSaveFileName(
-            self,
-            self._t("Exportar perfil"),
-            self._default_save_path(f"{suggested_stem}.json"),
-            self._t("Arquivos JSON (*.json)"),
+        output = self._choose_output_file(
+            "Exportar perfil", f"{suggested_stem}.json", ".json", "Arquivos JSON (*.json)"
         )
-        if not filename:
+        if output is None:
             return
-        output = Path(filename).expanduser()
-        if output.suffix.lower() != ".json":
-            output = output.with_suffix(".json")
-        output = output.resolve()
         try:
             safe_name, safe_profile = self._validate_pipeline_profile_document({
                 "schema_version": CURRENT_PROFILE_SCHEMA_VERSION,
@@ -3994,7 +4063,7 @@ class DocumentToolsWindow(QMainWindow):
                 delete=False,
             ) as stream:
                 temporary = Path(stream.name)
-                json.dump(document, stream, ensure_ascii=False, indent=2, sort_keys=True)
+                json.dump(document, stream, ensure_ascii=True, indent=2, sort_keys=True)
                 stream.write("\n")
             temporary.replace(output)
         except OSError:
@@ -4006,7 +4075,10 @@ class DocumentToolsWindow(QMainWindow):
             return
         finally:
             if temporary is not None:
-                temporary.unlink(missing_ok=True)
+                try:
+                    temporary.unlink(missing_ok=True)
+                except OSError:
+                    pass
         self.status_label.setText(self._t("Perfil exportado: {name}").format(name=name))
 
     def _import_pipeline_profile(self) -> None:
@@ -4029,16 +4101,8 @@ class DocumentToolsWindow(QMainWindow):
             )
             return
         profiles = self._read_pipeline_profiles()
-        if name in profiles:
-            answer = QMessageBox.question(
-                self,
-                self._t("Importar perfil"),
-                self._t("Já existe um perfil chamado '{name}'. Deseja substituí-lo?").format(name=name),
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if answer != QMessageBox.StandardButton.Yes:
-                return
+        if not self._confirm_pipeline_profile_replacement(name, profiles, "Importar perfil"):
+            return
         profiles[name] = profile
         if not self._write_pipeline_profiles(profiles):
             QMessageBox.warning(
@@ -4278,18 +4342,25 @@ class DocumentToolsWindow(QMainWindow):
         if not accepted or name not in profiles:
             return
 
-        self._last_batch_profile = dict(profiles[name])
-        self._last_batch_profile_name = name
-        self._last_batch_source_directory = str(Path(source).expanduser().resolve())
-        self._last_batch_output_directory = str(Path(output).expanduser().resolve())
-        self._last_batch_recursive = self.batch_include_subfolders.isChecked()
-        self._last_batch_file_mode = self._output_file_mode()
+        source_path = str(Path(source).expanduser().resolve())
+        output_path = str(Path(output).expanduser().resolve())
+        profile = dict(profiles[name])
+        recursive = self.batch_include_subfolders.isChecked()
+        file_mode = self._output_file_mode()
+        self._pending_batch_context = {
+            "profile": profile,
+            "profile_name": name,
+            "source_directory": source_path,
+            "output_directory": output_path,
+            "recursive": recursive,
+            "file_mode": file_mode,
+        }
         self._start_folder_batch(
-            self._last_batch_source_directory,
-            self._last_batch_output_directory,
-            self._last_batch_profile,
-            recursive=self._last_batch_recursive,
-            file_mode=self._last_batch_file_mode,
+            source_path,
+            output_path,
+            profile,
+            recursive=recursive,
+            file_mode=file_mode,
             resume=self.batch_resume_checkbox.isChecked(),
         )
 
@@ -4403,6 +4474,12 @@ class DocumentToolsWindow(QMainWindow):
     def _batch_progress_changed(self, completed: int, total: int, filename: str) -> None:
         self.progress.setRange(0, total)
         self.progress.setValue(completed)
+        control = self._batch_control
+        if control is not None and control.is_paused:
+            self.status_label.setText(self._t(
+                "Lote pausado após {completed} de {total} arquivo(s)."
+            ).format(completed=completed, total=total))
+            return
         self.status_label.setText(self._t("Processando arquivo {completed} de {total}: {name}").format(
             completed=completed, total=total, name=filename
         ))
@@ -4581,6 +4658,15 @@ class DocumentToolsWindow(QMainWindow):
         if not isinstance(results, list) or not all(isinstance(item, BatchFileResult) for item in results):
             self._operation_failed("Não foi possível gerar o relatório individual do lote.")
             return
+        if self._pending_batch_context is not None:
+            context = self._pending_batch_context
+            self._last_batch_profile = dict(context["profile"])  # type: ignore[arg-type]
+            self._last_batch_profile_name = str(context["profile_name"])
+            self._last_batch_source_directory = str(context["source_directory"])
+            self._last_batch_output_directory = str(context["output_directory"])
+            self._last_batch_recursive = bool(context["recursive"])
+            self._last_batch_file_mode = int(context["file_mode"])
+            self._pending_batch_context = None
         self._render_batch_results(results)
         successes = sum(int(item.success) for item in results)
         failures = len(results) - successes
@@ -4607,17 +4693,29 @@ class DocumentToolsWindow(QMainWindow):
         if not self.batch_results:
             QMessageBox.information(self, self._t("Salvar relatório CSV"), self._t("Não há relatório para exportar."))
             return
-        filename, _ = QFileDialog.getSaveFileName(
-            self, self._t("Salvar relatório CSV"), self._default_save_path("relatorio-pdf-hub.csv"), self._t("Arquivos CSV (*.csv)")
+        output = self._choose_output_file(
+            "Salvar relatório CSV",
+            "relatorio-pdf-hub.csv",
+            ".csv",
+            "Arquivos CSV (*.csv)",
         )
-        if not filename:
+        if output is None:
             return
-        output = Path(filename).expanduser()
-        if output.suffix.casefold() != ".csv":
-            output = output.with_suffix(".csv")
+        temporary: Path | None = None
         try:
-            with output.open("w", encoding="utf-8-sig", newline="") as stream:
-                writer = csv.writer(stream)
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8-sig",
+                errors="replace",
+                newline="",
+                dir=str(output.parent),
+                prefix=".batch-report-",
+                suffix=".tmp",
+                delete=False,
+            ) as stream:
+                temporary = Path(stream.name)
+                delimiter = ";" if self._language in {"pt", "es"} else ","
+                writer = csv.writer(stream, delimiter=delimiter)
                 writer.writerow([
                     self._t("Arquivo de origem"), self._t("Resultado"),
                     self._t("Detalhes"), self._t("Arquivo de saída"),
@@ -4627,10 +4725,23 @@ class DocumentToolsWindow(QMainWindow):
                         result.source_path, self._t("Sucesso" if result.success else "Falha"),
                         self._t(result.message), result.output_path,
                     ])
-        except OSError:
-            QMessageBox.warning(self, self._t("Salvar relatório CSV"),
-                self._t("Não foi possível salvar o relatório CSV. Verifique a pasta e as permissões."))
+                stream.flush()
+                os.fsync(stream.fileno())
+            temporary.replace(output)
+            temporary = None
+        except (OSError, ValueError):
+            QMessageBox.warning(
+                self,
+                self._t("Salvar relatório CSV"),
+                self._t("Não foi possível salvar o relatório CSV. Verifique a pasta e as permissões."),
+            )
             return
+        finally:
+            if temporary is not None:
+                try:
+                    temporary.unlink(missing_ok=True)
+                except OSError:
+                    pass
         self.status_label.setText(self._t("Relatório salvo: {path}").format(path=output.resolve()))
 
     def _choose_pdf_to_images_source(self) -> None:
