@@ -18,6 +18,7 @@ Aplicación de escritorio para trabajar localmente con archivos PDF e imágenes,
 - **Extraer páginas:** guarda páginas o intervalos como `1-3, 5, 8-10`, permite repetir páginas y acepta contraseña. La navegación y las anotaciones se conservan cuando es posible, con referencias adaptadas a las páginas retenidas.
 - **Girar páginas:** gira 90°, 180° o 270°, en todo el documento o solo las páginas seleccionadas, incluidos los PDFs protegidos con contraseña.
 - **Dividir PDF:** permite un archivo por página, grupos de N páginas, cortes después de páginas seleccionadas, pares o impares, tamaño aproximado y marcadores con nivel y filtro opcional de expresión regular. Crea la carpeta si hace falta, acepta contraseña, conserva estructuras compatibles cuando es posible y nunca sobrescribe archivos existentes. El tamaño es estimado; una página puede superar el límite.
+- **PDF a imágenes:** exporta todas las páginas o solo intervalos seleccionados como PNG o JPEG, con resolución ajustable (72–600 DPI), calidad JPEG configurable, soporte para contraseña y nombres que evitan sobrescribir archivos existentes.
 - **Reordenar páginas con miniaturas y vista previa:** cada página aparece como miniatura en una cuadrícula; arrastra para cambiar el orden y revisa la página seleccionada en el panel de vista previa. Las miniaturas se generan en segundo plano y siguen la página original. Cada página debe aparecer exactamente una vez.
 - **Marcas de agua y numeración selectivas:** aplica texto, numeración o ambos a todas las páginas o solo a intervalos (por ejemplo, `2-4, 7`). La numeración conserva la posición original de la página en el documento. El contenido original no se rasteriza.
 - **Optimizar PDF:** elige compresión de streams sin pérdida y eliminación de objetos duplicados, o recomprensión JPEG equilibrada de imágenes opacas con calidad ajustable. Las imágenes transparentes y las imágenes inline se mantienen sin cambios.
@@ -57,7 +58,7 @@ El flujo **PDF Hub CI, security and packages** prueba la aplicación y genera pa
 
 El artefacto incluye el entorno de ejecución y no requiere instalar Python por separado. Windows puede mostrar una advertencia de seguridad para archivos descargados; verifica el origen antes de ejecutar la aplicación.
 
-> Los artefactos de GitHub Actions son temporales y caducan según el periodo de retención configurado. Las versiones permanentes se generan al enviar una etiqueta como `v0.8.0`. Los ejecutables no tienen firma digital/notarización; Windows SmartScreen o macOS Gatekeeper pueden mostrar una advertencia.
+> Los artefactos de GitHub Actions son temporales y caducan según el periodo de retención configurado. Las versiones permanentes se generan al enviar una etiqueta como `v0.10.0`. Los ejecutables no tienen firma digital/notarización; Windows SmartScreen o macOS Gatekeeper pueden mostrar una advertencia.
 
 ## Ejecutar desde el código fuente
 
