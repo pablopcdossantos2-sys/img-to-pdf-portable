@@ -363,6 +363,8 @@ def insert_pages_repeatedly(
         with target.open("rb") as target_stream, insertion.open("rb") as insert_stream:
             target_reader = _open_reader(target, target_stream, password=target_password)
             insert_reader = _open_reader(insertion, insert_stream, password=insert_password)
+            if every_n_pages > len(target_reader.pages):
+                raise ValueError("O intervalo entre inserções não pode exceder o número de páginas do PDF de destino.")
             insert_indexes = (
                 list(range(len(insert_reader.pages)))
                 if not insert_page_ranges or not insert_page_ranges.strip()
