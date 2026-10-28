@@ -15,6 +15,8 @@ A desktop application for working with PDF files and images locally, built with 
 
 - **Images to PDF:** convert JPG, JPEG, PNG, BMP, WEBP, TIFF, and GIF images into A4 pages, automatically choosing orientation and preserving aspect ratio. By default, all pages/frames in multipage or animated files are imported, with an option to use only the first. Transparency is placed on white.
 - **Merge PDFs:** combine files in the chosen order, prompt for protected PDFs' passwords, and attempt to preserve compatible bookmarks, metadata, and internal references.
+- **Mix PDFs:** interleave pages from two documents, with optional page ranges, reverse order for the second file, and configurable pages per block. Supports passwords and preserves the originals.
+- **Insert pages repeatedly:** insert selected pages from one PDF into another after every N target pages, repeating the chosen selection. Supports passwords and preserves the original files.
 - **Extract pages:** save selected pages or ranges such as `1-3, 5, 8-10`, allow repeated pages, and accept a password. Navigation and annotations are retained where possible, with remapping to the retained pages.
 - **Delete pages:** remove selected pages or ranges, such as `2, 4-6, 9`, into a new PDF while preserving the original. Supports password-protected documents and prevents deleting every page.
 - **Rotate pages:** rotate by 90°, 180°, or 270°, across the whole document or selected pages, including password-protected PDFs.
