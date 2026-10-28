@@ -169,6 +169,7 @@ def test_reorder_titles_are_below_thumbnails_and_layout_is_stable(qt_app: QAppli
     from document_tools.gui import ReorderPageDelegate
 
     window = DocumentToolsWindow()
+    previous_theme_setting = window.settings.value("theme", None)
     try:
         delegate = window.reorder_list.itemDelegate()
         assert isinstance(delegate, ReorderPageDelegate)
@@ -190,6 +191,10 @@ def test_reorder_titles_are_below_thumbnails_and_layout_is_stable(qt_app: QAppli
         assert not dark_pixmap.isNull()
         assert light_pixmap.toImage().pixelColor(10, 12) != dark_pixmap.toImage().pixelColor(10, 12)
     finally:
+        if previous_theme_setting is None:
+            window.settings.remove("theme")
+        else:
+            window.settings.setValue("theme", previous_theme_setting)
         window.close()
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
