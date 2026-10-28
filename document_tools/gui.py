@@ -1644,10 +1644,9 @@ class DocumentToolsWindow(QMainWindow):
             self._preview_reorder_page(self.reorder_list.currentRow())
         if hasattr(self, "batch_pause_button"):
             control = getattr(self, "_batch_control", None)
-            if control is not None:
-                self.batch_pause_button.setText(
-                    self._t("Retomar lote" if control.is_paused else "Pausar lote")
-                )
+            self.batch_pause_button.setText(
+                self._t("Retomar lote" if control is not None and control.is_paused else "Pausar lote")
+            )
         if hasattr(self, "batch_history_combo"):
             selected = self.batch_history_combo.currentData()
             self._refresh_batch_history_combo(selected if isinstance(selected, str) else None)
