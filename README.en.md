@@ -38,7 +38,7 @@ A desktop application for working with PDF files and images locally, built with 
 
 ### Usability, privacy, and reliability
 
-- Desktop interface with a PT-BR/English/Spanish language selector, reorderable thumbnail grids with a selected-page preview, reusable batch profiles, intentional item duplication, and a processing indicator. Main dialogs, password prompts, confirmations, and common page-range errors follow the selected language. Common pypdf parsing, Qt PDF rendering, and image-processing errors receive clearer translated messages without exposing internal diagnostics. Passwords are entered through masked fields, are not stored in preferences, and the fields are cleared when an operation starts.
+- Desktop interface with sidebar navigation and a PT-BR/English/Spanish language selector, reorderable thumbnail grids with a selected-page preview, reusable batch profiles, intentional item duplication, and a processing indicator. Main dialogs, password prompts, confirmations, and common page-range errors follow the selected language. Common pypdf parsing, Qt PDF rendering, and image-processing errors receive clearer translated messages without exposing internal diagnostics. Passwords are entered through masked fields, are not stored in preferences, and the fields are cleared when an operation starts.
 - DPI and margin controls when converting images to PDF.
 - Long-running tasks execute outside the main UI thread; the window cannot be closed while a task is running.
 - A button opens the output folder when processing finishes.
@@ -46,6 +46,7 @@ A desktop application for working with PDF files and images locally, built with 
 - Source files are not replaced by normal processing operations.
 - Temporary/atomic writes for PDF operations; splitting stops if an output filename already exists.
 - Persistent output permission preference on Linux/macOS: owner-only (0600, recommended default) or shared-readable (0644). Windows permissions are managed by the operating system.
+- **Protected PDFs and privacy:** a password is needed to process a protected PDF, but the generated file does not automatically inherit the source document's encryption or restrictions. Re-protect the output if confidentiality is required. Basic document metadata may be preserved.
 - **Quality note:** balanced optimization may reduce image quality and cannot guarantee a smaller result for every PDF; keep the original and compare outputs. Watermarks use the built-in Helvetica font and may not support every Unicode character.
 - Automated tests and dependency auditing run in GitHub Actions. The workflow validates Windows, Linux, and macOS packages and generates SHA-256 checksums.
 
