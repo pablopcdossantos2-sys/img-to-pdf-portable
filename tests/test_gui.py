@@ -767,3 +767,134 @@ def test_desktop_is_the_default_folder_for_save_dialogs(qt_app: QApplication) ->
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         qt_app.processEvents()
+
+
+def test_reorder_custom_drag_does_not_remove_the_dropped_page(
+    qt_app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import document_tools.gui as gui
+    from PySide6.QtCore import QSize
+
+    class FakePosition:
+        def __init__(self, point) -> None:
+            self._point = point
+
+        def toPoint(self):
+            return self._point
+
+    class FakeDropEvent:
+        def __init__(self, source, point) -> None:
+            self._source = source
+            self._position = FakePosition(point)
+            self.accepted = False
+            self.action = None
+
+        def source(self):
+            return self._source
+
+        def position(self):
+            return self._position
+
+        def setDropAction(self, action):
+            self.action = action
+
+        def accept(self):
+            self.accepted = True
+
+        def ignore(self):
+            self.accepted = False
+
+    class FakeDrag:
+        def __init__(self, source) -> None:
+            self.source = source
+
+        def setMimeData(self, _mime_data) -> None:
+            pass
+
+        def setPixmap(self, _pixmap) -> None:
+            pass
+
+        def setHotSpot(self, _point) -> None:
+            pass
+
+        def exec(self, _actions, _default_action):
+            target_point = self.source.visualItemRect(self.source.item(2)).center()
+            event = FakeDropEvent(self.source, target_point)
+            self.source.dropEvent(event)
+            assert event.accepted
+            assert event.action == Qt.DropAction.MoveAction
+            return Qt.DropAction.MoveAction
+
+    widget = gui.ReorderablePageList()
+    try:
+        widget.setViewMode(QListWidget.ViewMode.IconMode)
+        widget.setIconSize(QSize(76, 96))
+        widget.setGridSize(QSize(124, 164))
+        widget.resize(420, 180)
+        for page_number in (1, 2, 3):
+            item = QListWidgetItem(f"Página {page_number}")
+            item.setData(Qt.ItemDataRole.UserRole, page_number)
+            widget.addItem(item)
+        widget.show()
+        qt_app.processEvents()
+        monkeypatch.setattr(gui, "QDrag", FakeDrag)
+
+        widget.setCurrentRow(0)
+        widget.startDrag(Qt.DropAction.MoveAction)
+
+        assert widget.count() == 3
+        assert [widget.item(i).data(Qt.ItemDataRole.UserRole) for i in range(widget.count())] == [2, 3, 1]
+        assert widget.currentItem() is not None
+        assert widget.currentItem().data(Qt.ItemDataRole.UserRole) == 1
+    finally:
+        widget.close()
+        widget.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_window_preserves_space_for_controls_and_aligned_file_pickers(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    try:
+        screen = qt_app.primaryScreen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            assert window.minimumWidth() == min(1120, available.width())
+            assert window.minimumHeight() == min(700, available.height())
+
+        content_areas = window.findChildren(QScrollArea, "contentScrollArea")
+        assert content_areas
+        assert all(
+            area.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+            for area in content_areas
+        )
+
+        assert window.reorder_list.gridSize().height() >= 160
+        assert window.reorder_list.wordWrap()
+
+        path_fields = (
+            "extract_path",
+            "delete_pages_path",
+            "rotate_path",
+            "split_path",
+            "split_directory",
+            "reorder_path",
+            "stamp_path",
+            "optimize_path",
+            "pipeline_path",
+            "batch_source_directory",
+            "batch_output_directory",
+            "pdf_to_images_path",
+            "pdf_to_images_directory",
+        )
+        for field_name in path_fields:
+            field = getattr(window, field_name)
+            row_layout = field.parentWidget().layout()
+            assert row_layout is not None, field_name
+            margins = row_layout.contentsMargins()
+            assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (0, 0, 0, 0), field_name
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
