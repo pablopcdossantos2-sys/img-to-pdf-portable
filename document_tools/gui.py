@@ -1057,10 +1057,12 @@ class ReorderablePageList(QListWidget):
             event.ignore()
 
     def dragMoveEvent(self, event) -> None:  # noqa: N802 - Qt override
-        # Accept internal moves even when the pointer is between grid cells;
-        # QListWidget's default handler can otherwise refuse a drop on empty space.
+        # Let QListWidget handle its native drop indicator and autoscroll. The
+        # custom dropEvent still performs the final move without Qt's source cleanup.
         if event.source() is self and self.count() > 0:
-            event.acceptProposedAction()
+            super().dragMoveEvent(event)
+            if not event.isAccepted():
+                event.acceptProposedAction()
         else:
             event.ignore()
 
@@ -1090,7 +1092,7 @@ class ImageDropList(QListWidget):
     filesDropped = Signal(list)
 
     @staticmethod
-    def _paths_from_mime(mime_data) -> list[str]:
+    def _paths_from_mime(mime_data, *, check_exists: bool = True) -> list[str]:
         if not mime_data.hasUrls():
             return []
         paths: list[str] = []
@@ -1098,7 +1100,8 @@ class ImageDropList(QListWidget):
             if not url.isLocalFile():
                 continue
             path = Path(url.toLocalFile()).expanduser()
-            if path.is_file() and path.suffix.casefold() in SUPPORTED_IMAGE_SUFFIXES:
+            supported = path.suffix.casefold() in SUPPORTED_IMAGE_SUFFIXES
+            if supported and (not check_exists or path.is_file()):
                 paths.append(str(path))
         return paths
 
@@ -1113,19 +1116,19 @@ class ImageDropList(QListWidget):
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
 
     def dragEnterEvent(self, event) -> None:
-        if self._paths_from_mime(event.mimeData()):
+        if self._paths_from_mime(event.mimeData(), check_exists=False):
             event.acceptProposedAction()
             return
         super().dragEnterEvent(event)
 
     def dragMoveEvent(self, event) -> None:
-        if self._paths_from_mime(event.mimeData()):
+        if self._paths_from_mime(event.mimeData(), check_exists=False):
             event.acceptProposedAction()
             return
         super().dragMoveEvent(event)
 
     def dropEvent(self, event) -> None:
-        paths = self._paths_from_mime(event.mimeData())
+        paths = self._paths_from_mime(event.mimeData(), check_exists=True)
         if paths:
             self.filesDropped.emit(paths)
             event.acceptProposedAction()
