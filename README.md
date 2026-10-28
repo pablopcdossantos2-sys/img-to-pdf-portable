@@ -35,7 +35,7 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, desenvolvido co
 - **CMYK e transparência:** modos que não são aceitos pelo formato de destino são convertidos para formatos compatíveis; a transparência para JPEG/BMP é composta sobre fundo branco.
 
 ### Usabilidade, privacidade e robustez
-- Interface desktop com abas e seletor de idioma (PT-BR/EN/ES), listas reordenáveis, grade de miniaturas com prévia da página selecionada e perfis reutilizáveis de fluxo em lote, duplicação intencional de itens e indicador de processamento. Os diálogos principais, prompts de senha, confirmações e erros comuns de página também acompanham o idioma. Erros de parsing do pypdf, renderização Qt PDF e processamento de imagens recebem mensagens genéricas mais claras e traduzidas, sem expor diagnósticos internos. As senhas são digitadas em campos protegidos, não são salvas nas preferências e os campos são limpos ao iniciar a operação.
+- Interface desktop com navegação lateral e seletor de idioma (PT-BR/EN/ES), listas reordenáveis, grade de miniaturas com prévia da página selecionada e perfis reutilizáveis de fluxo em lote, duplicação intencional de itens e indicador de processamento. Os diálogos principais, prompts de senha, confirmações e erros comuns de página também acompanham o idioma. Erros de parsing do pypdf, renderização Qt PDF e processamento de imagens recebem mensagens genéricas mais claras e traduzidas, sem expor diagnósticos internos. As senhas são digitadas em campos protegidos, não são salvas nas preferências e os campos são limpos ao iniciar a operação.
 - Opções de resolução (DPI) e margem na conversão de imagens para PDF.
 - Operações demoradas fora da thread principal; a janela não fecha enquanto uma operação está ativa.
 - Botão para abrir a pasta de saída depois de concluir a operação.
@@ -43,6 +43,7 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, desenvolvido co
 - Os arquivos originais não são substituídos pelas operações.
 - Gravação temporária/atômica para operações PDF; a divisão interrompe conflitos sem substituir arquivos preexistentes.
 - Preferência persistente para arquivos gerados em Linux/macOS: somente o usuário (0600, padrão recomendado) ou leitura compartilhada (0644). No Windows, as permissões seguem as regras do sistema.
+- **PDFs protegidos e privacidade:** ao processar um PDF protegido, é necessária a senha, mas o arquivo gerado não herda automaticamente a criptografia nem as restrições do original. Se precisar de confidencialidade, proteja novamente o resultado. Metadados básicos do documento podem ser preservados.
 - **Atenção à qualidade:** o modo equilibrado de otimização pode reduzir a qualidade de imagens e não garante que todos os PDFs fiquem menores; mantenha o original e compare o resultado. A marca d'água usa fonte Helvetica incorporada e pode não aceitar todos os caracteres Unicode.
 - Testes automatizados e auditoria de dependências executados no GitHub Actions. O pipeline valida os pacotes de Windows, Linux e macOS e gera checksums SHA-256.
 
