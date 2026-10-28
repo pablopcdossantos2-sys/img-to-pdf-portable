@@ -144,7 +144,7 @@ def _write_checkpoint(
     finally:
         try:
             temporary_path.unlink()
-        except FileNotFoundError:
+        except OSError:
             pass
 
 
@@ -229,6 +229,8 @@ def process_pdf_folder(
         raise ValueError("Selecione uma pasta de origem.")
     if not output_root.is_dir():
         raise ValueError("Escolha uma pasta de saída existente.")
+    if file_mode not in (0o600, 0o644):
+        raise ValueError("As permissões de saída devem ser 0600 (somente usuário) ou 0644 (compartilhadas).")
     if output_root == source_root or source_root in output_root.parents:
         raise ValueError("A pasta de saída não pode ser a pasta de origem nem ficar dentro dela.")
 
@@ -305,7 +307,11 @@ def process_pdf_folder(
                 "message": item.message,
             }
 
-    _write_checkpoint(checkpoint_path, fingerprint, result_state, requested_paths)
+    # Checkpoints improve resumability but must never abort otherwise-valid processing.
+    try:
+        _write_checkpoint(checkpoint_path, fingerprint, result_state, requested_paths)
+    except OSError:
+        pass
     total = len(work_sources)
     for completed, source in enumerate(work_sources, start=1):
         if control is not None and not control.wait_until_resumed():
@@ -343,7 +349,12 @@ def process_pdf_folder(
                 "output_path": result.output_path,
                 "message": result.message,
             }
-            _write_checkpoint(checkpoint_path, fingerprint, result_state, requested_paths)
+            try:
+                _write_checkpoint(checkpoint_path, fingerprint, result_state, requested_paths)
+            except OSError:
+                # Keep the result in memory and continue; the report is more important
+                # than resumability when the destination temporarily cannot be written.
+                pass
 
         if progress_callback is not None:
             progress_callback(completed, total, source.name)
@@ -367,11 +378,10 @@ def process_pdf_folder(
     if control is not None and control.was_stopped:
         return report_from_state()
 
+    # The completed checkpoint would immediately be deleted anyway. Remove the
+    # resumable state directly; a cleanup failure must not discard the finished report.
     try:
-        _write_checkpoint(checkpoint_path, fingerprint, result_state, requested_paths, completed=True)
-    finally:
-        try:
-            checkpoint_path.unlink()
-        except OSError:
-            pass
+        checkpoint_path.unlink(missing_ok=True)
+    except OSError:
+        pass
     return report_from_state()
