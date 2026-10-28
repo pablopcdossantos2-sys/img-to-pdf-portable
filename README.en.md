@@ -18,6 +18,7 @@ A desktop application for working with PDF files and images locally, built with 
 - **Extract pages:** save selected pages or ranges such as `1-3, 5, 8-10`, allow repeated pages, and accept a password. Navigation and annotations are retained where possible, with remapping to the retained pages.
 - **Rotate pages:** rotate by 90°, 180°, or 270°, across the whole document or selected pages, including password-protected PDFs.
 - **Split PDF:** supports one file per page, groups of N pages, breaks after selected/even/odd pages, approximate target size, and bookmarks with a selected level and optional regular-expression filter. Creates the output folder if needed, accepts a password, preserves compatible structures where possible, and never overwrites existing files. Size is estimated; a single page can exceed the target.
+- **PDF to images:** export all pages or selected ranges as PNG or JPEG, with adjustable resolution (72–600 DPI), configurable JPEG quality, password support, and filenames that avoid overwriting existing files.
 - **Reorder pages with thumbnails and preview:** every page appears as a thumbnail in a grid; drag to change the order and inspect the selected page in the preview panel. Thumbnails render in the background and track the original page; every page must appear exactly once.
 - **Selective watermarks and page numbers:** apply text, numbering, or both to all pages or only selected ranges (for example, `2-4, 7`). Numbering retains the page's original position in the document. Original content is not rasterized.
 - **Optimize PDF:** choose lossless stream compression/deduplication or balanced JPEG recompression of opaque raster images with adjustable quality. Transparent and inline images are left unchanged.
@@ -57,7 +58,7 @@ The **PDF Hub CI, security and packages** workflow tests the app and builds port
 
 The artifact includes the runtime and does not require a separate Python installation. Windows may show a security warning for downloaded files; verify the source before running the application.
 
-> GitHub Actions artifacts are temporary and expire according to the configured retention period. Versioned GitHub Releases are created when a tag such as `v0.8.0` is pushed. The executables are not digitally signed/notarized; Windows SmartScreen or macOS Gatekeeper may display a warning.
+> GitHub Actions artifacts are temporary and expire according to the configured retention period. Versioned GitHub Releases are created when a tag such as `v0.10.0` is pushed. The executables are not digitally signed/notarized; Windows SmartScreen or macOS Gatekeeper may display a warning.
 
 ## Run from source
 
