@@ -5,10 +5,10 @@ from pypdf.errors import PdfReadError, PdfStreamError
 from document_tools.errors import friendly_error_message
 
 
-def test_pdf_read_errors_are_not_swallowed_by_generic_pypdf_branch() -> None:
+def test_pdf_parser_errors_use_the_safe_structural_error_message() -> None:
     for error in (PdfReadError("internal parser detail"), PdfStreamError("internal stream detail")):
         message = friendly_error_message(error)
-        assert "danificado ou protegido por senha" in message
+        assert "estrutura não suportada ou está danificado" in message
         assert "internal parser detail" not in message
         assert "internal stream detail" not in message
 
