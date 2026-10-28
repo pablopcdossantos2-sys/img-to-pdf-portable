@@ -11,11 +11,12 @@ A desktop application for working with PDF files and images locally, built with 
 ## Features
 
 ### PDF tools
-- **Interface and quick image input:** left-side navigation, light/dark appearance in Settings, drag-and-drop image import, automatic DPI recommendation from image dimensions, and a default 0 mm margin.
+- **Interface and quick image input:** left-side navigation with an icon for every tool, light/dark appearance in Settings, drag-and-drop image import, automatic DPI recommendation from image dimensions, and a default 0 mm margin.
 
 - **Images to PDF:** convert JPG, JPEG, PNG, BMP, WEBP, TIFF, and GIF images into A4 pages, automatically choosing orientation and preserving aspect ratio. By default, all pages/frames in multipage or animated files are imported, with an option to use only the first. Transparency is placed on white.
 - **Merge PDFs:** combine files in the chosen order, prompt for protected PDFs' passwords, and attempt to preserve compatible bookmarks, metadata, and internal references.
 - **Extract pages:** save selected pages or ranges such as `1-3, 5, 8-10`, allow repeated pages, and accept a password. Navigation and annotations are retained where possible, with remapping to the retained pages.
+- **Delete pages:** remove selected pages or ranges, such as `2, 4-6, 9`, into a new PDF while preserving the original. Supports password-protected documents and prevents deleting every page.
 - **Rotate pages:** rotate by 90°, 180°, or 270°, across the whole document or selected pages, including password-protected PDFs.
 - **Split PDF:** supports one file per page, groups of N pages, breaks after selected/even/odd pages, approximate target size, and bookmarks with a selected level and optional regular-expression filter. Creates the output folder if needed, accepts a password, preserves compatible structures where possible, and never overwrites existing files. Size is estimated; a single page can exceed the target.
 - **PDF to images:** export all pages or selected ranges as PNG or JPEG, with adjustable resolution (72–600 DPI), configurable JPEG quality, password support, and filenames that avoid overwriting existing files.
