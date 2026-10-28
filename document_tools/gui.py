@@ -51,6 +51,7 @@ from document_tools.batch_processing import BatchControl, BatchFileResult, proce
 from document_tools.report_history import delete_batch_report, load_batch_history, save_batch_report
 from document_tools.image_resolution import recommend_dpi_from_images
 from document_tools.errors import friendly_error_message
+from document_tools.pdf_rendering import export_pdf_pages_to_images
 from document_tools.profiles import (
     CURRENT_PROFILE_SCHEMA_VERSION,
     migrate_local_profile,
@@ -3716,6 +3717,134 @@ class DocumentToolsWindow(QMainWindow):
                 self._t("Não foi possível salvar o relatório CSV. Verifique a pasta e as permissões."))
             return
         self.status_label.setText(self._t("Relatório salvo: {path}").format(path=output.resolve()))
+
+    def _choose_pdf_to_images_source(self) -> None:
+        path = self._choose_pdf("Escolher PDF para exportar imagens")
+        if path:
+            self.pdf_to_images_path.setText(path)
+
+    def _choose_pdf_to_images_directory(self) -> None:
+        path = self._choose_directory("Escolher pasta para salvar as imagens")
+        if path:
+            self.pdf_to_images_directory.setText(path)
+
+    def _export_pdf_pages(self) -> None:
+        source = self.pdf_to_images_path.text().strip()
+        directory_text = self.pdf_to_images_directory.text().strip()
+        if not source:
+            QMessageBox.information(
+                self, self._t("PDF para imagens"), self._t("Escolha o PDF de origem.")
+            )
+            return
+        if not directory_text or not Path(directory_text).is_dir():
+            QMessageBox.information(
+                self, self._t("PDF para imagens"), self._t("Escolha uma pasta de saída existente.")
+            )
+            return
+
+        output_directory = Path(directory_text)
+        page_specification = self.pdf_to_images_pages.text().strip()
+        image_format = str(self.pdf_to_images_format.currentData())
+        dpi = self.pdf_to_images_dpi.value()
+        quality = self.pdf_to_images_quality.value()
+        password = self.pdf_to_images_password.text()
+        self.pdf_to_images_password.clear()
+
+        def task() -> str:
+            images = export_pdf_pages_to_images(
+                source,
+                output_directory,
+                image_format=image_format,
+                dpi=dpi,
+                quality=quality,
+                pages=page_specification,
+                password=password,
+            )
+            return self._t("Exportadas {count} página(s) para imagens em {directory}.").format(
+                count=len(images), directory=output_directory
+            )
+
+        self._run_task(
+            "Exportando páginas do PDF como imagens…",
+            task,
+            output_location=output_directory,
+        )
+
+    def _build_pdf_to_images_tab(self) -> QWidget:
+        page, layout = self._new_page(
+            "Exportar páginas de PDF como imagens",
+            "Exporte todas as páginas ou apenas os intervalos escolhidos como arquivos PNG/JPEG.",
+        )
+        form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
+
+        self.pdf_to_images_path = QLineEdit()
+        self.pdf_to_images_path.setReadOnly(True)
+        choose_pdf = QPushButton("Escolher PDF")
+        choose_pdf.clicked.connect(self._choose_pdf_to_images_source)
+        source_row = QHBoxLayout()
+        source_row.addWidget(self.pdf_to_images_path, 1)
+        source_row.addWidget(choose_pdf)
+        source_container = QWidget()
+        source_container.setLayout(source_row)
+        form.addRow("PDF de origem para exportar", source_container)
+
+        self.pdf_to_images_pages = QLineEdit()
+        self.pdf_to_images_pages.setPlaceholderText("Deixe vazio para exportar todas as páginas")
+        form.addRow("Páginas (opcional)", self.pdf_to_images_pages)
+
+        self.pdf_to_images_password = QLineEdit()
+        self.pdf_to_images_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.pdf_to_images_password.setPlaceholderText("Opcional; não é armazenada")
+        form.addRow("Senha do PDF (opcional)", self.pdf_to_images_password)
+
+        self.pdf_to_images_format = QComboBox()
+        self.pdf_to_images_format.addItem("PNG", "PNG")
+        self.pdf_to_images_format.addItem("JPEG", "JPEG")
+        form.addRow("Formato das imagens", self.pdf_to_images_format)
+
+        self.pdf_to_images_dpi = QSpinBox()
+        self.pdf_to_images_dpi.setRange(72, 600)
+        self.pdf_to_images_dpi.setValue(150)
+        self.pdf_to_images_dpi.setSuffix(" DPI")
+        form.addRow("Resolução de saída", self.pdf_to_images_dpi)
+
+        self.pdf_to_images_quality = QSpinBox()
+        self.pdf_to_images_quality.setRange(1, 100)
+        self.pdf_to_images_quality.setValue(90)
+        self.pdf_to_images_quality.setSuffix(" / 100")
+        self.pdf_to_images_quality.setEnabled(False)
+        self.pdf_to_images_format.currentIndexChanged.connect(
+            lambda _index: self.pdf_to_images_quality.setEnabled(
+                self.pdf_to_images_format.currentData() == "JPEG"
+            )
+        )
+        form.addRow("Qualidade JPEG", self.pdf_to_images_quality)
+
+        self.pdf_to_images_directory = QLineEdit()
+        self.pdf_to_images_directory.setReadOnly(True)
+        choose_directory = QPushButton("Escolher pasta")
+        choose_directory.clicked.connect(self._choose_pdf_to_images_directory)
+        output_row = QHBoxLayout()
+        output_row.addWidget(self.pdf_to_images_directory, 1)
+        output_row.addWidget(choose_directory)
+        output_container = QWidget()
+        output_container.setLayout(output_row)
+        form.addRow("Pasta para salvar as imagens", output_container)
+
+        layout.addLayout(form)
+        layout.addStretch(1)
+        button_row = QHBoxLayout()
+        button_row.addStretch(1)
+        export_button = QPushButton("Exportar páginas")
+        export_button.setObjectName("primaryButton")
+        export_button.clicked.connect(self._export_pdf_pages)
+        button_row.addWidget(export_button)
+        layout.addLayout(button_row)
+        return page
 
     def _build_convert_tab(self) -> QWidget:
         page, layout = self._new_page(
