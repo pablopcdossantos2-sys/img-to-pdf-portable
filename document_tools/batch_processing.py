@@ -359,7 +359,16 @@ def process_pdf_folder(
                     pass
 
         if progress_callback is not None:
-            progress_callback(completed, total, source.name)
+            try:
+                progress_callback(completed, total, source.name)
+            except Exception:
+                # A callback failure is an unexpected interruption; save the in-memory
+                # state before propagating it so resumability is not lost.
+                try:
+                    _write_checkpoint(checkpoint_path, fingerprint, result_state, requested_paths)
+                except OSError:
+                    pass
+                raise
 
     def report_from_state() -> list[BatchFileResult]:
         report: list[BatchFileResult] = []
