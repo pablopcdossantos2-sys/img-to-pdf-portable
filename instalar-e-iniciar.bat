@@ -30,7 +30,7 @@ if errorlevel 1 (
 )
 
 if exist ".venv\Scripts\python.exe" (
-    ".venv\Scripts\python.exe" -c "import PySide6, pypdf, PIL" >nul 2>nul
+    ".venv\Scripts\python.exe" -c "import sys, PySide6, pypdf, PIL, cryptography, reportlab; raise SystemExit(0 if sys.version_info >= (3,11) else 1)" >nul 2>nul
     if errorlevel 1 (
         echo O ambiente Python existente parece incompleto ou foi movido.
         echo Apague manualmente a pasta .venv e execute este instalador novamente.
