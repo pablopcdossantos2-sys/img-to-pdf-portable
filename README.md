@@ -13,7 +13,7 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, desenvolvido co
 ### PDFs
 - **Interface e entrada rápida:** navegação lateral com ícones associados a cada ferramenta, modos claro/escuro em Configurações, inclusão de imagens por arrastar e soltar, sugestão automática de DPI pelas dimensões das imagens e margem inicial de 0 mm.
 - **Imagens para PDF:** converte JPG, JPEG, PNG, BMP, WEBP, TIFF e GIF em páginas A4, ajustando automaticamente a orientação e preservando as proporções. Por padrão, importa todas as páginas/quadros dos arquivos multipágina ou animados, com opção para usar apenas o primeiro. Imagens transparentes são compostas sobre branco.
-- **Unir PDFs:** combina arquivos na ordem escolhida, solicita senhas para PDFs protegidos e tenta preservar marcadores, metadados e referências internas compatíveis.
+- **Unir PDFs:** combina arquivos na ordem escolhida, permite definir intervalos de páginas individualmente para cada PDF, solicita senhas para documentos protegidos e tenta preservar marcadores, metadados e referências internas compatíveis.
 - **Misturar PDFs:** intercala páginas de dois documentos, com intervalos opcionais, ordem reversa para o segundo arquivo e quantidade configurável de páginas por bloco. Aceita senhas e preserva os originais.
 - **Inserir páginas repetidamente:** insere páginas de um PDF dentro de outro após cada N páginas, repetindo a seleção indicada. Aceita senhas e preserva os arquivos originais.
 - **Extrair páginas:** salva páginas específicas ou intervalos como `1-3, 5, 8-10`, permite repetir páginas e aceita senha. A estrutura de navegação e as anotações são preservadas na medida do possível, com remapeamento para as páginas mantidas.
