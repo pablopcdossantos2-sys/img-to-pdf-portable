@@ -14,7 +14,7 @@ A desktop application for working with PDF files and images locally, built with 
 - **Interface and quick image input:** left-side navigation with an icon for every tool, light/dark appearance in Settings, drag-and-drop image import, automatic DPI recommendation from image dimensions, and a default 0 mm margin.
 
 - **Images to PDF:** convert JPG, JPEG, PNG, BMP, WEBP, TIFF, and GIF images into A4 pages, automatically choosing orientation and preserving aspect ratio. By default, all pages/frames in multipage or animated files are imported, with an option to use only the first. Transparency is placed on white.
-- **Merge PDFs:** combine files in the chosen order, prompt for protected PDFs' passwords, and attempt to preserve compatible bookmarks, metadata, and internal references.
+- **Merge PDFs:** combine files in the chosen order, select page ranges for each input independently, prompt for protected PDFs' passwords, and attempt to preserve compatible bookmarks, metadata, and internal references.
 - **Mix PDFs:** interleave pages from two documents, with optional page ranges, reverse order for the second file, and configurable pages per block. Supports passwords and preserves the originals.
 - **Insert pages repeatedly:** insert selected pages from one PDF into another after every N target pages, repeating the chosen selection. Supports passwords and preserves the original files.
 - **Extract pages:** save selected pages or ranges such as `1-3, 5, 8-10`, allow repeated pages, and accept a password. Navigation and annotations are retained where possible, with remapping to the retained pages.
