@@ -63,6 +63,8 @@ def test_profile_rejects_unknown_fields_in_every_schema() -> None:
 def test_profile_rejects_invalid_page_range_syntax(key: str, value: str) -> None:
     profile = schema_one_profile()
     profile[key] = value
+    if key == "stamp_ranges":
+        profile["stamp_enabled"] = True
     with pytest.raises(ValueError):
         validate_profile_document({
             "schema_version": 1,
@@ -73,6 +75,7 @@ def test_profile_rejects_invalid_page_range_syntax(key: str, value: str) -> None
 
 def test_profile_rejects_watermark_text_not_supported_by_standard_font() -> None:
     profile = schema_one_profile()
+    profile["stamp_enabled"] = True
     profile["stamp_text"] = "Review 🐾"
     with pytest.raises(ValueError, match="marca d'água contém caracteres não suportados"):
         validate_profile_document({
