@@ -64,6 +64,8 @@ from document_tools.pdf_ops import (
     extract_pages,
     images_to_pdf,
     merge_pdfs,
+    mix_pdfs,
+    insert_pages_repeatedly,
     optimize_pdf,
     pdf_page_count,
     reorder_pdf_pages,
@@ -100,6 +102,39 @@ TRANSLATIONS = {
         "Idioma / Language": "Language",
         "Imagens para PDF": "Images to PDF",
         "Unir PDFs": "Merge PDFs",
+        "Misturar PDFs": "Mix PDFs",
+        "Inserir páginas": "Insert pages",
+        "Combinar páginas de dois PDFs alternadamente": "Interleave pages from two PDFs",
+        "Escolha os documentos e defina quantas páginas de cada arquivo serão usadas em cada bloco.": "Choose the documents and set how many pages from each file are used in each block.",
+        "Primeiro PDF": "First PDF",
+        "Segundo PDF": "Second PDF",
+        "Páginas do primeiro PDF (opcional)": "Pages from the first PDF (optional)",
+        "Páginas do segundo PDF (opcional)": "Pages from the second PDF (optional)",
+        "Senha do primeiro PDF (opcional)": "First PDF password (optional)",
+        "Senha do segundo PDF (opcional)": "Second PDF password (optional)",
+        "Páginas do primeiro PDF por bloco": "Pages from first PDF per block",
+        "Páginas do segundo PDF por bloco": "Pages from second PDF per block",
+        "Inverter a ordem das páginas do segundo PDF": "Reverse the order of pages from the second PDF",
+        "Deixe em branco para usar todas as páginas; exemplo: 1-3, 5.": "Leave blank to use every page; example: 1-3, 5.",
+        "Misturar PDFs": "Mix PDFs",
+        "Misturando PDFs…": "Mixing PDFs…",
+        "PDFs misturados: ": "PDFs mixed: ",
+        "Inserir páginas de um PDF repetidamente dentro de outro": "Insert pages from one PDF repeatedly into another",
+        "Escolha o PDF de destino e o arquivo que contém as páginas a inserir.": "Choose the destination PDF and the file containing the pages to insert.",
+        "PDF de destino": "Destination PDF",
+        "PDF com páginas a inserir": "PDF containing pages to insert",
+        "Páginas a inserir (opcional)": "Pages to insert (optional)",
+        "Inserir após cada N páginas": "Insert after every N pages",
+        "Senha do PDF de destino (opcional)": "Destination PDF password (optional)",
+        "Senha do PDF a inserir (opcional)": "PDF-to-insert password (optional)",
+        "Inserindo páginas…": "Inserting pages…",
+        "PDF com páginas inseridas: ": "PDF with inserted pages: ",
+        "Escolha o primeiro PDF.": "Choose the first PDF.",
+        "Escolha o segundo PDF.": "Choose the second PDF.",
+        "Escolha o PDF de destino.": "Choose the destination PDF.",
+        "Escolha o PDF que contém as páginas a inserir.": "Choose the PDF containing the pages to insert.",
+        "O número de páginas por bloco deve ser positivo.": "The number of pages per block must be positive.",
+        "O intervalo entre inserções deve ser positivo.": "The insertion interval must be positive.",
         "Extrair páginas": "Extract pages",
         "Girar páginas": "Rotate pages",
         "Dividir PDF": "Split PDF",
@@ -413,7 +448,40 @@ TRANSLATIONS = {
         "0600: somente o usuário atual. 0644: outros usuários do sistema podem ler os arquivos.": "0600: solo el usuario actual. 0644: otros usuarios pueden leer los archivos.",
         "Idioma / Language": "Idioma",
         "Imagens para PDF": "Imágenes a PDF",
-        "Unir PDFs": "Unir PDFs",
+        "Unir PDFs": "Unir PDF",
+        "Misturar PDFs": "Mezclar PDF",
+        "Inserir páginas": "Insertar páginas",
+        "Combinar páginas de dois PDFs alternadamente": "Intercalar páginas de dos PDF",
+        "Escolha os documentos e defina quantas páginas de cada arquivo serão usadas em cada bloco.": "Elige los documentos y define cuántas páginas de cada archivo se usarán en cada bloque.",
+        "Primeiro PDF": "Primer PDF",
+        "Segundo PDF": "Segundo PDF",
+        "Páginas do primeiro PDF (opcional)": "Páginas del primer PDF (opcional)",
+        "Páginas do segundo PDF (opcional)": "Páginas del segundo PDF (opcional)",
+        "Senha do primeiro PDF (opcional)": "Contraseña del primer PDF (opcional)",
+        "Senha do segundo PDF (opcional)": "Contraseña del segundo PDF (opcional)",
+        "Páginas do primeiro PDF por bloco": "Páginas del primer PDF por bloque",
+        "Páginas do segundo PDF por bloco": "Páginas del segundo PDF por bloque",
+        "Inverter a ordem das páginas do segundo PDF": "Invertir el orden de las páginas del segundo PDF",
+        "Deixe em branco para usar todas as páginas; exemplo: 1-3, 5.": "Deja en blanco para usar todas las páginas; ejemplo: 1-3, 5.",
+        "Misturar PDFs": "Mezclar PDF",
+        "Misturando PDFs…": "Mezclando PDF…",
+        "PDFs misturados: ": "PDF mezclados: ",
+        "Inserir páginas de um PDF repetidamente dentro de outro": "Insertar páginas de un PDF repetidamente dentro de otro",
+        "Escolha o PDF de destino e o arquivo que contém as páginas a inserir.": "Elige el PDF de destino y el archivo que contiene las páginas que se insertarán.",
+        "PDF de destino": "PDF de destino",
+        "PDF com páginas a inserir": "PDF que contiene las páginas que se insertarán",
+        "Páginas a inserir (opcional)": "Páginas que insertar (opcional)",
+        "Inserir após cada N páginas": "Insertar después de cada N páginas",
+        "Senha do PDF de destino (opcional)": "Contraseña del PDF de destino (opcional)",
+        "Senha do PDF a inserir (opcional)": "Contraseña del PDF que insertar (opcional)",
+        "Inserindo páginas…": "Insertando páginas…",
+        "PDF com páginas inseridas: ": "PDF con páginas insertadas: ",
+        "Escolha o primeiro PDF.": "Elige el primer PDF.",
+        "Escolha o segundo PDF.": "Elige el segundo PDF.",
+        "Escolha o PDF de destino.": "Elige el PDF de destino.",
+        "Escolha o PDF que contém as páginas a inserir.": "Elige el PDF que contiene las páginas que se insertarán.",
+        "O número de páginas por bloco deve ser positivo.": "El número de páginas por bloque debe ser positivo.",
+        "O intervalo entre inserções deve ser positivo.": "El intervalo entre inserciones debe ser positivo.",
         "Extrair páginas": "Extraer páginas",
         "Girar páginas": "Girar páginas",
         "Dividir PDF": "Dividir PDF",
@@ -1055,6 +1123,8 @@ class SideNavigationWidget(QWidget):
         icon_by_label = {
             "Imagens para PDF": QStyle.StandardPixmap.SP_FileDialogNewFolder,
             "Unir PDFs": QStyle.StandardPixmap.SP_FileDialogContentsView,
+            "Misturar PDFs": QStyle.StandardPixmap.SP_FileDialogContentsView,
+            "Inserir páginas": QStyle.StandardPixmap.SP_FileDialogDetailedView,
             "Extrair páginas": QStyle.StandardPixmap.SP_FileDialogDetailedView,
             "Excluir páginas": QStyle.StandardPixmap.SP_TrashIcon,
             "Girar páginas": QStyle.StandardPixmap.SP_BrowserReload,
@@ -1305,6 +1375,8 @@ class DocumentToolsWindow(QMainWindow):
         self.tabs.setDocumentMode(True)
         self.tabs.addTab(self._build_image_pdf_tab(), "  Imagens para PDF  ")
         self.tabs.addTab(self._build_merge_tab(), "  Unir PDFs  ")
+        self.tabs.addTab(self._build_mix_tab(), "  Misturar PDFs  ")
+        self.tabs.addTab(self._build_insert_pages_tab(), "  Inserir páginas  ")
         self.tabs.addTab(self._build_extract_tab(), "  Extrair páginas  ")
         self.tabs.addTab(self._build_delete_pages_tab(), "  Excluir páginas  ")
         self.tabs.addTab(self._build_rotate_tab(), "  Girar páginas  ")
@@ -1378,7 +1450,9 @@ class DocumentToolsWindow(QMainWindow):
             "en": [
                 ("PDF criado: ", "PDF created: "),
                 ("PDFs unidos: ", "PDFs merged: "),
-                ("Páginas extraídas: ", "Pages extracted: "),
+                ("PDFs misturados: ", "PDFs mixed: "),
+                ("PDF com páginas inseridas: ", "PDF with inserted pages: "),
+                ("Páginas extraídas:  "Pages extracted: "),
                 ("Páginas removidas: ", "Pages removed: "),
                 ("PDF rotacionado: ", "PDF rotated: "),
                 ("Unindo os PDFs…", "Merging PDFs…"),
@@ -1391,7 +1465,9 @@ class DocumentToolsWindow(QMainWindow):
             "es": [
                 ("PDF criado: ", "PDF creado: "),
                 ("PDFs unidos: ", "PDFs unidos: "),
-                ("Páginas extraídas: ", "Páginas extraídas: "),
+                ("PDFs misturados: ", "PDF mezclados: "),
+                ("PDF com páginas inseridas: ", "PDF con páginas insertadas: "),
+                ("Páginas extraídas:  "Páginas extraídas: "),
                 ("Páginas removidas: ", "Páginas eliminadas: "),
                 ("PDF rotacionado: ", "PDF girado: "),
                 ("Unindo os PDFs…", "Uniendo los PDF…"),
@@ -2181,6 +2257,223 @@ class DocumentToolsWindow(QMainWindow):
         self._run_task(
             "Unindo os PDFs…",
             lambda: f"PDFs unidos: {merge_pdfs(sources, output, passwords=passwords, file_mode=file_mode)}",
+            output_location=output,
+        )
+
+    def _build_mix_tab(self) -> QWidget:
+        page, layout = self._new_page(
+            "Combinar páginas de dois PDFs alternadamente",
+            "Escolha os documentos e defina quantas páginas de cada arquivo serão usadas em cada bloco.",
+        )
+        form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
+
+        self.mix_first_path = QLineEdit()
+        self.mix_first_path.setReadOnly(True)
+        first_browse = QPushButton("Escolher PDF")
+        first_browse.clicked.connect(self._select_mix_first_pdf)
+        first_row = QHBoxLayout()
+        first_row.setContentsMargins(0, 0, 0, 0)
+        first_row.addWidget(self.mix_first_path, 1)
+        first_row.addWidget(first_browse)
+        first_container = QWidget()
+        first_container.setLayout(first_row)
+        form.addRow("Primeiro PDF", first_container)
+
+        self.mix_second_path = QLineEdit()
+        self.mix_second_path.setReadOnly(True)
+        second_browse = QPushButton("Escolher PDF")
+        second_browse.clicked.connect(self._select_mix_second_pdf)
+        second_row = QHBoxLayout()
+        second_row.setContentsMargins(0, 0, 0, 0)
+        second_row.addWidget(self.mix_second_path, 1)
+        second_row.addWidget(second_browse)
+        second_container = QWidget()
+        second_container.setLayout(second_row)
+        form.addRow("Segundo PDF", second_container)
+
+        self.mix_first_ranges = QLineEdit()
+        self.mix_first_ranges.setPlaceholderText("Deixe em branco para usar todas as páginas; exemplo: 1-3, 5.")
+        form.addRow("Páginas do primeiro PDF (opcional)", self.mix_first_ranges)
+        self.mix_second_ranges = QLineEdit()
+        self.mix_second_ranges.setPlaceholderText("Deixe em branco para usar todas as páginas; exemplo: 1-3, 5.")
+        form.addRow("Páginas do segundo PDF (opcional)", self.mix_second_ranges)
+
+        self.mix_first_password = QLineEdit()
+        self.mix_first_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.mix_first_password.setPlaceholderText("Opcional; não é armazenada")
+        form.addRow("Senha do primeiro PDF (opcional)", self.mix_first_password)
+        self.mix_second_password = QLineEdit()
+        self.mix_second_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.mix_second_password.setPlaceholderText("Opcional; não é armazenada")
+        form.addRow("Senha do segundo PDF (opcional)", self.mix_second_password)
+
+        self.mix_first_pace = QSpinBox()
+        self.mix_first_pace.setRange(1, 1000)
+        self.mix_first_pace.setValue(1)
+        form.addRow("Páginas do primeiro PDF por bloco", self.mix_first_pace)
+        self.mix_second_pace = QSpinBox()
+        self.mix_second_pace.setRange(1, 1000)
+        self.mix_second_pace.setValue(1)
+        form.addRow("Páginas do segundo PDF por bloco", self.mix_second_pace)
+        self.mix_reverse_second = QCheckBox("Inverter a ordem das páginas do segundo PDF")
+        form.addRow("", self.mix_reverse_second)
+
+        layout.addLayout(form)
+        layout.addStretch(1)
+        actions = QHBoxLayout()
+        actions.addStretch(1)
+        mix_button = QPushButton("Misturar PDFs")
+        mix_button.setObjectName("primaryButton")
+        mix_button.clicked.connect(self._mix_pdfs)
+        actions.addWidget(mix_button)
+        layout.addLayout(actions)
+        return page
+
+    def _select_mix_first_pdf(self) -> None:
+        path = self._choose_pdf("Escolher o primeiro PDF.")
+        if path:
+            self.mix_first_path.setText(path)
+
+    def _select_mix_second_pdf(self) -> None:
+        path = self._choose_pdf("Escolher o segundo PDF.")
+        if path:
+            self.mix_second_path.setText(path)
+
+    def _mix_pdfs(self) -> None:
+        first = self.mix_first_path.text().strip()
+        second = self.mix_second_path.text().strip()
+        if not first:
+            QMessageBox.information(self, self._t("Misturar PDFs"), self._t("Escolha o primeiro PDF."))
+            return
+        if not second:
+            QMessageBox.information(self, self._t("Misturar PDFs"), self._t("Escolha o segundo PDF."))
+            return
+        output = self._require_output_pdf(
+            f"{Path(first).stem}-misturado.pdf", source_paths=[first, second]
+        )
+        if not output:
+            return
+
+        first_ranges = self.mix_first_ranges.text().strip() or None
+        second_ranges = self.mix_second_ranges.text().strip() or None
+        first_password = self.mix_first_password.text() or None
+        second_password = self.mix_second_password.text() or None
+        first_pace = self.mix_first_pace.value()
+        second_pace = self.mix_second_pace.value()
+        reverse_second = self.mix_reverse_second.isChecked()
+        self.mix_first_password.clear()
+        self.mix_second_password.clear()
+        file_mode = self._output_file_mode()
+        self._run_task(
+            "Misturando PDFs…",
+            lambda: f"PDFs misturados: {mix_pdfs(first, second, output, first_page_ranges=first_ranges, second_page_ranges=second_ranges, reverse_second=reverse_second, first_pace=first_pace, second_pace=second_pace, first_password=first_password, second_password=second_password, file_mode=file_mode)}",
+            output_location=output,
+        )
+
+    def _build_insert_pages_tab(self) -> QWidget:
+        page, layout = self._new_page(
+            "Inserir páginas de um PDF repetidamente dentro de outro",
+            "Escolha o PDF de destino e o arquivo que contém as páginas a inserir.",
+        )
+        form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
+
+        self.insert_target_path = QLineEdit()
+        self.insert_target_path.setReadOnly(True)
+        target_browse = QPushButton("Escolher PDF")
+        target_browse.clicked.connect(self._select_insert_target_pdf)
+        target_row = QHBoxLayout()
+        target_row.setContentsMargins(0, 0, 0, 0)
+        target_row.addWidget(self.insert_target_path, 1)
+        target_row.addWidget(target_browse)
+        target_container = QWidget()
+        target_container.setLayout(target_row)
+        form.addRow("PDF de destino", target_container)
+
+        self.insert_source_path = QLineEdit()
+        self.insert_source_path.setReadOnly(True)
+        source_browse = QPushButton("Escolher PDF")
+        source_browse.clicked.connect(self._select_insert_source_pdf)
+        source_row = QHBoxLayout()
+        source_row.setContentsMargins(0, 0, 0, 0)
+        source_row.addWidget(self.insert_source_path, 1)
+        source_row.addWidget(source_browse)
+        source_container = QWidget()
+        source_container.setLayout(source_row)
+        form.addRow("PDF com páginas a inserir", source_container)
+
+        self.insert_ranges = QLineEdit()
+        self.insert_ranges.setPlaceholderText("Deixe em branco para usar todas as páginas; exemplo: 1-3, 5.")
+        form.addRow("Páginas a inserir (opcional)", self.insert_ranges)
+        self.insert_every_n = QSpinBox()
+        self.insert_every_n.setRange(1, 100000)
+        self.insert_every_n.setValue(1)
+        form.addRow("Inserir após cada N páginas", self.insert_every_n)
+
+        self.insert_target_password = QLineEdit()
+        self.insert_target_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.insert_target_password.setPlaceholderText("Opcional; não é armazenada")
+        form.addRow("Senha do PDF de destino (opcional)", self.insert_target_password)
+        self.insert_source_password = QLineEdit()
+        self.insert_source_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.insert_source_password.setPlaceholderText("Opcional; não é armazenada")
+        form.addRow("Senha do PDF a inserir (opcional)", self.insert_source_password)
+
+        layout.addLayout(form)
+        layout.addStretch(1)
+        actions = QHBoxLayout()
+        actions.addStretch(1)
+        insert_button = QPushButton("Inserir páginas")
+        insert_button.setObjectName("primaryButton")
+        insert_button.clicked.connect(self._insert_pages_repeatedly)
+        actions.addWidget(insert_button)
+        layout.addLayout(actions)
+        return page
+
+    def _select_insert_target_pdf(self) -> None:
+        path = self._choose_pdf("Escolher PDF de destino.")
+        if path:
+            self.insert_target_path.setText(path)
+
+    def _select_insert_source_pdf(self) -> None:
+        path = self._choose_pdf("Escolher o PDF que contém as páginas a inserir.")
+        if path:
+            self.insert_source_path.setText(path)
+
+    def _insert_pages_repeatedly(self) -> None:
+        target = self.insert_target_path.text().strip()
+        source = self.insert_source_path.text().strip()
+        if not target:
+            QMessageBox.information(self, self._t("Inserir páginas"), self._t("Escolha o PDF de destino."))
+            return
+        if not source:
+            QMessageBox.information(
+                self, self._t("Inserir páginas"), self._t("Escolha o PDF que contém as páginas a inserir.")
+            )
+            return
+        output = self._require_output_pdf(
+            f"{Path(target).stem}-com-paginas-inseridas.pdf", source_paths=[target, source]
+        )
+        if not output:
+            return
+
+        ranges = self.insert_ranges.text().strip() or None
+        every_n_pages = self.insert_every_n.value()
+        target_password = self.insert_target_password.text() or None
+        insert_password = self.insert_source_password.text() or None
+        self.insert_target_password.clear()
+        self.insert_source_password.clear()
+        file_mode = self._output_file_mode()
+        self._run_task(
+            "Inserindo páginas…",
+            lambda: f"PDF com páginas inseridas: {insert_pages_repeatedly(target, source, output, every_n_pages=every_n_pages, insert_page_ranges=ranges, target_password=target_password, insert_password=insert_password, file_mode=file_mode)}",
             output_location=output,
         )
 
