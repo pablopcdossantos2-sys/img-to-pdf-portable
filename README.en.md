@@ -59,9 +59,9 @@ The **PDF Hub CI, security and packages** workflow tests the app and builds port
 4. Extract the package. On Windows, run `PDFHub.exe`; on Linux, run `PDFHub`; on macOS, open `PDF Hub.app`.
 5. The `.sha256` files can be used to verify the package checksum. For releases, download the checksum beside the same package from the official release page.
 
-The artifact includes the runtime and does not require a separate Python installation. Windows may show a security warning for downloaded files; verify the source before running the application.
+The artifact includes the runtime and does not require a separate Python installation. Packages include `LICENSE` and `LICENSES-THIRD-PARTY.md`. Windows may show a security warning for downloaded files; verify the source before running the application.
 
-> GitHub Actions artifacts are temporary and expire according to the configured retention period. Versioned GitHub Releases are created when a tag such as `v0.10.0` is pushed. The executables are not digitally signed/notarized; Windows SmartScreen or macOS Gatekeeper may display a warning.
+> GitHub Actions artifacts are temporary and expire according to the configured retention period. Versioned GitHub Releases are created when a tag such as `v0.11.0` is pushed. The executables are not digitally signed/notarized; Windows SmartScreen or macOS Gatekeeper may display a warning.
 
 ## Run from source
 
