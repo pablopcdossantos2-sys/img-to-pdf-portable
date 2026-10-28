@@ -600,10 +600,6 @@ def split_pdf(
         raise FileNotFoundError(f"PDF não encontrado: {source}")
     if source.suffix.lower() != ".pdf":
         raise ValueError("O arquivo de origem precisa ser PDF.")
-    directory.mkdir(parents=True, exist_ok=True)
-    if not directory.is_dir():
-        raise FileNotFoundError("Não foi possível criar a pasta de destino.")
-
     created: list[Path] = []
     with source.open("rb") as stream:
         reader = _open_reader(source, stream, password=password)
@@ -723,6 +719,10 @@ def split_pdf(
                 filename = f"{source.stem}-parte-{index:0{width}d}.pdf"
             outputs.append(directory / filename)
 
+        # Create the destination only after all input/password/options validation succeeds.
+        directory.mkdir(parents=True, exist_ok=True)
+        if not directory.is_dir():
+            raise FileNotFoundError("Não foi possível criar a pasta de destino.")
         conflicts = [path.name for path in outputs if path.exists()]
         if conflicts:
             raise FileExistsError(
