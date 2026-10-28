@@ -14,7 +14,7 @@ def test_pdf_rendering_reports_invalid_document(tmp_path: Path) -> None:
     output = tmp_path / "images"
     output.mkdir()
 
-    with pytest.raises(ValueError, match="não foi possível abrir o PDF"):
+    with pytest.raises(ValueError, match="Não foi possível abrir o PDF"):
         export_pdf_pages_to_images(source, output)
 
 
