@@ -835,9 +835,13 @@ def test_stamp_pdf_handles_page_rotation_and_nonzero_cropbox(tmp_path: Path) -> 
     assert "1 / 1" in stamped.extract_text()
     positions: list[tuple[float, float]] = []
 
-    def collect(text, _cm, tm, _font_dict, _font_size):
+    def collect(text, cm, tm, _font_dict, _font_size):
         if "1 / 1" in text:
-            positions.append((float(tm[4]), float(tm[5])))
+            # The text matrix is local to the overlay; apply the current transform
+            # to inspect where the text will actually be placed on the page.
+            x = float(cm[0] * tm[4] + cm[2] * tm[5] + cm[4])
+            y = float(cm[1] * tm[4] + cm[3] * tm[5] + cm[5])
+            positions.append((x, y))
 
     stamped.extract_text(visitor_text=collect)
     assert positions, "page-number text should have an inspectable text position"
