@@ -140,6 +140,8 @@ def _atomic_pdf_save(
                             shutil.copyfileobj(source_stream, destination_stream)
                         destination_stream.flush()
                         os.fsync(destination_stream.fileno())
+                    if os.name != "nt":
+                        os.chmod(output, file_mode)
                 except Exception:
                     output.unlink(missing_ok=True)
                     raise
