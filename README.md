@@ -11,10 +11,11 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, desenvolvido co
 ## Funcionalidades
 
 ### PDFs
-- **Interface e entrada rápida:** navegação lateral, modos claro/escuro em Configurações, inclusão de imagens por arrastar e soltar, sugestão automática de DPI pelas dimensões das imagens e margem inicial de 0 mm.
+- **Interface e entrada rápida:** navegação lateral com ícones associados a cada ferramenta, modos claro/escuro em Configurações, inclusão de imagens por arrastar e soltar, sugestão automática de DPI pelas dimensões das imagens e margem inicial de 0 mm.
 - **Imagens para PDF:** converte JPG, JPEG, PNG, BMP, WEBP, TIFF e GIF em páginas A4, ajustando automaticamente a orientação e preservando as proporções. Por padrão, importa todas as páginas/quadros dos arquivos multipágina ou animados, com opção para usar apenas o primeiro. Imagens transparentes são compostas sobre branco.
 - **Unir PDFs:** combina arquivos na ordem escolhida, solicita senhas para PDFs protegidos e tenta preservar marcadores, metadados e referências internas compatíveis.
 - **Extrair páginas:** salva páginas específicas ou intervalos como `1-3, 5, 8-10`, permite repetir páginas e aceita senha. A estrutura de navegação e as anotações são preservadas na medida do possível, com remapeamento para as páginas mantidas.
+- **Excluir páginas:** remove páginas específicas ou intervalos, como `2, 4-6, 9`, gerando um novo PDF e preservando o original. Aceita senha para documentos protegidos e impede a exclusão de todas as páginas.
 - **Girar páginas:** rotação em 90°, 180° ou 270°, em todas as páginas ou somente nas selecionadas, inclusive em PDFs protegidos por senha.
 - **Dividir PDF:** oferece um arquivo por página, grupos de N páginas, quebra após páginas selecionadas, quebra após páginas pares ou ímpares, tamanho aproximado e divisão por marcadores do sumário com nível/filtro opcional. Cria a pasta se necessário, aceita senha, preserva estruturas compatíveis quando possível e nunca substitui arquivos existentes. O tamanho é estimado; uma página pode exceder o limite.
 - **PDF para imagens:** exporta todas as páginas ou apenas intervalos selecionados em PNG ou JPEG, com resolução ajustável (72–600 DPI), qualidade JPEG configurável, suporte a senha e nomes que evitam sobrescrever arquivos existentes.
