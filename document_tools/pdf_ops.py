@@ -175,8 +175,10 @@ def pdf_requires_user_password(path: str | Path) -> bool:
             return False
         try:
             return not bool(reader.decrypt(""))
-        except Exception:
-            return True
+        except Exception as error:
+            raise ValueError(
+                "Não foi possível verificar se o PDF exige senha. O arquivo pode estar danificado."
+            ) from error
 
 
 def _copy_metadata(reader: PdfReader, writer: PdfWriter) -> None:
@@ -835,6 +837,9 @@ def convert_image(
                     save_options["optimize"] = True
                 else:
                     save_options["method"] = 6
+            elif image_format == "TIFF":
+                # Lossless compression reduces file size without changing image pixels.
+                save_options["compression"] = "tiff_lzw"
 
             profile_compatible = (
                 image_format != "BMP"
