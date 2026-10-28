@@ -74,9 +74,11 @@ def validate_profile_options(profile: object, schema_version: int) -> dict[str, 
     quality = profile["quality"]
     if not isinstance(quality, int) or isinstance(quality, bool) or not 50 <= quality <= 95:
         raise ValueError("A qualidade do perfil deve ficar entre 50 e 95.")
-    _validate_page_range_syntax(profile["rotate_ranges"])
-    _validate_page_range_syntax(profile["stamp_ranges"])
-    stamp_text = profile["stamp_text"]
+    if profile["rotate_enabled"]:
+        _validate_page_range_syntax(profile["rotate_ranges"])
+    if profile["stamp_enabled"]:
+        _validate_page_range_syntax(profile["stamp_ranges"])
+    stamp_text = profile["stamp_text"] if profile["stamp_enabled"] else ""
     if stamp_text:
         try:
             stamp_text.encode("cp1252")
