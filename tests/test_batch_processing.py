@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 
 import pytest
 
 import document_tools.batch_processing as batch
-from document_tools.batch_processing import BatchControl, CHECKPOINT_FILENAME, process_pdf_folder
+from document_tools.batch_processing import BatchControl, process_pdf_folder
 
 
 def make_profile() -> dict[str, object]:
@@ -49,7 +51,8 @@ def test_folder_batch_records_per_file_failures_and_never_overwrites(tmp_path: P
     assert results[2].output_path == "" and "simulated malformed PDF" in results[2].message
     assert processed == ["a.pdf", "b.pdf", "bad.pdf"]
     assert [entry[0] for entry in progress] == [1, 2, 3] and all(entry[1] == 3 for entry in progress)
-    assert not (output / CHECKPOINT_FILENAME).exists()
+    assert not list(output.glob('.pdf-hub-batch-state-*.json'))
+    assert not list(output.glob('.pdf-hub-batch-state-*.jsonl'))
 
 
 def test_recursive_batch_preserves_subfolder_layout_and_matches_uppercase_pdf(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -94,7 +97,8 @@ def test_folder_batch_resumes_without_reprocessing_recorded_successes(tmp_path: 
             source, output, make_profile(), resume=True,
             progress_callback=simulate_interruption,
         )
-    assert (output / CHECKPOINT_FILENAME).is_file()
+    assert len(list(output.glob('.pdf-hub-batch-state-*.json'))) == 1
+    assert len(list(output.glob('.pdf-hub-batch-state-*.jsonl'))) == 1
     assert processed == ["a.pdf"]
 
     results = process_pdf_folder(source, output, make_profile(), resume=True)
@@ -102,7 +106,8 @@ def test_folder_batch_resumes_without_reprocessing_recorded_successes(tmp_path: 
     assert all(result.success for result in results)
     assert results[0].message == "Concluído antes da interrupção; resultado reutilizado."
     assert processed == ["a.pdf", "b.pdf"]
-    assert not (output / CHECKPOINT_FILENAME).exists()
+    assert not list(output.glob('.pdf-hub-batch-state-*.json'))
+    assert not list(output.glob('.pdf-hub-batch-state-*.jsonl'))
 
 
 def test_resume_starts_fresh_when_profile_or_inventory_changes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -191,14 +196,16 @@ def test_cancel_preserves_checkpoint_and_resume_skips_completed_files(tmp_path: 
     assert len(partial) == 1
     assert partial[0].success
     assert control.was_stopped
-    assert (output / CHECKPOINT_FILENAME).is_file()
+    assert len(list(output.glob('.pdf-hub-batch-state-*.json'))) == 1
+    assert len(list(output.glob('.pdf-hub-batch-state-*.jsonl'))) == 1
     assert processed == ["a.pdf"]
 
     resumed = process_pdf_folder(source, output, make_profile(), resume=True, control=BatchControl())
     assert len(resumed) == 3 and all(item.success for item in resumed)
     assert resumed[0].message == "Concluído antes da interrupção; resultado reutilizado."
     assert processed == ["a.pdf", "b.pdf", "c.pdf"]
-    assert not (output / CHECKPOINT_FILENAME).exists()
+    assert not list(output.glob('.pdf-hub-batch-state-*.json'))
+    assert not list(output.glob('.pdf-hub-batch-state-*.jsonl'))
 
 
 def test_cancel_releases_a_paused_batch_control() -> None:
@@ -295,13 +302,15 @@ def test_failure_only_retry_checkpoint_resumes_the_same_subset(tmp_path: Path, m
     )
     assert [Path(item.source_path).name for item in partial] == ["a.pdf", "b.pdf", "c.pdf"]
     assert partial[0].success and not partial[1].success and partial[2].success
-    assert (output / CHECKPOINT_FILENAME).is_file()
+    assert len(list(output.glob('.pdf-hub-batch-state-*.json'))) == 1
+    assert len(list(output.glob('.pdf-hub-batch-state-*.jsonl'))) == 1
     assert calls == ["a.pdf", "b.pdf", "c.pdf", "a.pdf"]
 
     resumed = process_pdf_folder(source, output, make_profile(), resume=True)
     assert all(item.success for item in resumed)
     assert calls == ["a.pdf", "b.pdf", "c.pdf", "a.pdf", "b.pdf"]
-    assert not (output / CHECKPOINT_FILENAME).exists()
+    assert not list(output.glob('.pdf-hub-batch-state-*.json'))
+    assert not list(output.glob('.pdf-hub-batch-state-*.jsonl'))
 
 
 def test_checkpoint_write_failures_do_not_abort_batch(
@@ -359,7 +368,7 @@ def test_checkpoint_writes_are_batched_during_large_folders(
     assert len(results) == 11
     assert all(item.success for item in results)
     assert write_calls == 2  # initial state + after the 10th processed item
-    assert not (output / batch.CHECKPOINT_FILENAME).exists()
+    assert not list(output.glob('.pdf-hub-batch-state-*.json'))
 
 
 def test_checkpoint_write_failure_does_not_abort_batch_or_lose_report(
@@ -391,3 +400,165 @@ def test_checkpoint_write_failure_does_not_abort_batch_or_lose_report(
     assert len(results) == 12
     assert all(result.success for result in results)
     assert len(list(output.glob("*-processed.pdf"))) == 12
+
+
+
+@pytest.mark.skipif(os.name == "nt" or sys.platform == "darwin", reason="POSIX byte filenames are required")
+def test_batch_handles_non_utf8_filename(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source, output = tmp_path / "input", tmp_path / "output"
+    source.mkdir()
+    output.mkdir()
+    legacy_name = os.fsdecode(b"a\\xe7\\xe3o.pdf")
+    (source / legacy_name).write_bytes(b"legacy name")
+    (source / "ok.pdf").write_bytes(b"valid name")
+
+    def fake_pipeline(_input_path, output_path, **_kwargs):
+        Path(output_path).write_bytes(b"processed")
+        return Path(output_path)
+
+    monkeypatch.setattr(batch, "process_pdf_pipeline", fake_pipeline)
+    results = process_pdf_folder(source, output, make_profile(), resume=True)
+
+    assert len(results) == 2
+    assert all(item.success for item in results)
+    assert len(list(output.glob("*-processed.pdf"))) == 2
+    assert not list(output.glob(".pdf-hub-batch-state-*.json"))
+    assert not list(output.glob(".pdf-hub-batch-state-*.jsonl"))
+
+
+def test_resume_after_interruption_does_not_duplicate_completed_outputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source, output = tmp_path / "input", tmp_path / "output"
+    source.mkdir()
+    output.mkdir()
+    for index in range(15):
+        (source / f"f{index:02d}.pdf").write_bytes(b"source")
+    processed: list[str] = []
+
+    def fake_pipeline(input_path, output_path, **_kwargs):
+        processed.append(Path(input_path).name)
+        Path(output_path).write_bytes(b"processed")
+        return Path(output_path)
+
+    monkeypatch.setattr(batch, "process_pdf_pipeline", fake_pipeline)
+
+    def interrupt_after_nine(completed: int, _total: int, _name: str) -> None:
+        if completed == 9:
+            raise SystemExit("simulated hard interruption")
+
+    with pytest.raises(SystemExit, match="simulated hard interruption"):
+        process_pdf_folder(
+            source, output, make_profile(), resume=True,
+            progress_callback=interrupt_after_nine,
+        )
+
+    assert len(list(output.glob("*-processed.pdf"))) == 9
+    resumed = process_pdf_folder(source, output, make_profile(), resume=True)
+    assert len(resumed) == 15
+    assert all(item.success for item in resumed)
+    assert sum(item.message == "Concluído antes da interrupção; resultado reutilizado." for item in resumed) == 9
+    assert len(list(output.glob("*-processed.pdf"))) == 15
+    assert not list(output.glob("*-processed-2.pdf"))
+    assert processed == [f"f{index:02d}.pdf" for index in range(15)]
+
+
+def test_checkpoints_of_different_sources_do_not_collide(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_a, source_b, output = tmp_path / "input-a", tmp_path / "input-b", tmp_path / "output"
+    source_a.mkdir()
+    source_b.mkdir()
+    output.mkdir()
+    for name in ("a0.pdf", "a1.pdf"):
+        (source_a / name).write_bytes(b"source")
+    for name in ("b0.pdf", "b1.pdf"):
+        (source_b / name).write_bytes(b"source")
+
+    def fake_pipeline(_input_path, output_path, **_kwargs):
+        Path(output_path).write_bytes(b"processed")
+        return Path(output_path)
+
+    monkeypatch.setattr(batch, "process_pdf_pipeline", fake_pipeline)
+    control = BatchControl()
+
+    def cancel_after_first(done: int, _total: int, _name: str) -> None:
+        if done == 1:
+            control.cancel()
+
+    partial_a = process_pdf_folder(
+        source_a, output, make_profile(), resume=True,
+        control=control, progress_callback=cancel_after_first,
+    )
+    assert partial_a[0].success
+    checkpoint_a = list(output.glob(".pdf-hub-batch-state-*.json"))
+    assert len(checkpoint_a) == 1
+
+    processed_b = process_pdf_folder(source_b, output, make_profile(), resume=True)
+    assert all(item.success for item in processed_b)
+    assert checkpoint_a[0].exists()
+
+    resumed_a = process_pdf_folder(source_a, output, make_profile(), resume=True)
+    assert all(item.success for item in resumed_a)
+    assert sum(item.message == "Concluído antes da interrupção; resultado reutilizado." for item in resumed_a) == 1
+    assert (output / "a0-processed.pdf").exists()
+    assert (output / "a1-processed.pdf").exists()
+    assert not (output / "a0-processed-2.pdf").exists()
+
+
+def test_invalid_ranges_are_rejected_before_processing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source, output = tmp_path / "input", tmp_path / "output"
+    source.mkdir()
+    output.mkdir()
+    for name in ("a.pdf", "b.pdf", "c.pdf"):
+        (source / name).write_bytes(b"source")
+    profile = make_profile()
+    profile["rotate_ranges"] = "abc"
+    calls: list[str] = []
+
+    def fake_pipeline(input_path, output_path, **_kwargs):
+        calls.append(Path(input_path).name)
+        Path(output_path).write_bytes(b"processed")
+        return Path(output_path)
+
+    monkeypatch.setattr(batch, "process_pdf_pipeline", fake_pipeline)
+    with pytest.raises(ValueError, match="Intervalo de páginas inválido"):
+        process_pdf_folder(source, output, profile)
+    assert calls == []
+    assert not list(output.glob("*-processed.pdf"))
+
+
+def test_rerun_failed_skips_missing_sources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source, output = tmp_path / "input", tmp_path / "output"
+    source.mkdir()
+    output.mkdir()
+    for name in ("a.pdf", "b.pdf", "c.pdf"):
+        (source / name).write_bytes(b"source")
+    calls: list[str] = []
+    attempts: dict[str, int] = {}
+
+    def fake_pipeline(input_path, output_path, **_kwargs):
+        name = Path(input_path).name
+        calls.append(name)
+        attempts[name] = attempts.get(name, 0) + 1
+        if name in {"a.pdf", "b.pdf"} and attempts[name] == 1:
+            raise ValueError("initial failure")
+        Path(output_path).write_bytes(b"processed")
+        return Path(output_path)
+
+    monkeypatch.setattr(batch, "process_pdf_pipeline", fake_pipeline)
+    original = process_pdf_folder(source, output, make_profile())
+    assert [item.success for item in original] == [False, False, True]
+    (source / "a.pdf").unlink()
+
+    retried = process_pdf_folder(
+        source, output, make_profile(),
+        only_sources=[original[0].source_path, original[1].source_path],
+        initial_results=original,
+        resume=True,
+    )
+    assert [Path(item.source_path).name for item in retried] == ["b.pdf", "c.pdf"]
+    assert all(item.success for item in retried)
+    assert calls == ["a.pdf", "b.pdf", "c.pdf", "b.pdf"]
