@@ -993,3 +993,16 @@ def test_split_pdf_does_not_create_destination_before_option_validation(tmp_path
         split_pdf(source, output_directory, mode="after_pages")
 
     assert not output_directory.exists()
+
+
+def test_normalizing_integer_mode_preserves_existing_8_bit_grayscale_values() -> None:
+    image = Image.new("I", (256, 1))
+    image.putdata(list(range(256)))
+    normalized = pdf_ops._normalise_high_bit_depth(image)
+    try:
+        assert normalized.mode == "L"
+        assert normalized.getextrema() == (0, 255)
+    finally:
+        if normalized is not image:
+            normalized.close()
+        image.close()
