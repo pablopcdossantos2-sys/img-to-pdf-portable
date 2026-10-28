@@ -734,6 +734,29 @@ def create_app_icon() -> QIcon:
 
 
 TRANSLATIONS["en"].update({
+    "PDF para imagens": "PDF to images",
+    "Exportar páginas de PDF como imagens": "Export PDF pages as images",
+    "Exporte todas as páginas ou apenas os intervalos escolhidos como arquivos PNG/JPEG.": "Export every page or selected ranges as PNG/JPEG image files.",
+    "PDF de origem para exportar": "Source PDF to export",
+    "Páginas (opcional)": "Pages (optional)",
+    "Deixe vazio para exportar todas as páginas": "Leave blank to export every page",
+    "Formato das imagens": "Image format",
+    "Resolução de saída": "Output resolution",
+    "Qualidade JPEG": "JPEG quality",
+    "Senha do PDF (opcional)": "PDF password (optional)",
+    "Pasta para salvar as imagens": "Folder to save images",
+    "Exportar páginas": "Export pages",
+    "Exportando páginas do PDF como imagens…": "Exporting PDF pages as images…",
+    "Escolher PDF para exportar imagens": "Choose PDF to export as images",
+    "Escolher pasta para salvar as imagens": "Choose folder to save images",
+    "Informe páginas, por exemplo: 1-3, 5, 8-10.": "Enter pages, e.g. 1-3, 5, 8-10.",
+    "A página {number} foi informada mais de uma vez.": "Page {number} was specified more than once.",
+    "Não foi possível abrir o PDF. Verifique se o arquivo está válido e se a senha está correta.": "Could not open the PDF. Check that the file is valid and the password is correct.",
+    "A resolução precisa ficar entre 72 e 600 DPI.": "Resolution must be between 72 and 600 DPI.",
+    "A qualidade JPEG precisa ficar entre 1 e 100.": "JPEG quality must be between 1 and 100.",
+    "Escolha PNG ou JPEG para exportar as páginas.": "Choose PNG or JPEG for page export.",
+    "Não foi possível renderizar a página {number}.": "Could not render page {number}.",
+    "Exportadas {count} página(s) para imagens em {directory}.": "Exported {count} page(s) to images in {directory}.",
     "Modo de divisão": "Split method",
     "Um arquivo por página": "One file per page",
     "A cada N páginas": "Every N pages",
@@ -768,6 +791,29 @@ TRANSLATIONS["en"].update({
     "{count} arquivos criados em: {directory}": "{count} files created in: {directory}"
 });
 TRANSLATIONS["es"].update({
+    "PDF para imagens": "PDF a imágenes",
+    "Exportar páginas de PDF como imagens": "Exportar páginas PDF como imágenes",
+    "Exporte todas as páginas ou apenas os intervalos escolhidos como arquivos PNG/JPEG.": "Exporta todas las páginas o solo los intervalos elegidos como archivos PNG/JPEG.",
+    "PDF de origem para exportar": "PDF de origen para exportar",
+    "Páginas (opcional)": "Páginas (opcional)",
+    "Deixe vazio para exportar todas as páginas": "Déjalo vacío para exportar todas las páginas",
+    "Formato das imagens": "Formato de imagen",
+    "Resolução de saída": "Resolución de salida",
+    "Qualidade JPEG": "Calidad JPEG",
+    "Senha do PDF (opcional)": "Contraseña del PDF (opcional)",
+    "Pasta para salvar as imagens": "Carpeta para guardar las imágenes",
+    "Exportar páginas": "Exportar páginas",
+    "Exportando páginas do PDF como imagens…": "Exportando páginas del PDF como imágenes…",
+    "Escolher PDF para exportar imagens": "Elegir PDF para exportar imágenes",
+    "Escolher pasta para salvar as imagens": "Elegir carpeta para guardar las imágenes",
+    "Informe páginas, por exemplo: 1-3, 5, 8-10.": "Indica las páginas, por ejemplo: 1-3, 5, 8-10.",
+    "A página {number} foi informada mais de uma vez.": "La página {number} se indicó más de una vez.",
+    "Não foi possível abrir o PDF. Verifique se o arquivo está válido e se a senha está correta.": "No se pudo abrir el PDF. Comprueba que el archivo sea válido y que la contraseña sea correcta.",
+    "A resolução precisa ficar entre 72 e 600 DPI.": "La resolución debe estar entre 72 y 600 DPI.",
+    "A qualidade JPEG precisa ficar entre 1 e 100.": "La calidad JPEG debe estar entre 1 y 100.",
+    "Escolha PNG ou JPEG para exportar as páginas.": "Elige PNG o JPEG para exportar las páginas.",
+    "Não foi possível renderizar a página {number}.": "No se pudo renderizar la página {number}.",
+    "Exportadas {count} página(s) para imagens em {directory}.": "Se exportaron {count} página(s) como imágenes en {directory}.",
     "Modo de divisão": "Método de división",
     "Um arquivo por página": "Un archivo por página",
     "A cada N páginas": "Cada N páginas",
@@ -803,30 +849,75 @@ TRANSLATIONS["es"].update({
 });
 
 class ReorderablePageList(QListWidget):
-    """Icon grid whose drop handler always reorders the underlying item model."""
+    """Thumbnail grid with explicit, same-widget drag-and-drop reordering."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self._dragged_item: QListWidgetItem | None = None
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self.setDragDropOverwriteMode(False)
+        self.setMovement(QListWidget.Movement.Static)
 
     def move_page_to_row(self, source_row: int, target_row: int) -> None:
+        """Move one item to its final zero-based row, preserving its page identity."""
         if source_row < 0 or source_row >= self.count():
             return
+        target_row = max(0, min(target_row, self.count() - 1))
+        if source_row == target_row:
+            return
         item = self.takeItem(source_row)
-        target_row = max(0, min(target_row, self.count()))
         self.insertItem(target_row, item)
         self.setCurrentItem(item)
 
-    def dropEvent(self, event) -> None:
-        selected = self.selectedItems()
-        if len(selected) != 1 or event.source() is not self:
+    def startDrag(self, supportedActions) -> None:  # noqa: N802 - Qt override
+        item = self.currentItem()
+        if item is None:
+            selected = self.selectedItems()
+            item = selected[0] if len(selected) == 1 else None
+        if item is None:
+            return
+        self._dragged_item = item
+        try:
+            super().startDrag(supportedActions)
+        finally:
+            self._dragged_item = None
+
+    def dragEnterEvent(self, event) -> None:  # noqa: N802 - Qt override
+        if event.source() is self:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event) -> None:  # noqa: N802 - Qt override
+        # Accept internal moves even when the pointer is between grid cells;
+        # QListWidget's default handler can otherwise refuse a drop on empty space.
+        if event.source() is self and self.count() > 0:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event) -> None:  # noqa: N802 - Qt override
+        if event.source() is not self:
             event.ignore()
             return
-        source_row = self.row(selected[0])
+        item = self._dragged_item
+        if item is None or self.row(item) < 0:
+            selected = self.selectedItems()
+            item = selected[0] if len(selected) == 1 else None
+        if item is None:
+            event.ignore()
+            return
+        source_row = self.row(item)
         target_row = self.indexAt(event.position().toPoint()).row()
         if target_row < 0:
             target_row = self.count() - 1
-        if source_row == target_row:
-            event.acceptProposedAction()
-            return
         self.move_page_to_row(source_row, target_row)
-        event.acceptProposedAction()
+        event.setDropAction(Qt.DropAction.MoveAction)
+        event.accept()
 
 
 class ImageDropList(QListWidget):
@@ -1164,6 +1255,7 @@ class DocumentToolsWindow(QMainWindow):
         self.tabs.addTab(self._build_optimize_tab(), "  Otimizar PDF  ")
         self.tabs.addTab(self._build_pipeline_tab(), "  Fluxo em lote  ")
         self._folder_batch_tab_index = self.tabs.addTab(self._build_folder_batch_tab(), "  Processar pasta  ")
+        self.tabs.addTab(self._build_pdf_to_images_tab(), "  PDF para imagens  ")
         self.tabs.addTab(self._build_convert_tab(), "  Converter imagens  ")
         self.settings_tab_index = self.tabs.addTab(self._build_settings_tab(), "Configurações")
         central_layout.addWidget(self.tabs, 1)
