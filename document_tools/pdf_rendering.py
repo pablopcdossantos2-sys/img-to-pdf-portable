@@ -45,8 +45,8 @@ def export_pdf_pages_to_images(
         if password:
             document.setPassword(password)
         load_error = document.load(str(source))
-        if load_error is not None and int(load_error) != 0:
-            error_name = str(getattr(load_error, "name", load_error)).casefold()
+        error_name = str(getattr(load_error, "name", load_error)).rsplit(".", 1)[-1].casefold()
+        if load_error is not None and error_name not in {"none", "none_", "noerror"}:
             if "password" in error_name:
                 raise ValueError("A senha do PDF está incorreta ou não foi informada.")
             raise ValueError(
