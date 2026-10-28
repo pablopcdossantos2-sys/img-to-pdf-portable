@@ -11,6 +11,9 @@ from PySide6.QtPdf import QPdfDocument
 from document_tools.pdf_ops import parse_page_ranges
 
 
+MAX_RENDER_PIXELS = 40_000_000
+
+
 def export_pdf_pages_to_images(
     source_path: str | Path,
     output_directory: str | Path,
@@ -41,7 +44,14 @@ def export_pdf_pages_to_images(
     try:
         if password:
             document.setPassword(password)
-        document.load(str(source))
+        load_error = document.load(str(source))
+        if load_error is not None and int(load_error) != 0:
+            error_name = str(getattr(load_error, "name", load_error)).casefold()
+            if "password" in error_name:
+                raise ValueError("A senha do PDF está incorreta ou não foi informada.")
+            raise ValueError(
+                "Não foi possível abrir o PDF. Verifique se o arquivo está válido e se a senha está correta."
+            )
         page_count = document.pageCount()
         if page_count < 1:
             raise ValueError(
@@ -62,7 +72,13 @@ def export_pdf_pages_to_images(
             height = float(point_size.height())
             if width <= 0 or height <= 0:
                 raise ValueError(f"Não foi possível obter o tamanho da página {page_index + 1}.")
-            image_size = QSize(max(1, round(width * scale)), max(1, round(height * scale)))
+            pixel_width = max(1, round(width * scale))
+            pixel_height = max(1, round(height * scale))
+            if pixel_width * pixel_height > MAX_RENDER_PIXELS:
+                raise ValueError(
+                    "A página ultrapassa o limite seguro de pixels. Reduza a resolução de saída."
+                )
+            image_size = QSize(pixel_width, pixel_height)
             rendered = document.render(page_index, image_size)
             if rendered.isNull():
                 raise ValueError(f"Não foi possível renderizar a página {page_index + 1}.")
