@@ -14,10 +14,21 @@ from document_tools.pdf_ops import process_pdf_pipeline
 from document_tools.profiles import migrate_local_profile
 
 
-CHECKPOINT_FILENAME = ".pdf-hub-batch-state.json"
+CHECKPOINT_FILENAME = ".pdf-hub-batch-state.json"  # legacy filename retained for migration
 CHECKPOINT_INTERVAL = 10
 _CHECKPOINT_VERSION = 1
+_JOURNAL_VERSION = 1
 _RESUMED_MESSAGE = "Concluído antes da interrupção; resultado reutilizado."
+
+
+def _batch_state_paths(output_root: Path, fingerprint: str) -> tuple[Path, Path]:
+    """Use separate durable state files for each source/profile/inventory fingerprint."""
+    stem = CHECKPOINT_FILENAME.removesuffix(".json")
+    token = fingerprint[:16]
+    return (
+        output_root / f"{stem}-{token}.json",
+        output_root / f"{stem}-{token}.jsonl",
+    )
 
 
 @dataclass(frozen=True)
@@ -116,6 +127,143 @@ def _batch_fingerprint(
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _truncate_incomplete_journal_tail(journal_path: Path) -> None:
+    """Drop a possibly truncated last JSONL record before appending after a crash."""
+    if not journal_path.is_file():
+        return
+    with journal_path.open("r+b") as stream:
+        stream.seek(0, os.SEEK_END)
+        size = stream.tell()
+        if size == 0:
+            return
+        stream.seek(size - 1)
+        if stream.read(1) == b"\n":
+            return
+        position = size - 1
+        while position >= 0:
+            stream.seek(position)
+            if stream.read(1) == b"\n":
+                stream.truncate(position + 1)
+                stream.flush()
+                os.fsync(stream.fileno())
+                return
+            position -= 1
+        stream.seek(0)
+        stream.truncate()
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+def _read_journal(
+    journal_path: Path,
+    fingerprint: str,
+    selected_paths: list[str],
+    valid_relative_paths: set[str],
+    output_root: Path,
+) -> tuple[bool, dict[str, dict[str, object]]]:
+    """Read durable per-file records; ignore an incomplete or malformed final line."""
+    try:
+        text = journal_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return False, {}
+    except (OSError, ValueError, TypeError, RecursionError, MemoryError):
+        return False, {}
+
+    lines = text.splitlines(keepends=True)
+    if not lines or not lines[0].endswith("\n"):
+        return False, {}
+    try:
+        header = json.loads(lines[0])
+    except (ValueError, TypeError, RecursionError, MemoryError):
+        return False, {}
+    if (
+        not isinstance(header, dict)
+        or header.get("type") != "header"
+        or type(header.get("version")) is not int
+        or header.get("version") != _JOURNAL_VERSION
+        or header.get("fingerprint") != fingerprint
+        or header.get("selected_paths") != selected_paths
+    ):
+        return False, {}
+
+    selected = set(selected_paths)
+    reusable: dict[str, dict[str, object]] = {}
+    for line in lines[1:]:
+        if not line.endswith("\n"):
+            break
+        try:
+            item = json.loads(line)
+        except (ValueError, TypeError, RecursionError, MemoryError):
+            continue
+        if (
+            not isinstance(item, dict)
+            or item.get("type") != "result"
+            or not isinstance(item.get("relative"), str)
+            or item["relative"] not in selected
+            or item["relative"] not in valid_relative_paths
+            or not isinstance(item.get("success"), bool)
+            or not isinstance(item.get("message"), str)
+        ):
+            continue
+        relative = item["relative"]
+        if item["success"]:
+            raw_output = item.get("output_path")
+            if not isinstance(raw_output, str) or not raw_output:
+                continue
+            try:
+                output_path = Path(raw_output).expanduser().resolve()
+                safe = output_path.is_file() and output_root in output_path.parents
+            except (OSError, RuntimeError, ValueError):
+                safe = False
+            if not safe:
+                continue
+            reusable[relative] = {
+                "success": True,
+                "output_path": str(output_path),
+                "message": item["message"],
+            }
+        else:
+            reusable[relative] = {
+                "success": False,
+                "output_path": "",
+                "message": item["message"],
+            }
+    return True, reusable
+
+
+def _append_journal_result(
+    journal_path: Path,
+    fingerprint: str,
+    selected_paths: list[str],
+    relative: str,
+    result: dict[str, object],
+) -> None:
+    """Append and fsync one completed file without rewriting the growing result map."""
+    journal_path.parent.mkdir(parents=True, exist_ok=True)
+    _truncate_incomplete_journal_tail(journal_path)
+    with journal_path.open("a", encoding="utf-8", newline="\n") as stream:
+        if journal_path.stat().st_size == 0:
+            header = {
+                "type": "header",
+                "version": _JOURNAL_VERSION,
+                "fingerprint": fingerprint,
+                "selected_paths": selected_paths,
+            }
+            stream.write(json.dumps(header, ensure_ascii=True, sort_keys=True) + "\n")
+        record = {
+            "type": "result",
+            "relative": relative,
+            "success": bool(result.get("success", False)),
+            "output_path": str(result.get("output_path", "")),
+            "message": str(result.get("message", "")),
+        }
+        stream.write(json.dumps(record, ensure_ascii=True, sort_keys=True) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    if os.name != "nt":
+        os.chmod(journal_path, 0o600)
+
+
 def _write_checkpoint(
     checkpoint_path: Path,
     fingerprint: str,
@@ -135,7 +283,7 @@ def _write_checkpoint(
     }
     try:
         with temporary_path.open("w", encoding="utf-8", newline="\n") as stream:
-            json.dump(payload, stream, ensure_ascii=False, sort_keys=True)
+            json.dump(payload, stream, ensure_ascii=True, sort_keys=True)
             stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
@@ -145,7 +293,7 @@ def _write_checkpoint(
     finally:
         try:
             temporary_path.unlink()
-        except OSError:
+        except (OSError, ValueError):
             pass
 
 
@@ -158,7 +306,7 @@ def _read_checkpoint(
     """Read a matching checkpoint, including the exact work list for safe resume."""
     try:
         payload = json.loads(checkpoint_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError, TypeError):
+    except (OSError, ValueError, TypeError, RecursionError, MemoryError):
         return None, {}
     selected_paths = payload.get("selected_paths") if isinstance(payload, dict) else None
     if (
@@ -255,8 +403,10 @@ def process_pdf_folder(
         raise ValueError("A pasta selecionada não contém arquivos PDF.")
 
     suffix = str(settings["output_suffix"])
-    checkpoint_path = output_root / CHECKPOINT_FILENAME
     fingerprint = _batch_fingerprint(source_root, output_root, recursive, settings, all_sources)
+    checkpoint_path, journal_path = _batch_state_paths(output_root, fingerprint)
+    legacy_checkpoint_path = output_root / CHECKPOINT_FILENAME
+    legacy_checkpoint_loaded = False
     sources_by_relative = {
         source.relative_to(source_root).as_posix(): source for source in all_sources
     }
@@ -269,19 +419,25 @@ def process_pdf_folder(
         if not requested_absolute:
             raise ValueError("Não há PDFs selecionados para reprocessar.")
         available_absolute = {str(source) for source in all_sources}
-        if not requested_absolute.issubset(available_absolute):
-            raise ValueError("Um ou mais PDFs selecionados não pertencem à pasta de origem atual.")
+        # Failure-only retries are historical selections: files removed since the
+        # report was generated should be skipped, not invalidate the remaining work.
         requested_paths = [
             relative for relative, source in sources_by_relative.items()
-            if str(source) in requested_absolute
+            if str(source) in requested_absolute and str(source) in available_absolute
         ]
+        if not requested_paths:
+            raise ValueError("Não há PDFs selecionados para reprocessar.")
 
     previous: dict[str, dict[str, object]] = {}
     checkpoint_selection: list[str] | None = None
-    if resume and checkpoint_path.is_file():
+    checkpoint_to_read = checkpoint_path
+    if resume and not checkpoint_path.is_file() and legacy_checkpoint_path.is_file():
+        checkpoint_to_read = legacy_checkpoint_path
+    if resume and checkpoint_to_read.is_file():
         checkpoint_selection, checkpoint_results = _read_checkpoint(
-            checkpoint_path, fingerprint, relative_paths, output_root
+            checkpoint_to_read, fingerprint, relative_paths, output_root
         )
+        legacy_checkpoint_loaded = checkpoint_to_read == legacy_checkpoint_path and checkpoint_selection is not None
         # Normal resume follows the saved work list. Failure-only retries reuse
         # it only when it matches the requested subset; otherwise start the new
         # subset with the current in-memory report as seed data.
@@ -308,11 +464,35 @@ def process_pdf_folder(
                 "message": item.message,
             }
 
+    if resume:
+        journal_matches, journal_results = _read_journal(
+            journal_path, fingerprint, requested_paths, relative_paths, output_root
+        )
+        if journal_matches:
+            result_state.update(journal_results)
+        elif journal_path.exists():
+            # A different selected subset can share a fingerprint. Start a fresh log
+            # only after confirming that its header does not match this work list.
+            try:
+                journal_path.unlink()
+            except OSError:
+                pass
+    elif journal_path.exists():
+        try:
+            journal_path.unlink()
+        except (OSError, ValueError):
+            pass
+
     # Checkpoints improve resumability but must never abort otherwise-valid processing.
     try:
         _write_checkpoint(checkpoint_path, fingerprint, result_state, requested_paths)
-    except OSError:
+    except (OSError, ValueError):
         pass
+    if legacy_checkpoint_loaded:
+        try:
+            legacy_checkpoint_path.unlink(missing_ok=True)
+        except (OSError, ValueError):
+            pass
     total = len(work_sources)
     for completed, source in enumerate(work_sources, start=1):
         if control is not None and not control.wait_until_resumed():
@@ -350,13 +530,20 @@ def process_pdf_folder(
                 "output_path": result.output_path,
                 "message": result.message,
             }
-            if completed % CHECKPOINT_INTERVAL == 0:
-                try:
-                    _write_checkpoint(checkpoint_path, fingerprint, result_state, requested_paths)
-                except OSError:
-                    # Keep the result in memory and continue; the report is more important
-                    # than resumability when the destination temporarily cannot be written.
-                    pass
+
+        # A per-file append-only record protects finished output if the process exits
+        # before the next full checkpoint. Durability failures never abort the batch.
+        try:
+            _append_journal_result(journal_path, fingerprint, requested_paths, relative, result_state[relative])
+        except (OSError, ValueError):
+            pass
+        if completed % CHECKPOINT_INTERVAL == 0:
+            try:
+                _write_checkpoint(checkpoint_path, fingerprint, result_state, requested_paths)
+            except (OSError, ValueError):
+                # Keep the result in memory and continue; the report is more important
+                # than resumability when the destination temporarily cannot be written.
+                pass
 
         if progress_callback is not None:
             try:
@@ -366,7 +553,7 @@ def process_pdf_folder(
                 # state before propagating it so resumability is not lost.
                 try:
                     _write_checkpoint(checkpoint_path, fingerprint, result_state, requested_paths)
-                except OSError:
+                except (OSError, ValueError):
                     pass
                 raise
 
@@ -391,7 +578,7 @@ def process_pdf_folder(
     if control is not None and control.was_stopped:
         try:
             _write_checkpoint(checkpoint_path, fingerprint, result_state, requested_paths)
-        except OSError:
+        except (OSError, ValueError):
             pass
         return report_from_state()
 
@@ -401,4 +588,13 @@ def process_pdf_folder(
         checkpoint_path.unlink(missing_ok=True)
     except OSError:
         pass
+    try:
+        journal_path.unlink(missing_ok=True)
+    except OSError:
+        pass
+    if legacy_checkpoint_loaded:
+        try:
+            legacy_checkpoint_path.unlink(missing_ok=True)
+        except OSError:
+            pass
     return report_from_state()
