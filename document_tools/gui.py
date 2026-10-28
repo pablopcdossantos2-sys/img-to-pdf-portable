@@ -962,11 +962,13 @@ TRANSLATIONS["en"].update({
     "A marca d'água contém caracteres não suportados pela fonte padrão. Use caracteres latinos e símbolos compatíveis.": "The watermark contains characters unsupported by the built-in font. Use Latin characters and compatible symbols.",
     "O texto da marca d'água é longo demais para caber na página. Reduza o texto ou use uma posição central.": "The watermark is too long to fit on the page. Shorten the text or use a centered position.",
     "Não foi possível concluir a operação. Os detalhes internos foram ocultados.": "The operation could not be completed. Internal details were hidden.",
+    "Um arquivo de destino já existe. Escolha outra pasta ou nome.": "A destination file already exists. Choose another folder or name.",
 })
 TRANSLATIONS["es"].update({
     "A marca d'água contém caracteres não suportados pela fonte padrão. Use caracteres latinos e símbolos compatíveis.": "La marca de agua contiene caracteres no compatibles con la fuente integrada. Usa caracteres latinos y símbolos compatibles.",
     "O texto da marca d'água é longo demais para caber na página. Reduza o texto ou use uma posição central.": "La marca de agua es demasiado larga para caber en la página. Acorta el texto o usa una posición centrada.",
     "Não foi possível concluir a operação. Os detalhes internos foram ocultados.": "No se pudo completar la operación. Se ocultaron los detalles internos.",
+    "Um arquivo de destino já existe. Escolha outra pasta ou nome.": "Ya existe un archivo de destino. Elige otra carpeta o nombre.",
 })
 
 class ReorderablePageList(QListWidget):
@@ -1353,6 +1355,7 @@ class DocumentToolsWindow(QMainWindow):
         self._last_batch_recursive = False
         self._last_batch_file_mode = 0o600
         self._pending_output_directory: Path | None = None
+        self._pending_output_location: Path | None = None
         self._split_custom_directory = False
         self.reorder_thumbnail_worker: PageThumbnailWorker | None = None
         self._reorder_items_by_page: dict[int, QListWidgetItem] = {}
@@ -1856,13 +1859,10 @@ class DocumentToolsWindow(QMainWindow):
         self.tabs.setEnabled(False)
         if output_location is None:
             self._pending_output_directory = None
+            self._pending_output_location = None
         else:
-            location = Path(output_location).expanduser().resolve()
-            # Directory-producing tasks may create the destination only after the worker
-            # starts (e.g. split PDF); do not collapse a not-yet-existing directory to its parent.
-            self._pending_output_directory = (
-                location.parent if location.suffix.lower() == ".pdf" else location
-            )
+            self._pending_output_location = Path(output_location).expanduser().resolve()
+            self._pending_output_directory = None
 
         worker = OperationWorker(task)
         self._worker = worker
@@ -1873,6 +1873,11 @@ class DocumentToolsWindow(QMainWindow):
 
     def _operation_succeeded(self, message: str) -> None:
         self.status_label.setText(self._t(message))
+        location = self._pending_output_location
+        if location is not None:
+            self._pending_output_directory = (
+                location if location.is_dir() else location.parent
+            )
         self.open_directory_button.setVisible(
             self._pending_output_directory is not None
             and self._pending_output_directory.is_dir()
@@ -2920,6 +2925,13 @@ class DocumentToolsWindow(QMainWindow):
                     QLineEdit.EchoMode.Password,
                 )
                 if not accepted:
+                    return
+                if not password:
+                    QMessageBox.information(
+                        self,
+                        self._t("Senha necessária"),
+                        self._t("Informe uma senha não vazia para continuar."),
+                    )
                     return
             count = pdf_page_count(path, password=password or None)
         except Exception as error:
