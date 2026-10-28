@@ -9,6 +9,9 @@ def friendly_error_message(error: Exception) -> str:
     if isinstance(error, FileNotFoundError):
         return "O arquivo ou a pasta não foi encontrado. Confira o caminho e tente novamente."
     if isinstance(error, FileExistsError):
+        detail = str(error)
+        if detail.startswith("A pasta já contém '"):
+            return detail
         return "Um arquivo de destino já existe. Escolha outra pasta ou nome."
     error_type = error.__class__.__name__
     module_name = error.__class__.__module__

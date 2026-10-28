@@ -18,6 +18,15 @@ def test_unexpected_errors_do_not_expose_internal_details() -> None:
     assert message == "Não foi possível concluir a operação. Os detalhes internos foram ocultados."
 
 
+def test_split_conflict_message_keeps_file_name() -> None:
+    error = FileExistsError(
+        "A pasta já contém 'doc-pagina-001.pdf'. Escolha outra pasta ou remova os arquivos conflitantes."
+    )
+    message = friendly_error_message(error)
+    assert "doc-pagina-001.pdf" in message
+    assert "Escolha outra pasta" in message
+
+
 def test_existing_output_error_does_not_include_file_path() -> None:
     message = friendly_error_message(FileExistsError("/private/user/document.pdf"))
     assert message == "Um arquivo de destino já existe. Escolha outra pasta ou nome."

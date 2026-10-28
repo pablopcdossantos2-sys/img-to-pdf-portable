@@ -46,6 +46,37 @@ def test_unreadable_images_are_skipped_and_empty_input_has_no_recommendation(tmp
     assert recommend_dpi_from_images([invalid, create_image(tmp_path / "valid.png", (1240, 1754))]) == 150
 
 
+def test_recommend_dpi_swaps_axes_for_exif_orientation_6(tmp_path: Path) -> None:
+    oriented_path = tmp_path / "orientation-6.jpg"
+    reference_path = tmp_path / "portrait.jpg"
+    image = Image.new("RGB", (200, 100), "white")
+    exif = image.getexif()
+    exif[0x0112] = 6
+    image.save(oriented_path, exif=exif)
+    image.close()
+    create_image(reference_path, (100, 200))
+    assert recommend_dpi_from_images([oriented_path]) == recommend_dpi_from_images([reference_path])
+
+
+def test_recommend_dpi_does_not_decode_pixels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = create_image(tmp_path / "header-only.png", (2480, 3508))
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("DPI estimation should read metadata only")
+    monkeypatch.setattr(Image.Image, "load", forbidden)
+    monkeypatch.setattr(Image.Image, "copy", forbidden)
+    assert recommend_dpi_from_images([source]) == 300
+
+
+def test_recommend_dpi_skips_decompression_bomb(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = create_image(tmp_path / "large-for-threshold.png", (50, 50))
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 1000)
+    assert recommend_dpi_from_images([source]) is None
+
+
 def test_invalid_margin_is_rejected() -> None:
     with pytest.raises(ValueError, match="margem"):
         recommend_dpi_from_images([], margin_mm=41)

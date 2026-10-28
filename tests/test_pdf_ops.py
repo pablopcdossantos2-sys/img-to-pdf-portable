@@ -930,6 +930,33 @@ def test_split_pdf_falls_back_when_hard_links_are_not_supported(
     assert all(path.is_file() and len(read_pdf(path).pages) == 1 for path in outputs)
 
 
+def test_split_twice_reports_conflicting_file_name(tmp_path: Path) -> None:
+    from document_tools.errors import friendly_error_message
+    source = create_pdf(tmp_path / "doc.pdf", [300])
+    output_dir = tmp_path / "split"
+    split_pdf(source, output_dir, mode="each_page")
+    with pytest.raises(FileExistsError) as error:
+        split_pdf(source, output_dir, mode="each_page")
+    assert "doc-pagina-001.pdf" in friendly_error_message(error.value)
+
+
+def test_optimize_encrypted_pdf_output_is_not_an_encrypted_source_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = create_pdf(tmp_path / "encrypted.pdf", [300], password="correct")
+    output = tmp_path / "optimized.pdf"
+    original_write = pdf_ops.PdfWriter.write
+    def write_inflated(writer, stream) -> None:
+        original_write(writer, stream)
+        with Path(stream).open("ab") as target:
+            target.write(b"\n% padding to make the re-encoded PDF larger\n" * 256)
+    monkeypatch.setattr(pdf_ops.PdfWriter, "write", write_inflated)
+    optimize_pdf(source, output, mode="lossless", password="correct")
+    with output.open("rb") as stream:
+        assert not PdfReader(stream).is_encrypted
+    assert output.stat().st_size > source.stat().st_size
+
+
 def test_optimize_pdf_never_returns_a_larger_file(tmp_path: Path) -> None:
     source = create_pdf(tmp_path / "tiny.pdf", [300])
     output = tmp_path / "optimized.pdf"

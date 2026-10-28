@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
-from PIL import Image, ImageOps
+from PIL import Image
 
 MIN_DPI = 72
 MAX_DPI = 600
@@ -34,14 +34,12 @@ def recommend_dpi_from_images(
         path = Path(raw_path).expanduser()
         try:
             with Image.open(path) as opened:
+                # The DPI estimate needs dimensions and EXIF orientation, not pixels.
                 opened.seek(0)
-                oriented = ImageOps.exif_transpose(opened)
-                try:
-                    width, height = oriented.size
-                finally:
-                    if oriented is not opened:
-                        oriented.close()
-        except (OSError, ValueError, EOFError):
+                width, height = opened.size
+                if opened.getexif().get(0x0112) in (5, 6, 7, 8):
+                    width, height = height, width
+        except (OSError, ValueError, EOFError, Image.DecompressionBombError):
             continue
 
         if width < 1 or height < 1:

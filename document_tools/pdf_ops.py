@@ -941,6 +941,7 @@ def optimize_pdf(
     def write(temporary: Path) -> None:
         with source.open("rb") as stream:
             reader = _open_reader(source, stream, password=password)
+            source_was_encrypted = reader.is_encrypted
             # pypdf's documented image replacement flow uses a writer cloned from the reader.
             writer = PdfWriter(clone_from=reader)
             for page in writer.pages:
@@ -979,8 +980,9 @@ def optimize_pdf(
                 remove_unreferenced=True,
             )
             writer.write(temporary)
-        # Optimization is optional: never replace a document with a larger one.
-        if temporary.stat().st_size > source.stat().st_size:
+        # The no-growth fallback is safe only for unencrypted input. Copying an
+        # encrypted source verbatim would make the output unexpectedly require a password.
+        if not source_was_encrypted and temporary.stat().st_size > source.stat().st_size:
             shutil.copyfile(source, temporary)
 
     _atomic_pdf_save(output, write, file_mode=file_mode)

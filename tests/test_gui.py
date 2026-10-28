@@ -49,6 +49,47 @@ def selected_names(widget: QListWidget) -> list[str]:
     ]
 
 
+def test_move_selected_preserves_current_item_and_merge_range_editor(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    try:
+        items = []
+        for index, name in enumerate(("a.pdf", "b.pdf", "c.pdf"), start=1):
+            item = QListWidgetItem(name)
+            item.setData(Qt.ItemDataRole.UserRole, name)
+            item.setData(Qt.ItemDataRole.UserRole + 1, str(index))
+            window.pdf_list.addItem(item)
+            items.append(item)
+        window.pdf_list.setCurrentRow(1)
+        moved = window.pdf_list.currentItem()
+        moved.setSelected(True)
+        assert window.merge_page_ranges.text() == "2"
+
+        DocumentToolsWindow._move_selected(window.pdf_list, -1)
+        assert window.pdf_list.currentItem() is moved
+        assert moved.isSelected()
+        assert window.merge_page_ranges.text() == "2"
+        DocumentToolsWindow._move_selected(window.pdf_list, 1)
+        assert window.pdf_list.currentItem() is moved
+        assert moved.isSelected()
+        assert window.merge_page_ranges.text() == "2"
+
+        for page_number in (1, 2, 3):
+            item = QListWidgetItem(f"Página {page_number:02d}")
+            item.setData(Qt.ItemDataRole.UserRole, page_number)
+            window.reorder_list.addItem(item)
+        window.reorder_list.setCurrentRow(1)
+        moved_page = window.reorder_list.currentItem()
+        moved_page.setSelected(True)
+        DocumentToolsWindow._move_selected(window.reorder_list, -1)
+        assert window.reorder_list.currentItem() is moved_page
+        assert moved_page.isSelected()
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
 def test_move_selected_up_does_not_reorder_block_at_top(qt_app: QApplication) -> None:
     widget = make_list(selected=(0, 1))
 
@@ -791,6 +832,211 @@ def test_settings_theme_icon_and_left_navigation(qt_app: QApplication) -> None:
         qt_app.processEvents()
 
 
+def test_part4_strings_and_reorder_captions_translate_between_languages(
+    qt_app: QApplication,
+) -> None:
+    window = DocumentToolsWindow()
+    previous_language = window.language_combo.currentData()
+    try:
+        if window._language == "en":
+            assert "Formats:" in window.image_pdf_hint.text()
+        elif window._language == "es":
+            assert "Formatos:" in window.image_pdf_hint.text()
+        else:
+            assert "Formatos:" in window.image_pdf_hint.text()
+
+        window.language_combo.setCurrentIndex(window.language_combo.findData("en"))
+        assert "Formats:" in window.image_pdf_hint.text()
+        assert window._t("Criando PDF a partir das imagens…") == "Creating PDF from images…"
+        page_item = QListWidgetItem("Página 01")
+        page_item.setData(Qt.ItemDataRole.UserRole, 1)
+        window.reorder_list.addItem(page_item)
+        window._reorder_items_by_page[1] = page_item
+        window._apply_language("en")
+        assert page_item.text() == "Page 01"
+
+        window.language_combo.setCurrentIndex(window.language_combo.findData("es"))
+        assert "Formatos:" in window.image_pdf_hint.text()
+        assert window._t("Criando PDF a partir das imagens…") == "Creando PDF a partir de las imágenes…"
+        assert page_item.text() == "Página 01"
+    finally:
+        window.language_combo.setCurrentIndex(
+            window.language_combo.findData(previous_language)
+        )
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_manual_dpi_survives_adding_more_images(
+    qt_app: QApplication, tmp_path: Path
+) -> None:
+    first = tmp_path / "first.png"
+    second = tmp_path / "second.png"
+    with PILImage.new("RGB", (2480, 3508), "white") as image:
+        image.save(first)
+    with PILImage.new("RGB", (1240, 1754), "white") as image:
+        image.save(second)
+    window = DocumentToolsWindow()
+    try:
+        assert DocumentToolsWindow._add_paths(window.image_list, [str(first)]) == 1
+        window._update_image_dpi_from_sources()
+        assert window.image_dpi.value() == 300
+        window.image_dpi.setValue(180)
+        assert DocumentToolsWindow._add_paths(window.image_list, [str(second)]) == 1
+        window._update_image_dpi_from_sources()
+        assert window.image_dpi.value() == 180
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX filesystems may distinguish case-only names")
+def test_add_paths_keeps_case_distinct_files_on_posix(
+    qt_app: QApplication, tmp_path: Path
+) -> None:
+    first = tmp_path / "Report.pdf"
+    second = tmp_path / "report.pdf"
+    first.write_text("first", encoding="utf-8")
+    second.write_text("second", encoding="utf-8")
+    if first.samefile(second):
+        pytest.skip("The test filesystem is case-insensitive.")
+    widget = QListWidget()
+    try:
+        assert DocumentToolsWindow._add_paths(widget, [str(first), str(second)]) == 2
+        assert widget.count() == 2
+    finally:
+        widget.close()
+        widget.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_preview_message_when_document_unavailable(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    try:
+        item = QListWidgetItem("Página 01")
+        item.setData(Qt.ItemDataRole.UserRole, 1)
+        window.reorder_list.addItem(item)
+        window.reorder_list.setCurrentRow(0)
+        window.reorder_document = None
+        window._preview_reorder_page(0)
+        assert window.reorder_preview.text() == window._t("Prévia indisponível para este PDF.")
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_stale_thumbnail_from_previous_pdf_is_ignored(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    try:
+        item = QListWidgetItem("Página 01")
+        item.setData(Qt.ItemDataRole.UserRole, 1)
+        window.reorder_list.addItem(item)
+        window._reorder_items_by_page[1] = item
+        window._reorder_generation = 2
+        image = QImage(4, 4, QImage.Format.Format_ARGB32)
+        image.fill(Qt.GlobalColor.red)
+        window._set_reorder_thumbnail(1, image, generation=1)
+        assert item.icon().isNull()
+        window._set_reorder_thumbnail(1, image, generation=2)
+        assert not item.icon().isNull()
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_reorder_refuses_pdf_modified_after_selection(
+    qt_app: QApplication, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import document_tools.gui as gui
+    source = tmp_path / "source.pdf"
+    source.write_bytes(b"original")
+    window = DocumentToolsWindow()
+    messages = []
+    output_requests = []
+    try:
+        window.reorder_path.setText(str(source))
+        item = QListWidgetItem("Página 01")
+        item.setData(Qt.ItemDataRole.UserRole, 1)
+        window.reorder_list.addItem(item)
+        window._reorder_source_signature = (source.stat().st_size, source.stat().st_mtime_ns)
+        source.write_bytes(b"content replaced with a different length")
+        monkeypatch.setattr(gui.QMessageBox, "warning", lambda *args: messages.append(args))
+        window._require_output_pdf = lambda *args, **kwargs: output_requests.append(args)
+        window._reorder_pdf()
+        assert messages
+        assert messages[0][2] == window._t(
+            "O PDF foi alterado desde a seleção. Escolha o arquivo novamente antes de reordenar."
+        )
+        assert not output_requests
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_merge_reprompts_after_wrong_password_and_reuses_validated_password(
+    qt_app: QApplication, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import document_tools.gui as gui
+    protected = tmp_path / "protected.pdf"
+    writer = PdfWriter()
+    writer.add_blank_page(width=100, height=100)
+    writer.encrypt(user_password="correct", owner_password="owner", algorithm="AES-256")
+    with protected.open("wb") as stream:
+        writer.write(stream)
+
+    window = DocumentToolsWindow()
+    previous_language = window.language_combo.currentData()
+    prompts = iter([("wrong", True), ("correct", True)])
+    warnings = []
+    tasks = []
+    captured = {}
+    def fake_merge(sources, destination, *, passwords, page_ranges, file_mode):
+        captured["sources"] = sources
+        captured["passwords"] = passwords
+        captured["page_ranges"] = page_ranges
+        captured["file_mode"] = file_mode
+        return Path(destination)
+
+    try:
+        window.language_combo.setCurrentIndex(window.language_combo.findData("pt"))
+        for _ in range(2):
+            item = QListWidgetItem(protected.name)
+            item.setData(Qt.ItemDataRole.UserRole, str(protected))
+            window.pdf_list.addItem(item)
+        window.pdf_list.setCurrentRow(0)
+        window._require_output_pdf = lambda *args, **kwargs: tmp_path / "merged.pdf"
+        window._run_task = lambda _title, task, **kwargs: tasks.append(task)
+        monkeypatch.setattr(gui.QInputDialog, "getText", lambda *args: next(prompts))
+        monkeypatch.setattr(gui.QMessageBox, "warning", lambda *args: warnings.append(args))
+        monkeypatch.setattr(gui, "merge_pdfs", fake_merge)
+        window._merge_pdfs()
+        assert len(warnings) == 1
+        assert any(word in warnings[0][2].lower() for word in ("senha", "password", "contraseña"))
+        assert len(tasks) == 1
+        tasks[0]()
+        assert captured["passwords"] == ["correct", "correct"]
+        assert captured["sources"] == [str(protected), str(protected)]
+    finally:
+        window.language_combo.setCurrentIndex(
+            window.language_combo.findData(previous_language)
+        )
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
 def test_image_dpi_is_estimated_after_adding_a_source_image(
     qt_app: QApplication, tmp_path: Path
 ) -> None:
@@ -968,7 +1214,8 @@ def test_window_preserves_space_for_controls_and_aligned_file_pickers(qt_app: QA
         )
 
         assert window.reorder_list.gridSize().height() >= 160
-        assert window.reorder_list.wordWrap()
+        assert not window.reorder_list.wordWrap()
+        assert window.reorder_list.textElideMode() == Qt.TextElideMode.ElideNone
 
         path_fields = (
             "extract_path",

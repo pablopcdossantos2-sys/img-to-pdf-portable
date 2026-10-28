@@ -11,7 +11,7 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QSize, QThread, Signal, Qt, QUrl, QStandardPaths, QMimeData, QPoint
+from PySide6.QtCore import QItemSelectionModel, QSettings, QSize, QThread, Signal, Qt, QUrl, QStandardPaths, QMimeData, QPoint
 from PySide6.QtGui import QCloseEvent, QDesktopServices, QDrag, QFont, QIcon, QImage, QPixmap
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtWidgets import (
@@ -1026,6 +1026,22 @@ TRANSLATIONS["es"].update({
     "A página ultrapassa o limite seguro de pixels. Reduza a resolução de saída.": "La página supera el límite seguro de píxeles. Reduce la resolución de salida.",
 })
 
+TRANSLATIONS["en"].update({
+    "Arraste imagens para esta área ou use “Adicionar imagens”. Formatos: JPG, PNG, BMP, WEBP, TIFF e GIF.": "Drop images here or use “Add images”. Formats: JPG, PNG, BMP, WEBP, TIFF and GIF.",
+    "Não houve redução de tamanho: {old} → {new}": "No size reduction: {old} → {new}",
+    "O PDF foi alterado desde a seleção. Escolha o arquivo novamente antes de reordenar.": "The PDF has changed since it was selected. Choose the file again before reordering.",
+    "Não foi possível acessar o PDF de origem. Escolha o arquivo novamente.": "The source PDF is no longer available. Choose the file again.",
+    "Prévia indisponível para este PDF.": "Preview is unavailable for this PDF.",
+})
+TRANSLATIONS["es"].update({
+    "Arraste imagens para esta área ou use “Adicionar imagens”. Formatos: JPG, PNG, BMP, WEBP, TIFF e GIF.": "Suelta imágenes aquí o usa “Añadir imágenes”. Formatos: JPG, PNG, BMP, WEBP, TIFF y GIF.",
+    "Criando PDF a partir das imagens…": "Creando PDF a partir de las imágenes…",
+    "Não houve redução de tamanho: {old} → {new}": "No se redujo el tamaño: {old} → {new}",
+    "O PDF foi alterado desde a seleção. Escolha o arquivo novamente antes de reordenar.": "El PDF cambió desde que se seleccionó. Elige el archivo de nuevo antes de reordenarlo.",
+    "Não foi possível acessar o PDF de origem. Escolha o arquivo novamente.": "El PDF de origen ya no está disponible. Elige el archivo de nuevo.",
+    "Prévia indisponível para este PDF.": "La vista previa no está disponible para este PDF.",
+})
+
 class ReorderPageDelegate(QStyledItemDelegate):
     """Keep each page thumbnail above its readable caption."""
 
@@ -1441,6 +1457,9 @@ class DocumentToolsWindow(QMainWindow):
         self._pending_output_location: Path | None = None
         self._split_custom_directory = False
         self.reorder_thumbnail_worker: PageThumbnailWorker | None = None
+        self._retired_thumbnail_workers: list[PageThumbnailWorker] = []
+        self._reorder_generation = 0
+        self._reorder_source_signature: tuple[int, int] | None = None
         self._reorder_items_by_page: dict[int, QListWidgetItem] = {}
 
         central = QWidget()
@@ -1681,6 +1700,11 @@ class DocumentToolsWindow(QMainWindow):
                 continue
         for index, original in enumerate(self._original_tab_titles):
             self.tabs.setTabText(index, self._t(original))
+        if hasattr(self, "_reorder_items_by_page"):
+            for page_number, item in self._reorder_items_by_page.items():
+                item.setText(
+                    self._t("Página {number}").format(number=f"{page_number:02d}")
+                )
         if hasattr(self, "batch_results_table"):
             self.batch_results_table.setHorizontalHeaderLabels([
                 self._t("Arquivo de origem"), self._t("Resultado"),
@@ -1859,19 +1883,23 @@ class DocumentToolsWindow(QMainWindow):
     @staticmethod
     def _add_paths(list_widget: QListWidget, paths: list[str]) -> int:
         known = {
-            str(Path(list_widget.item(index).data(Qt.ItemDataRole.UserRole)).resolve()).casefold()
+            os.path.normcase(
+                str(Path(list_widget.item(index).data(Qt.ItemDataRole.UserRole)).resolve())
+            )
             for index in range(list_widget.count())
         }
         added = 0
         for raw_path in paths:
             path = Path(raw_path).expanduser()
-            if not path.is_file() or str(path.resolve()).casefold() in known:
+            resolved = str(path.resolve())
+            key = os.path.normcase(resolved)
+            if not path.is_file() or key in known:
                 continue
             item = QListWidgetItem(path.name)
-            item.setToolTip(str(path.resolve()))
-            item.setData(Qt.ItemDataRole.UserRole, str(path.resolve()))
+            item.setToolTip(resolved)
+            item.setData(Qt.ItemDataRole.UserRole, resolved)
             list_widget.addItem(item)
-            known.add(str(path.resolve()).casefold())
+            known.add(key)
             added += 1
         return added
 
@@ -2044,12 +2072,19 @@ class DocumentToolsWindow(QMainWindow):
             worker.wait()
             worker.deleteLater()
             self._worker = None
-        thumbnail_worker = self.reorder_thumbnail_worker
-        if thumbnail_worker is not None:
+        thumbnail_workers = list(self._retired_thumbnail_workers)
+        if (
+            self.reorder_thumbnail_worker is not None
+            and self.reorder_thumbnail_worker not in thumbnail_workers
+        ):
+            thumbnail_workers.append(self.reorder_thumbnail_worker)
+        for thumbnail_worker in thumbnail_workers:
             thumbnail_worker.requestInterruption()
+        for thumbnail_worker in thumbnail_workers:
             thumbnail_worker.wait()
             thumbnail_worker.deleteLater()
-            self.reorder_thumbnail_worker = None
+        self._retired_thumbnail_workers.clear()
+        self.reorder_thumbnail_worker = None
         if getattr(self, "reorder_document", None) is not None:
             self.reorder_document.close()
             self.reorder_document = None
@@ -2179,6 +2214,7 @@ class DocumentToolsWindow(QMainWindow):
 
         options = QHBoxLayout()
         options.addWidget(QLabel("Resolução:"))
+        self._image_dpi_auto = 150
         self.image_dpi = QSpinBox()
         self.image_dpi.setRange(72, 600)
         self.image_dpi.setValue(150)
@@ -2194,6 +2230,9 @@ class DocumentToolsWindow(QMainWindow):
         self.image_margin.setDecimals(1)
         self.image_margin.setValue(0)
         self.image_margin.setSuffix(" mm")
+        self.image_margin.valueChanged.connect(
+            lambda _value: self._update_image_dpi_from_sources()
+        )
         options.addWidget(self.image_margin)
         options.addStretch(1)
         layout.addLayout(options)
@@ -2204,7 +2243,10 @@ class DocumentToolsWindow(QMainWindow):
         layout.addWidget(self.image_all_frames)
 
         bottom = QHBoxLayout()
-        hint = QLabel("Arraste imagens para esta área ou use “Adicionar imagens”. Formatos: JPG, PNG, BMP, WEBP, TIFF e GIF.")
+        hint = QLabel(
+            self._t("Arraste imagens para esta área ou use “Adicionar imagens”. Formatos: JPG, PNG, BMP, WEBP, TIFF e GIF.")
+        )
+        self.image_pdf_hint = hint
         hint.setObjectName("muted")
         hint.setWordWrap(True)
         make_pdf = QPushButton("Criar PDF")
@@ -2235,12 +2277,29 @@ class DocumentToolsWindow(QMainWindow):
 
     def _update_image_dpi_from_sources(self) -> None:
         sources = self._all_paths(self.image_list)
-        recommended = recommend_dpi_from_images(sources, margin_mm=self.image_margin.value())
-        if recommended is None:
+        previous_auto = self._image_dpi_auto
+        if not sources:
+            self._image_dpi_auto = 150
             self.image_dpi.setValue(150)
             return
-        self.image_dpi.setValue(recommended)
-        self.status_label.setText(self._t("Resolução recomendada calculada a partir das imagens."))
+
+        recommended = recommend_dpi_from_images(
+            sources, margin_mm=self.image_margin.value()
+        )
+        if recommended is None:
+            if self.image_dpi.value() == previous_auto:
+                self.image_dpi.setValue(150)
+            self._image_dpi_auto = 150
+            return
+
+        # Only overwrite the control while it still contains the previous automatic
+        # suggestion; a different value belongs to the user's manual choice.
+        if self.image_dpi.value() == previous_auto:
+            self.image_dpi.setValue(recommended)
+            self.status_label.setText(
+                self._t("Resolução recomendada calculada a partir das imagens.")
+            )
+        self._image_dpi_auto = recommended
 
     def _remove_image_inputs(self) -> None:
         self._remove_selected(self.image_list)
@@ -2272,6 +2331,7 @@ class DocumentToolsWindow(QMainWindow):
         if not list_widget.selectedItems():
             return
 
+        current_item = list_widget.currentItem()
         if offset < 0:
             for row in range(1, list_widget.count()):
                 current = list_widget.item(row)
@@ -2288,6 +2348,11 @@ class DocumentToolsWindow(QMainWindow):
                     item = list_widget.takeItem(row)
                     list_widget.insertItem(row + 1, item)
                     item.setSelected(True)
+
+        if current_item is not None and list_widget.row(current_item) >= 0:
+            list_widget.setCurrentItem(
+                current_item, QItemSelectionModel.SelectionFlag.NoUpdate
+            )
 
     def _create_pdf_from_images(self) -> None:
         sources = self._all_paths(self.image_list)
@@ -2391,9 +2456,17 @@ class DocumentToolsWindow(QMainWindow):
         if not output:
             return
         passwords: list[str | None] = [None] * len(sources)
+        validated_passwords: dict[str, str] = {}
         try:
             for index, source in enumerate(sources):
-                if pdf_requires_user_password(source):
+                password_key = os.path.normcase(str(Path(source).resolve()))
+                if password_key in validated_passwords:
+                    passwords[index] = validated_passwords[password_key]
+                    continue
+                if not pdf_requires_user_password(source):
+                    continue
+
+                for _attempt in range(3):
                     password, accepted = QInputDialog.getText(
                         self,
                         self._t("Senha do PDF"),
@@ -2403,9 +2476,26 @@ class DocumentToolsWindow(QMainWindow):
                     if not accepted:
                         return
                     if not password:
-                        QMessageBox.information(self, self._t("Senha necessária"), self._t("Informe uma senha não vazia para continuar."))
-                        return
+                        QMessageBox.information(
+                            self,
+                            self._t("Senha necessária"),
+                            self._t("Informe uma senha não vazia para continuar."),
+                        )
+                        continue
+                    try:
+                        pdf_page_count(source, password=password)
+                    except Exception as password_error:
+                        QMessageBox.warning(
+                            self,
+                            self._t("Não foi possível verificar o PDF"),
+                            self._t(friendly_error_message(password_error)),
+                        )
+                        continue
+                    validated_passwords[password_key] = password
                     passwords[index] = password
+                    break
+                else:
+                    return
         except Exception as error:
             QMessageBox.warning(
                 self,
@@ -3038,6 +3128,7 @@ class DocumentToolsWindow(QMainWindow):
                     )
                     return
             count = pdf_page_count(path, password=password or None)
+            source_stat = Path(path).stat()
         except Exception as error:
             QMessageBox.warning(
                 self,
@@ -3045,12 +3136,22 @@ class DocumentToolsWindow(QMainWindow):
                 self._t(friendly_error_message(error)),
             )
             return
+        # Invalidate queued signals from the previous PDF and retire its render
+        # worker without blocking the GUI thread on a large document.
+        self._reorder_generation += 1
         thumbnail_worker = self.reorder_thumbnail_worker
         if thumbnail_worker is not None:
+            self._retired_thumbnail_workers.append(thumbnail_worker)
+            thumbnail_worker.finished.connect(
+                self._cleanup_retired_thumbnail_worker
+            )
             thumbnail_worker.requestInterruption()
-            thumbnail_worker.wait()
-            thumbnail_worker.deleteLater()
+            if not thumbnail_worker.isRunning():
+                self._cleanup_retired_thumbnail_worker_for(thumbnail_worker)
             self.reorder_thumbnail_worker = None
+        self._reorder_source_signature = (
+            source_stat.st_size, source_stat.st_mtime_ns
+        )
         self._reorder_items_by_page.clear()
         self.reorder_path.setText(path)
         self.reorder_password = password or None
@@ -3063,6 +3164,7 @@ class DocumentToolsWindow(QMainWindow):
         self.reorder_document.load(path)
         if self.reorder_document.pageCount() != count:
             self.reorder_document.close()
+            self.reorder_document.deleteLater()
             self.reorder_document = None
         self.reorder_list.clear()
         for page_number in range(1, count + 1):
@@ -3077,29 +3179,61 @@ class DocumentToolsWindow(QMainWindow):
         if count:
             self.reorder_list.setCurrentRow(0)
             thumbnail_worker = PageThumbnailWorker(path, password or None, self)
-            thumbnail_worker.thumbnail_ready.connect(self._set_reorder_thumbnail)
-            thumbnail_worker.failed.connect(self._thumbnail_render_failed)
+            generation = self._reorder_generation
+            thumbnail_worker.thumbnail_ready.connect(
+                lambda number, image, current=generation:
+                    self._set_reorder_thumbnail(number, image, current)
+            )
+            thumbnail_worker.failed.connect(
+                lambda message, current=generation:
+                    self._thumbnail_render_failed(message, current)
+            )
             self.reorder_thumbnail_worker = thumbnail_worker
             thumbnail_worker.start()
         self.status_label.setText(
             self._t("{count} páginas carregadas. Arraste para reorganizar.").format(count=count)
         )
 
-    def _set_reorder_thumbnail(self, page_number: int, image: QImage) -> None:
-        """Assign an asynchronously rendered thumbnail to its original-page item."""
+    def _cleanup_retired_thumbnail_worker_for(
+        self, worker: PageThumbnailWorker
+    ) -> None:
+        if worker not in self._retired_thumbnail_workers:
+            return
+        self._retired_thumbnail_workers.remove(worker)
+        worker.deleteLater()
+
+    def _cleanup_retired_thumbnail_worker(self) -> None:
+        worker = self.sender()
+        if isinstance(worker, PageThumbnailWorker):
+            self._cleanup_retired_thumbnail_worker_for(worker)
+
+    def _set_reorder_thumbnail(
+        self, page_number: int, image: QImage, generation: int | None = None
+    ) -> None:
+        """Assign a thumbnail only when it belongs to the currently selected PDF."""
+        if generation is not None and generation != self._reorder_generation:
+            return
         item = self._reorder_items_by_page.get(page_number)
         if item is not None:
             item.setIcon(QIcon(QPixmap.fromImage(image)))
 
-    def _thumbnail_render_failed(self, message: str) -> None:
+    def _thumbnail_render_failed(
+        self, message: str, generation: int | None = None
+    ) -> None:
+        if generation is not None and generation != self._reorder_generation:
+            return
         self.status_label.setText(self._t(message))
 
     def _preview_reorder_page(self, row: int) -> None:
         document = self.reorder_document
         item = self.reorder_list.item(row) if row >= 0 else None
-        if document is None or item is None:
+        if item is None:
             self.reorder_preview.setPixmap(QPixmap())
             self.reorder_preview.setText(self._t("Selecione uma página para visualizar."))
+            return
+        if document is None:
+            self.reorder_preview.setPixmap(QPixmap())
+            self.reorder_preview.setText(self._t("Prévia indisponível para este PDF."))
             return
         original_page_number = int(item.data(Qt.ItemDataRole.UserRole))
         page_index = original_page_number - 1
@@ -3141,6 +3275,23 @@ class DocumentToolsWindow(QMainWindow):
         source = self.reorder_path.text().strip()
         if not source or not self.reorder_list.count():
             QMessageBox.information(self, self._t("Reordenar PDF"), self._t("Escolha um PDF para reorganizar suas páginas."))
+            return
+        try:
+            current_stat = Path(source).stat()
+        except OSError:
+            QMessageBox.warning(
+                self,
+                self._t("Reordenar PDF"),
+                self._t("Não foi possível acessar o PDF de origem. Escolha o arquivo novamente."),
+            )
+            return
+        current_signature = (current_stat.st_size, current_stat.st_mtime_ns)
+        if self._reorder_source_signature is None or current_signature != self._reorder_source_signature:
+            QMessageBox.warning(
+                self,
+                self._t("Reordenar PDF"),
+                self._t("O PDF foi alterado desde a seleção. Escolha o arquivo novamente antes de reordenar."),
+            )
             return
         order = [
             int(self.reorder_list.item(index).data(Qt.ItemDataRole.UserRole))
@@ -3450,12 +3601,9 @@ class DocumentToolsWindow(QMainWindow):
             if new_size < old_size:
                 percent = round((old_size - new_size) / old_size * 100) if old_size else 0
                 template = "PDF otimizado: {old} → {new} ({percent}% menor)"
-            elif new_size > old_size:
-                percent = round((new_size - old_size) / old_size * 100) if old_size else 0
-                template = "PDF otimizado: {old} → {new} ({percent}% maior)"
             else:
                 percent = 0
-                template = "PDF otimizado: {old} → {new} (tamanho igual)"
+                template = "Não houve redução de tamanho: {old} → {new}"
             message = self._t(template).format(
                 old=self._format_size(old_size),
                 new=self._format_size(new_size),
