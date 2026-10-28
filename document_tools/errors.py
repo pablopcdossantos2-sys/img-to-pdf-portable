@@ -14,7 +14,7 @@ def friendly_error_message(error: Exception) -> str:
     module_name = error.__class__.__module__
     if error_type in {"UnidentifiedImageError", "DecompressionBombError"}:
         return "A imagem é inválida, muito grande para processar com segurança ou usa um formato não suportado."
-    if error_type in {"WrongPasswordError", "FileNotDecryptedError", "PdfReadError", "PdfStreamError"}:
+    if error_type in {"WrongPasswordError", "FileNotDecryptedError"}:
         return "Não foi possível interpretar o PDF. Ele pode estar danificado ou protegido por senha."
     if module_name.startswith("pypdf"):
         return "O PDF contém uma estrutura não suportada ou está danificado. Tente salvar uma nova cópia do PDF antes de processar."
