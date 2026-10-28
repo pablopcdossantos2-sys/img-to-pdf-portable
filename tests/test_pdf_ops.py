@@ -11,6 +11,7 @@ from reportlab.pdfgen import canvas as reportlab_canvas
 import document_tools.pdf_ops as pdf_ops
 from document_tools.pdf_ops import (
     convert_image,
+    delete_pages,
     extract_pages,
     images_to_pdf,
     merge_pdfs,
