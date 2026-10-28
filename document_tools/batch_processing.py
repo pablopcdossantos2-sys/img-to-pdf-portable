@@ -485,11 +485,13 @@ def process_pdf_folder(
             pass
 
     # Checkpoints improve resumability but must never abort otherwise-valid processing.
+    initial_checkpoint_saved = False
     try:
         _write_checkpoint(checkpoint_path, fingerprint, result_state, requested_paths)
+        initial_checkpoint_saved = True
     except (OSError, ValueError):
         pass
-    if legacy_checkpoint_loaded:
+    if legacy_checkpoint_loaded and initial_checkpoint_saved:
         try:
             legacy_checkpoint_path.unlink(missing_ok=True)
         except (OSError, ValueError):
