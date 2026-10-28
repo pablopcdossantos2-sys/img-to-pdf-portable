@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import shutil
@@ -1059,8 +1060,8 @@ def stamp_pdf(
                     if watermark_position == "diagonal":
                         angle = 35
                         max_text_width = min(
-                            max(1.0, (width - 2 * margin) / abs(__import__("math").cos(__import__("math").radians(angle)))),
-                            max(1.0, (height - 2 * margin) / abs(__import__("math").sin(__import__("math").radians(angle)))),
+                            max(1.0, (width - 2 * margin) / abs(math.cos(math.radians(angle)))),
+                            max(1.0, (height - 2 * margin) / abs(math.sin(math.radians(angle)))),
                         )
                     else:
                         max_text_width = max(1.0, width - 2 * margin)
