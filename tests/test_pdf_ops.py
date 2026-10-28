@@ -983,3 +983,13 @@ def test_convert_image_uses_lossless_tiff_compression(tmp_path: Path) -> None:
     with Image.open(output) as result:
         assert result.format == "TIFF"
         assert result.tag_v2.get(259) == 5
+
+
+def test_split_pdf_does_not_create_destination_before_option_validation(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [110, 120])
+    output_directory = tmp_path / "not-created-yet"
+
+    with pytest.raises(ValueError, match="Informe páginas após as quais dividir"):
+        split_pdf(source, output_directory, mode="after_pages")
+
+    assert not output_directory.exists()
