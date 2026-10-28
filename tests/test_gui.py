@@ -970,3 +970,24 @@ def test_merge_page_ranges_are_saved_per_input_and_copied_when_duplicating(qt_ap
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         qt_app.processEvents()
+
+
+def test_saving_pipeline_profiles_preserves_future_schema_entries(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    previous_profiles = window.settings.value("pipeline_profiles", None)
+    future_profile = {"schema_version": 999, "future_option": {"enabled": True}}
+    try:
+        window.settings.setValue("pipeline_profiles", json.dumps({"Future profile": future_profile}))
+        window._write_pipeline_profiles({"New profile": {"rotate_enabled": False}})
+        persisted = json.loads(window.settings.value("pipeline_profiles", "{}"))
+        assert persisted["Future profile"] == future_profile
+        assert persisted["New profile"] == {"rotate_enabled": False}
+    finally:
+        if previous_profiles is None:
+            window.settings.remove("pipeline_profiles")
+        else:
+            window.settings.setValue("pipeline_profiles", previous_profiles)
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
