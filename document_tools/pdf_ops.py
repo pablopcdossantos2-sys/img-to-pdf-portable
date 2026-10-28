@@ -278,7 +278,7 @@ def images_to_pdf(
         raise ValueError("O arquivo de saída precisa ter a extensão .pdf.")
     if not output.parent.is_dir():
         raise FileNotFoundError("A pasta de destino não existe.")
-    if output in sources:
+    if any(_same_existing_file(output, source) for source in sources):
         raise ValueError("O arquivo de saída não pode substituir uma imagem de origem.")
     for source in sources:
         if not source.is_file():
