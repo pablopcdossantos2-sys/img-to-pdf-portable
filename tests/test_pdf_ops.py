@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+import random
 
 import pytest
 from PIL import Image
 from pypdf import PdfReader, PdfWriter
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as reportlab_canvas
 
 import document_tools.pdf_ops as pdf_ops
@@ -54,7 +56,7 @@ def test_parse_page_ranges_expands_ranges_and_preserves_order() -> None:
     [
         ("", 5, "Informe páginas"),
         ("1,,2", 5, "item vazio"),
-        ("1-0", 5, "precisa estar"),
+        ("1-0", 5, "invertido"),
         ("2-6", 5, "precisa estar"),
         ("1, 1-2", 5, "informada mais de uma vez"),
         ("1-a", 5, "inválido"),
@@ -69,6 +71,25 @@ def test_parse_page_ranges_rejects_invalid_input(
 
 def test_parse_page_ranges_can_allow_duplicate_pages() -> None:
     assert parse_page_ranges("2, 1-2", 3, allow_duplicates=True) == [1, 0, 1]
+
+
+def test_parse_page_ranges_handles_very_long_page_numbers_without_raw_int_errors() -> None:
+    enormous = "9" * 5000
+    with pytest.raises(ValueError, match="precisa estar entre 1 e 5"):
+        parse_page_ranges(enormous, 5)
+    with pytest.raises(ValueError, match="precisa estar entre 1 e 5"):
+        parse_page_ranges(f"1-{enormous}", 5)
+
+
+def test_parse_page_ranges_explains_reversed_ranges() -> None:
+    with pytest.raises(ValueError, match="está invertido"):
+        parse_page_ranges("4-2", 5)
+
+
+def test_parse_page_ranges_caps_duplicate_page_expansion(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pdf_ops, "MAX_DUPLICATE_PAGE_SELECTION", 3)
+    with pytest.raises(ValueError, match="limitada a 3 páginas"):
+        parse_page_ranges("1,1,1,1", 1, allow_duplicates=True)
 
 
 def test_images_to_pdf_creates_one_a4_page_per_image(tmp_path: Path) -> None:
@@ -104,6 +125,20 @@ def test_images_to_pdf_flattens_transparency_over_white(tmp_path: Path) -> None:
     with embedded_images[0].image as extracted:
         background = extracted.convert("RGB").getpixel((0, 0))
         assert min(background) >= 245
+
+
+def test_pdf_operations_reject_output_path_that_is_an_existing_directory(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [120])
+    destination = tmp_path / "existing.pdf"
+    destination.mkdir()
+
+    with pytest.raises(ValueError, match="pasta, não um arquivo PDF"):
+        extract_pages(source, "1", destination)
+
+    image = tmp_path / "image.png"
+    Image.new("RGB", (10, 10), "white").save(image)
+    with pytest.raises(ValueError, match="pasta, não um arquivo PDF"):
+        images_to_pdf([image], destination)
 
 
 def test_merge_pdfs_preserves_document_order_and_outline(tmp_path: Path) -> None:
@@ -273,6 +308,36 @@ def test_extract_pages_can_repeat_pages_when_requested(tmp_path: Path) -> None:
     assert [round(float(page.mediabox.width)) for page in reader.pages] == [120, 110, 120]
 
 
+def test_extract_pages_preserves_annotations_on_each_repeated_page(tmp_path: Path) -> None:
+    source = tmp_path / "links.pdf"
+    buffer = BytesIO()
+    document = reportlab_canvas.Canvas(buffer, pagesize=(200, 300))
+    for page_number in range(3):
+        document.drawString(20, 250, f"Page {page_number + 1}")
+        document.linkURL(
+            f"https://example.org/{page_number + 1}",
+            (10, 10, 100, 40),
+            relative=0,
+            thickness=0,
+        )
+        document.showPage()
+    document.save()
+    source.write_bytes(buffer.getvalue())
+
+    output = tmp_path / "repeated-links.pdf"
+    extract_pages(source, "2,2,2", output, allow_duplicates=True)
+
+    annotations_per_page = [
+        len(page.get("/Annots") or []) for page in read_pdf(output).pages
+    ]
+    assert annotations_per_page == [1, 1, 1]
+    urls = [
+        str(page["/Annots"][0].get_object()["/A"]["/URI"])
+        for page in read_pdf(output).pages
+    ]
+    assert urls == ["https://example.org/2"] * 3
+
+
 @pytest.mark.parametrize("angle", [90, 180, 270])
 def test_rotate_pdf_rotates_only_requested_pages(tmp_path: Path, angle: int) -> None:
     source = create_pdf(tmp_path / "source.pdf", [120, 130, 140])
@@ -331,6 +396,42 @@ def test_split_pdf_can_split_by_approximate_size(tmp_path: Path) -> None:
     assert all(len(read_pdf(path).pages) == 1 for path in outputs)
 
 
+def test_split_pdf_by_size_uses_stored_resource_bytes_for_image_pages(tmp_path: Path) -> None:
+    source = tmp_path / "random-images.pdf"
+    buffer = BytesIO()
+    document = reportlab_canvas.Canvas(buffer, pagesize=(400, 400))
+    rng = random.Random(1)
+    for _ in range(20):
+        raw = bytes(rng.getrandbits(8) for _ in range(300 * 300 * 3))
+        image = Image.frombytes("RGB", (300, 300), raw)
+        image_buffer = BytesIO()
+        image.save(image_buffer, format="JPEG", quality=90)
+        image.close()
+        image_buffer.seek(0)
+        document.drawImage(ImageReader(image_buffer), 10, 10, 300, 300)
+        document.showPage()
+    document.save()
+    source.write_bytes(buffer.getvalue())
+
+    target_mb = 0.5
+    outputs = split_pdf(source, tmp_path / "size-split", mode="by_size", target_size_mb=target_mb)
+    sizes_mb = [path.stat().st_size / 1_000_000 for path in outputs]
+
+    assert len(outputs) > 1
+    assert max(sizes_mb) <= target_mb * 1.5, sizes_mb
+
+
+@pytest.mark.parametrize("target_size_mb", [float("nan"), float("inf"), float("-inf")])
+def test_split_pdf_by_size_rejects_non_finite_target(
+    tmp_path: Path, target_size_mb: float
+) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [110, 120])
+    with pytest.raises(ValueError, match="número finito maior que zero"):
+        split_pdf(
+            source, tmp_path / "split", mode="by_size", target_size_mb=target_size_mb
+        )
+
+
 def test_split_pdf_can_split_at_bookmark_level(tmp_path: Path) -> None:
     source = tmp_path / "bookmarked.pdf"
     writer = PdfWriter()
@@ -372,6 +473,15 @@ def test_empty_password_encrypted_pdf_can_be_processed(tmp_path: Path) -> None:
 
     extract_pages(source, "1", output)
 
+    assert len(read_pdf(output).pages) == 1
+
+
+def test_empty_user_password_accepts_unrelated_nonempty_password(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "owner-only.pdf", [120, 130], password="")
+    output = tmp_path / "extracted.pdf"
+
+    assert pdf_page_count(source, password="unrelated") == 2
+    extract_pages(source, "1", output, password="unrelated")
     assert len(read_pdf(output).pages) == 1
 
 
@@ -617,6 +727,17 @@ def test_optimize_pdf_lossless_preserves_pages_and_metadata(tmp_path: Path) -> N
     assert reader.metadata.title == "PDF Hub optimize test"
 
 
+def test_optimize_pdf_does_not_return_encrypted_source_as_no_growth_fallback(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "encrypted.pdf", [120, 130, 140], password="secret")
+    output = tmp_path / "optimized.pdf"
+
+    optimize_pdf(source, output, mode="lossless", password="secret")
+
+    result = read_pdf(output)
+    assert not result.is_encrypted
+    assert len(result.pages) == 3
+
+
 def test_optimize_pdf_balanced_recompresses_supported_image_pdfs(tmp_path: Path) -> None:
     image = tmp_path / "image.png"
     source = tmp_path / "source.pdf"
@@ -754,7 +875,7 @@ def test_atomic_pdf_save_preserves_existing_destination_when_writer_fails(
         pdf_ops._atomic_pdf_save(destination, fail_write)
 
     assert destination.read_bytes() == original_content
-    assert list(tmp_path.glob(".document-tools-*.pdf")) == []
+    assert list(tmp_path.glob(".pdf-hub-*.pdf")) == []
 
 def test_process_pdf_pipeline_chains_rotation_stamping_and_optimization(
     tmp_path: Path,
@@ -812,6 +933,49 @@ def test_process_pdf_pipeline_preserves_existing_output_on_failed_final_stage(
 
     assert output.read_bytes() == original
     assert not list(tmp_path.glob("pdf-hub-pipeline-*"))
+
+
+def test_stamp_pdf_rotates_link_rect_and_quadpoints_with_page_content(tmp_path: Path) -> None:
+    from pypdf.generic import ArrayObject, FloatObject, NameObject, NumberObject
+
+    buffer = BytesIO()
+    document = reportlab_canvas.Canvas(buffer, pagesize=(200, 300))
+    document.drawString(10, 270, "TOP LEFT")
+    document.linkURL(
+        "https://example.org",
+        (5, 262, 100, 288),
+        relative=0,
+        thickness=0,
+    )
+    document.showPage()
+    document.save()
+
+    writer = PdfWriter()
+    writer.append(PdfReader(BytesIO(buffer.getvalue())))
+    page = writer.pages[0]
+    page[NameObject("/Rotate")] = NumberObject(90)
+    annotation = page["/Annots"][0].get_object()
+    annotation[NameObject("/QuadPoints")] = ArrayObject([
+        FloatObject(5), FloatObject(288), FloatObject(100), FloatObject(288),
+        FloatObject(5), FloatObject(262), FloatObject(100), FloatObject(262),
+    ])
+    source = tmp_path / "rotated-links.pdf"
+    with source.open("wb") as stream:
+        writer.write(stream)
+
+    output = tmp_path / "stamped-links.pdf"
+    stamp_pdf(source, output, watermark_text="CONFIDENTIAL")
+
+    stamped = read_pdf(output).pages[0]
+    annotation = stamped["/Annots"][0].get_object()
+    rect = [float(value) for value in annotation["/Rect"]]
+    page_width = float(stamped.mediabox.width)
+    page_height = float(stamped.mediabox.height)
+    assert 0 <= rect[0] < rect[2] <= page_width
+    assert 0 <= rect[1] < rect[3] <= page_height
+    quadpoints = [float(value) for value in annotation["/QuadPoints"]]
+    assert all(0 <= quadpoints[i] <= page_width for i in range(0, len(quadpoints), 2))
+    assert all(0 <= quadpoints[i] <= page_height for i in range(1, len(quadpoints), 2))
 
 
 def test_stamp_pdf_handles_page_rotation_and_nonzero_cropbox(tmp_path: Path) -> None:

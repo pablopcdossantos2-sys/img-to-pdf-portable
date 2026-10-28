@@ -13,6 +13,15 @@ from typing import Callable, Sequence
 
 from PIL import Image, ImageOps
 from pypdf import PdfReader, PdfWriter, Transformation
+from pypdf.generic import (
+    ArrayObject,
+    DictionaryObject,
+    FloatObject,
+    IndirectObject,
+    NameObject,
+    RectangleObject,
+    StreamObject,
+)
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
@@ -20,6 +29,7 @@ from reportlab.pdfgen import canvas
 SUPPORTED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff", ".gif"}
 SUPPORTED_OUTPUT_FORMATS = {"JPEG", "PNG", "WEBP", "BMP", "TIFF"}
 ALPHA_MODES = {"RGBA", "LA", "PA"}
+MAX_DUPLICATE_PAGE_SELECTION = 100_000
 
 
 def parse_page_ranges(
@@ -36,6 +46,23 @@ def parse_page_ranges(
 
     indexes: list[int] = []
     seen: set[int] = set()
+    max_page_digits = len(str(page_count))
+
+    def parse_endpoint(value: str, segment: str) -> int:
+        # Strip leading zeroes before int(): Python limits the number of decimal
+        # digits accepted by int(), and page numbers can never exceed page_count.
+        significant = value.lstrip("0") or "0"
+        if len(significant) > max_page_digits:
+            raise ValueError(
+                f"O intervalo '{segment}' precisa estar entre 1 e {page_count}."
+            )
+        number = int(significant)
+        if number > page_count:
+            raise ValueError(
+                f"O intervalo '{segment}' precisa estar entre 1 e {page_count}."
+            )
+        return number
+
     segments = [part.strip() for part in specification.split(",")]
     if any(not part for part in segments):
         raise ValueError("Há um item vazio na lista de páginas.")
@@ -43,22 +70,32 @@ def parse_page_ranges(
     for segment in segments:
         pieces = [part.strip() for part in segment.split("-")]
         if len(pieces) == 1 and pieces[0].isdecimal():
-            start = end = int(pieces[0])
+            start = end = parse_endpoint(pieces[0], segment)
         elif (
             len(pieces) == 2
             and pieces[0].isdecimal()
             and (pieces[1].isdecimal() or pieces[1] == "")
         ):
-            start = int(pieces[0])
-            end = int(pieces[1]) if pieces[1] else page_count
+            start = parse_endpoint(pieces[0], segment)
+            end = parse_endpoint(pieces[1], segment) if pieces[1] else page_count
         else:
             raise ValueError(f"Intervalo de páginas inválido: '{segment}'.")
-        if start < 1 or end < start or end > page_count:
+        if start < 1 or end < 1:
+            raise ValueError(f"O intervalo '{segment}' precisa estar entre 1 e {page_count}.")
+        if end < start:
+            raise ValueError(
+                f"O intervalo '{segment}' está invertido: a página inicial não pode ser maior que a final."
+            )
+        if end > page_count:
             raise ValueError(f"O intervalo '{segment}' precisa estar entre 1 e {page_count}.")
 
         for page_number in range(start, end + 1):
             if page_number in seen and not allow_duplicates:
                 raise ValueError(f"A página {page_number} foi informada mais de uma vez.")
+            if allow_duplicates and len(indexes) >= MAX_DUPLICATE_PAGE_SELECTION:
+                raise ValueError(
+                    f"A seleção com repetições está limitada a {MAX_DUPLICATE_PAGE_SELECTION} páginas."
+                )
             seen.add(page_number)
             indexes.append(page_number - 1)
 
@@ -83,6 +120,8 @@ def _normalise_pdf_paths(
         raise ValueError("Selecione pelo menos um arquivo de origem.")
     sources = [Path(path).expanduser().resolve() for path in source_paths]
     output = Path(output_path).expanduser().resolve()
+    if output.exists() and output.is_dir():
+        raise ValueError("O caminho de saída é uma pasta, não um arquivo PDF.")
     if output.suffix.lower() != ".pdf":
         raise ValueError("O arquivo de saída precisa ter a extensão .pdf.")
     if not output.parent.is_dir():
@@ -153,16 +192,24 @@ def _atomic_pdf_save(
 def _open_reader(path: Path, stream, password: str | None = None):
     reader = PdfReader(stream, strict=False)
     if reader.is_encrypted:
+        last_error = None
         try:
             decrypted = reader.decrypt(password if password is not None else "")
         except Exception as error:
-            if password is not None:
-                raise ValueError(f"A senha informada para o PDF '{path.name}' está incorreta ou não pôde ser usada.") from error
-            raise ValueError(f"O PDF '{path.name}' exige uma senha. Informe-a para continuar.") from error
+            last_error = error
+            decrypted = 0
+        # Some PDFs have an empty user password and a distinct owner password.
+        # A user-supplied password that fails must not prevent opening those files.
+        if not decrypted and password not in (None, ""):
+            try:
+                decrypted = reader.decrypt("")
+            except Exception as error:
+                last_error = error
+                decrypted = 0
         if not decrypted:
             if password is not None:
-                raise ValueError(f"A senha informada para o PDF '{path.name}' está incorreta.")
-            raise ValueError(f"O PDF '{path.name}' exige uma senha. Informe-a para continuar.")
+                raise ValueError(f"A senha informada para o PDF '{path.name}' está incorreta.") from last_error
+            raise ValueError(f"O PDF '{path.name}' exige uma senha. Informe-a para continuar.") from last_error
     if len(reader.pages) < 1:
         raise ValueError(f"O PDF '{path.name}' não contém páginas.")
     return reader
@@ -193,6 +240,112 @@ def _copy_metadata(reader: PdfReader, writer: PdfWriter) -> None:
         }
         if safe_metadata:
             writer.add_metadata(safe_metadata)
+
+
+def _estimate_page_stored_size(page) -> int:
+    """Estimate a page from reachable stored stream bytes without decoding streams."""
+    visited_references: set[tuple[int, int, int]] = set()
+    visited_objects: set[int] = set()
+
+    def estimate(value) -> int:
+        if isinstance(value, IndirectObject):
+            key = (id(value.pdf), value.idnum, value.generation)
+            if key in visited_references:
+                return 0
+            visited_references.add(key)
+            value = value.get_object()
+
+        if isinstance(value, StreamObject):
+            object_id = id(value)
+            if object_id in visited_objects:
+                return 0
+            visited_objects.add(object_id)
+            stored_data = getattr(value, "_data", None)
+            if not isinstance(stored_data, bytes):
+                raise ValueError("O stream PDF não expõe seus bytes armazenados.")
+            total = len(stored_data) + 128
+            total += sum(
+                estimate(child)
+                for key, child in value.items()
+                if str(key) != "/Parent"
+            )
+            return total
+
+        if isinstance(value, DictionaryObject):
+            object_id = id(value)
+            if object_id in visited_objects:
+                return 0
+            visited_objects.add(object_id)
+            return 64 + sum(
+                estimate(child)
+                for key, child in value.items()
+                if str(key) != "/Parent"
+            )
+
+        if isinstance(value, (ArrayObject, list, tuple)):
+            object_id = id(value)
+            if object_id in visited_objects:
+                return 0
+            visited_objects.add(object_id)
+            return 16 + sum(estimate(child) for child in value)
+
+        return 0
+
+    # Resources can be inherited from the page tree. Visit the effective resource
+    # dictionary explicitly, while skipping /Parent so a page does not count the
+    # entire document's page tree.
+    return max(1, estimate(page) + estimate(page.get("/Resources")))
+
+
+def _transform_page_annotation_coordinates(page, rotation: int) -> None:
+    """Apply the same rotation transform as transfer_rotation_to_content to annotations."""
+    if rotation % 360 == 0:
+        return
+    media_box = RectangleObject(page.mediabox)
+    transform = (
+        Transformation()
+        .translate(
+            -float(media_box.left + media_box.width / 2),
+            -float(media_box.bottom + media_box.height / 2),
+        )
+        .rotate(-rotation)
+    )
+    first = transform.apply_on(media_box.lower_left)
+    second = transform.apply_on(media_box.upper_right)
+    transform = transform.translate(
+        -min(first[0], second[0]),
+        -min(first[1], second[1]),
+    )
+
+    annotations = page.get("/Annots")
+    if not annotations:
+        return
+    for reference in annotations:
+        annotation = reference.get_object()
+        rect = annotation.get("/Rect")
+        if rect is not None and len(rect) == 4:
+            x1, y1, x2, y2 = (float(value) for value in rect)
+            corners = [
+                transform.apply_on((x1, y1)),
+                transform.apply_on((x1, y2)),
+                transform.apply_on((x2, y1)),
+                transform.apply_on((x2, y2)),
+            ]
+            xs = [point[0] for point in corners]
+            ys = [point[1] for point in corners]
+            annotation[NameObject("/Rect")] = RectangleObject(
+                (min(xs), min(ys), max(xs), max(ys))
+            )
+
+        quad_points = annotation.get("/QuadPoints")
+        if quad_points is not None and len(quad_points) >= 2 and len(quad_points) % 2 == 0:
+            transformed_points = []
+            for index in range(0, len(quad_points), 2):
+                x, y = transform.apply_on(
+                    (float(quad_points[index]), float(quad_points[index + 1]))
+                )
+                transformed_points.extend((FloatObject(x), FloatObject(y)))
+            annotation[NameObject("/QuadPoints")] = ArrayObject(transformed_points)
 
 
 def _normalise_high_bit_depth(image: Image.Image) -> Image.Image:
@@ -274,6 +427,8 @@ def images_to_pdf(
     _validate_file_mode(file_mode)
     sources = [Path(path).expanduser().resolve() for path in image_paths]
     output = Path(output_path).expanduser().resolve()
+    if output.exists() and output.is_dir():
+        raise ValueError("O caminho de saída é uma pasta, não um arquivo PDF.")
     if output.suffix.lower() != ".pdf":
         raise ValueError("O arquivo de saída precisa ter a extensão .pdf.")
     if not output.parent.is_dir():
@@ -483,7 +638,15 @@ def extract_pages(
                 page_ranges, len(reader.pages), allow_duplicates=allow_duplicates
             )
             writer = PdfWriter()
-            writer.append(reader, pages=indexes, import_outline=True)
+            if allow_duplicates and len(set(indexes)) != len(indexes):
+                # Reset pypdf's translation map for each occurrence so repeated
+                # pages receive independent annotation objects instead of sharing
+                # one cloned annotation dictionary.
+                for index in indexes:
+                    writer.reset_translation(reader)
+                    writer.append(reader, pages=[index], import_outline=False)
+            else:
+                writer.append(reader, pages=indexes, import_outline=True)
             _copy_metadata(reader, writer)
             writer.write(temporary)
 
@@ -580,8 +743,10 @@ def split_pdf(
         raise ValueError("Modo de divisão inválido.")
     if mode == "every_n_pages" and pages_per_file < 1:
         raise ValueError("O número de páginas por arquivo deve ser positivo.")
-    if mode == "by_size" and target_size_mb <= 0:
-        raise ValueError("O tamanho alvo precisa ser maior que zero.")
+    if mode == "by_size" and (
+        not math.isfinite(target_size_mb) or target_size_mb <= 0
+    ):
+        raise ValueError("O tamanho alvo precisa ser um número finito maior que zero.")
     if mode == "by_bookmarks" and bookmark_level < 1:
         raise ValueError("O nível do marcador precisa ser um inteiro positivo.")
 
@@ -639,18 +804,13 @@ def split_pdf(
             # shared resources, compression, metadata and page-tree overhead.
             target_bytes = max(1, int(target_size_mb * 1024 * 1024))
             estimates: list[int] = []
-            for page in reader.pages:
-                estimate = 0
+            for page_number, page in enumerate(reader.pages, start=1):
                 try:
-                    contents = page.get_contents()
-                    if contents is not None:
-                        estimate += len(contents.get_data())
-                except Exception:
-                    pass
-                try:
-                    estimate += sum(len(image.data) for image in page.images if not image.is_inline)
-                except Exception:
-                    pass
+                    estimate = _estimate_page_stored_size(page)
+                except Exception as error:
+                    raise ValueError(
+                        f"Não foi possível estimar o tamanho armazenado da página {page_number}."
+                    ) from error
                 estimates.append(max(1, estimate))
             current_group: list[int] = []
             current_size = 0
@@ -1045,7 +1205,9 @@ def stamp_pdf(
                     continue
                 # Resolve /Rotate into the content before laying out the overlay.
                 # This makes text upright and lets the visible crop box determine placement.
-                if int(page.rotation or 0) % 360:
+                rotation = int(page.rotation or 0) % 360
+                if rotation:
+                    _transform_page_annotation_coordinates(page, rotation)
                     page.transfer_rotation_to_content()
                 visible_box = page.cropbox
                 width = float(visible_box.width)
