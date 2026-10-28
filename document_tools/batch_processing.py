@@ -15,6 +15,7 @@ from document_tools.profiles import migrate_local_profile
 
 
 CHECKPOINT_FILENAME = ".pdf-hub-batch-state.json"
+CHECKPOINT_INTERVAL = 10
 _CHECKPOINT_VERSION = 1
 _RESUMED_MESSAGE = "Concluído antes da interrupção; resultado reutilizado."
 
@@ -349,12 +350,13 @@ def process_pdf_folder(
                 "output_path": result.output_path,
                 "message": result.message,
             }
-            try:
-                _write_checkpoint(checkpoint_path, fingerprint, result_state, requested_paths)
-            except OSError:
-                # Keep the result in memory and continue; the report is more important
-                # than resumability when the destination temporarily cannot be written.
-                pass
+            if completed % CHECKPOINT_INTERVAL == 0:
+                try:
+                    _write_checkpoint(checkpoint_path, fingerprint, result_state, requested_paths)
+                except OSError:
+                    # Keep the result in memory and continue; the report is more important
+                    # than resumability when the destination temporarily cannot be written.
+                    pass
 
         if progress_callback is not None:
             progress_callback(completed, total, source.name)
@@ -374,8 +376,14 @@ def process_pdf_folder(
             ))
         return report
 
-    # Preserve the checkpoint after safe cancellation for a later resume.
+    # Preserve the latest in-memory state on cancellation. During normal processing,
+    # checkpoints are batched to avoid serializing the entire result map and fsyncing
+    # after every single file.
     if control is not None and control.was_stopped:
+        try:
+            _write_checkpoint(checkpoint_path, fingerprint, result_state, requested_paths)
+        except OSError:
+            pass
         return report_from_state()
 
     # The completed checkpoint would immediately be deleted anyway. Remove the
