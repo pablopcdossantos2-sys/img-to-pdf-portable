@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QStyle,
     QSizePolicy,
     QSpinBox,
     QStackedWidget,
@@ -59,6 +60,7 @@ from document_tools.profiles import (
 )
 from document_tools.pdf_ops import (
     convert_image,
+    delete_pages,
     extract_pages,
     images_to_pdf,
     merge_pdfs,
@@ -1020,6 +1022,25 @@ class SideNavigationWidget(QWidget):
 
         button = QPushButton(label.strip())
         button.setObjectName("navButton")
+        icon_by_label = {
+            "Imagens para PDF": QStyle.StandardPixmap.SP_FileDialogNewFolder,
+            "Unir PDFs": QStyle.StandardPixmap.SP_FileDialogContentsView,
+            "Extrair páginas": QStyle.StandardPixmap.SP_FileDialogDetailedView,
+            "Excluir páginas": QStyle.StandardPixmap.SP_TrashIcon,
+            "Girar páginas": QStyle.StandardPixmap.SP_BrowserReload,
+            "Dividir PDF": QStyle.StandardPixmap.SP_FileDialogListView,
+            "Reordenar páginas": QStyle.StandardPixmap.SP_ArrowRight,
+            "Marca d'água e numeração": QStyle.StandardPixmap.SP_DialogApplyButton,
+            "Otimizar PDF": QStyle.StandardPixmap.SP_ComputerIcon,
+            "Fluxo em lote": QStyle.StandardPixmap.SP_MediaPlay,
+            "Processar pasta": QStyle.StandardPixmap.SP_DirOpenIcon,
+            "PDF para imagens": QStyle.StandardPixmap.SP_FileDialogInfoView,
+            "Converter imagens": QStyle.StandardPixmap.SP_FileIcon,
+            "Configurações": QStyle.StandardPixmap.SP_ComputerIcon,
+        }
+        icon_kind = icon_by_label.get(label.strip(), QStyle.StandardPixmap.SP_FileIcon)
+        button.setIcon(self.style().standardIcon(icon_kind))
+        button.setIconSize(QSize(18, 18))
         button.setCheckable(True)
         button.setMinimumHeight(38)
         button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -1248,6 +1269,7 @@ class DocumentToolsWindow(QMainWindow):
         self.tabs.addTab(self._build_image_pdf_tab(), "  Imagens para PDF  ")
         self.tabs.addTab(self._build_merge_tab(), "  Unir PDFs  ")
         self.tabs.addTab(self._build_extract_tab(), "  Extrair páginas  ")
+        self.tabs.addTab(self._build_delete_pages_tab(), "  Excluir páginas  ")
         self.tabs.addTab(self._build_rotate_tab(), "  Girar páginas  ")
         self.tabs.addTab(self._build_split_tab(), "  Dividir PDF  ")
         self.tabs.addTab(self._build_reorder_tab(), "  Reordenar páginas  ")
@@ -1320,9 +1342,11 @@ class DocumentToolsWindow(QMainWindow):
                 ("PDF criado: ", "PDF created: "),
                 ("PDFs unidos: ", "PDFs merged: "),
                 ("Páginas extraídas: ", "Pages extracted: "),
+                ("Páginas removidas: ", "Pages removed: "),
                 ("PDF rotacionado: ", "PDF rotated: "),
                 ("Unindo os PDFs…", "Merging PDFs…"),
                 ("Extraindo páginas…", "Extracting pages…"),
+                ("Excluindo páginas…", "Deleting pages…"),
                 ("Girando páginas…", "Rotating pages…"),
                 ("Dividindo PDF em arquivos de página única…", "Splitting PDF into single-page files…"),
                 ("Convertendo imagens…", "Converting images…"),
@@ -1331,9 +1355,11 @@ class DocumentToolsWindow(QMainWindow):
                 ("PDF criado: ", "PDF creado: "),
                 ("PDFs unidos: ", "PDFs unidos: "),
                 ("Páginas extraídas: ", "Páginas extraídas: "),
+                ("Páginas removidas: ", "Páginas eliminadas: "),
                 ("PDF rotacionado: ", "PDF girado: "),
                 ("Unindo os PDFs…", "Uniendo los PDF…"),
                 ("Extraindo páginas…", "Extrayendo páginas…"),
+                ("Excluindo páginas…", "Eliminando páginas…"),
                 ("Girando páginas…", "Girando páginas…"),
                 ("Dividindo PDF em arquivos de página única…", "Dividiendo el PDF en archivos de una página…"),
                 ("Convertendo imagens…", "Convirtiendo imágenes…"),
@@ -2188,6 +2214,88 @@ class DocumentToolsWindow(QMainWindow):
         self._run_task(
             "Extraindo páginas…",
             lambda: f"Páginas extraídas: {extract_pages(source, ranges, output, allow_duplicates=allow_duplicates, password=password, file_mode=file_mode)}",
+            output_location=output,
+        )
+
+    def _build_delete_pages_tab(self) -> QWidget:
+        page, layout = self._new_page(
+            "Excluir páginas de um PDF",
+            "Informe as páginas que deseja remover. O PDF original será preservado e o resultado será salvo em outro arquivo.",
+        )
+        form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
+
+        self.delete_pages_path = QLineEdit()
+        self.delete_pages_path.setReadOnly(True)
+        browse = QPushButton("Escolher PDF")
+        browse.clicked.connect(self._select_delete_pages_pdf)
+        source_row = QHBoxLayout()
+        source_row.addWidget(self.delete_pages_path, 1)
+        source_row.addWidget(browse)
+        source_container = QWidget()
+        source_container.setLayout(source_row)
+        form.addRow("Arquivo de origem", source_container)
+
+        self.delete_pages_ranges = QLineEdit()
+        self.delete_pages_ranges.setPlaceholderText("Ex.: 2, 4-6, 9")
+        form.addRow("Páginas a excluir", self.delete_pages_ranges)
+
+        self.delete_pages_password = QLineEdit()
+        self.delete_pages_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.delete_pages_password.setPlaceholderText("Opcional; não é armazenada")
+        form.addRow("Senha do PDF (opcional)", self.delete_pages_password)
+
+        helper = QLabel(
+            "Use números ou intervalos, como 2, 4-6. É necessário manter pelo menos uma página no PDF resultante."
+        )
+        helper.setObjectName("muted")
+        helper.setWordWrap(True)
+        layout.addLayout(form)
+        layout.addWidget(helper)
+        layout.addStretch(1)
+
+        button_row = QHBoxLayout()
+        button_row.addStretch(1)
+        delete_button = QPushButton("Excluir páginas")
+        delete_button.setObjectName("primaryButton")
+        delete_button.clicked.connect(self._delete_pdf_pages)
+        button_row.addWidget(delete_button)
+        layout.addLayout(button_row)
+        return page
+
+    def _select_delete_pages_pdf(self) -> None:
+        path = self._choose_pdf("Escolher PDF para excluir páginas")
+        if path:
+            self.delete_pages_path.setText(path)
+
+    def _delete_pdf_pages(self) -> None:
+        source = self.delete_pages_path.text().strip()
+        ranges = self.delete_pages_ranges.text().strip()
+        if not source:
+            QMessageBox.information(
+                self, self._t("Excluir páginas"), self._t("Escolha o PDF de origem.")
+            )
+            return
+        if not ranges:
+            QMessageBox.information(
+                self, self._t("Excluir páginas"), self._t("Informe as páginas que deseja excluir.")
+            )
+            return
+
+        output = self._require_output_pdf(
+            f"{Path(source).stem}-sem-paginas.pdf", source_paths=[source]
+        )
+        if not output:
+            return
+        password = self.delete_pages_password.text() or None
+        self.delete_pages_password.clear()
+        file_mode = self._output_file_mode()
+        self._run_task(
+            "Excluindo páginas…",
+            lambda: f"Páginas removidas: {delete_pages(source, ranges, output, password=password, file_mode=file_mode)}",
             output_location=output,
         )
 
