@@ -179,6 +179,7 @@ def test_reorder_titles_are_below_thumbnails_and_layout_is_stable(qt_app: QAppli
         assert window.reorder_list.resizeMode() == QListWidget.ResizeMode.Fixed
         assert window.reorder_list.dragDropMode() == QAbstractItemView.DragDropMode.DragDrop
 
+        window.theme_combo.setCurrentIndex(window.theme_combo.findData("light"))
         icon = window.tabs._reorder_pages_button.icon()
         assert not icon.isNull()
         light_pixmap = icon.pixmap(QSize(24, 24))
