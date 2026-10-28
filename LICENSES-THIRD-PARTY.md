@@ -1,5 +1,10 @@
 # Licenças de terceiros
 
+> PDF Hub source repository: https://github.com/pablopcdossantos2-sys/img-to-pdf-portable
+>
+> The portable packages include this notice and the project AGPL-3.0 license. This summary is informational and does not replace the complete license texts or a review of each dependency's redistribution conditions.
+
+
 A aplicação deste repositório está coberta pela GNU AGPL v3, conforme o arquivo `LICENSE`.
 
 As dependências diretas listadas em `requirements.txt` têm termos próprios. Antes de redistribuir o aplicativo empacotado, preserve os avisos de licença exigidos e confira as versões efetivamente incluídas no executável:
