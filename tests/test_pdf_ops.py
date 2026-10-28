@@ -137,6 +137,40 @@ def test_extract_pages_keeps_requested_order(tmp_path: Path) -> None:
     ]
 
 
+def test_delete_pages_removes_selected_ranges_and_preserves_order(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [110, 120, 130, 140, 150])
+    output = tmp_path / "deleted.pdf"
+
+    delete_pages(source, "2-3, 5", output)
+
+    reader = read_pdf(output)
+    assert len(reader.pages) == 2
+    assert [round(float(page.mediabox.width)) for page in reader.pages] == [110, 140]
+
+
+def test_delete_pages_refuses_to_remove_every_page_and_preserves_existing_output(
+    tmp_path: Path,
+) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [110, 120, 130])
+    output = tmp_path / "deleted.pdf"
+    output.write_bytes(b"previous output")
+
+    with pytest.raises(ValueError, match="pelo menos uma página"):
+        delete_pages(source, "1-3", output)
+
+    assert output.read_bytes() == b"previous output"
+
+
+def test_delete_pages_accepts_password_protected_pdf(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "protected.pdf", [110, 120, 130], password="secret")
+    output = tmp_path / "deleted.pdf"
+
+    delete_pages(source, "2", output, password="secret")
+
+    reader = read_pdf(output)
+    assert [round(float(page.mediabox.width)) for page in reader.pages] == [110, 130]
+
+
 def test_extract_pages_can_repeat_pages_when_requested(tmp_path: Path) -> None:
     source = create_pdf(tmp_path / "source.pdf", [110, 120, 130])
     output = tmp_path / "repeated.pdf"
