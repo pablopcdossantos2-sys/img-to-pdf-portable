@@ -4,6 +4,8 @@ from __future__ import annotations
 
 def friendly_error_message(error: Exception) -> str:
     """Return a localized-safe message without exposing arbitrary library details."""
+    if isinstance(error, UnicodeError):
+        return "O nome do arquivo contém caracteres que não podem ser representados com segurança. Renomeie o arquivo e tente novamente."
     if isinstance(error, PermissionError):
         return "Não foi possível acessar ou salvar o arquivo. Confira as permissões e feche o documento em outros programas."
     if isinstance(error, FileNotFoundError):
