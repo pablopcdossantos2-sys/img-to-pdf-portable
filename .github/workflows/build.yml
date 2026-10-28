@@ -90,15 +90,15 @@ jobs:
       - name: Smoke-test executable
         shell: pwsh
         run: |
-          & .\dist\PDFHub.exe --selftest
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $process = Start-Process -Wait -PassThru -FilePath .\dist\PDFHub.exe -ArgumentList '--selftest'
+          if ($process.ExitCode -ne 0) { exit $process.ExitCode }
 
       - name: Package and checksum
         shell: pwsh
         run: |
           $exeHash = (Get-FileHash .\dist\PDFHub.exe -Algorithm SHA256).Hash.ToLower()
           "$exeHash  PDFHub.exe" | Set-Content .\dist\PDFHub.exe.sha256 -NoNewline
-          Compress-Archive -Path .\dist\PDFHub.exe, .\dist\PDFHub.exe.sha256 -DestinationPath .\dist\PDF-Hub-Windows-x64.zip
+          Compress-Archive -Path .\dist\PDFHub.exe, .\dist\PDFHub.exe.sha256, .\LICENSE, .\LICENSES-THIRD-PARTY.md -DestinationPath .\dist\PDF-Hub-Windows-x64.zip
           $zipHash = (Get-FileHash .\dist\PDF-Hub-Windows-x64.zip -Algorithm SHA256).Hash.ToLower()
           "$zipHash  PDF-Hub-Windows-x64.zip" | Set-Content .\dist\PDF-Hub-Windows-x64.zip.sha256 -NoNewline
 
@@ -148,7 +148,8 @@ jobs:
         run: |
           chmod +x dist/PDFHub
           (cd dist && sha256sum PDFHub > PDFHub.sha256)
-          tar -czf dist/PDF-Hub-Linux-x64.tar.gz -C dist PDFHub PDFHub.sha256
+          cp LICENSE LICENSES-THIRD-PARTY.md dist/
+          tar -czf dist/PDF-Hub-Linux-x64.tar.gz -C dist PDFHub PDFHub.sha256 LICENSE LICENSES-THIRD-PARTY.md
           (cd dist && sha256sum PDF-Hub-Linux-x64.tar.gz > PDF-Hub-Linux-x64.tar.gz.sha256)
 
       - uses: actions/upload-artifact@v7
@@ -192,6 +193,8 @@ jobs:
 
       - name: Package and checksum
         run: |
+          mkdir -p "dist/PDF Hub.app/Contents/Resources"
+          cp LICENSE LICENSES-THIRD-PARTY.md "dist/PDF Hub.app/Contents/Resources/"
           ditto -c -k --sequesterRsrc --keepParent "dist/PDF Hub.app" "dist/PDF-Hub-macOS-arm64.zip"
           (cd dist && shasum -a 256 PDF-Hub-macOS-arm64.zip > PDF-Hub-macOS-arm64.zip.sha256)
 
@@ -206,27 +209,35 @@ jobs:
   publish-release:
     name: Publish GitHub Release
     # Tags publish as usual. A deliberate marker on a main-branch commit requests
-    # a one-time release only after all tests and three platform packages succeed.
+    # a one-time release only when an explicit [create-release] marker is requested.
     if: >-
       startsWith(github.ref, 'refs/tags/v') ||
       (github.ref == 'refs/heads/main' &&
-      contains(github.event.head_commit.message, '[create-release:v0.11.0]'))
+      contains(github.event.head_commit.message, '[create-release]'))
     needs: [test, package-windows, package-linux, package-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Read application version
+        id: app-version
+        shell: bash
+        run: echo "version=$(python -c 'from document_tools import __version__; print(__version__)')" >> "$GITHUB_OUTPUT"
+
       - name: Download platform packages
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: release-assets
 
       - name: Publish release and attach packages
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[create-release:v0.11.0]') && 'v0.11.0' || github.ref_name }}
+          tag_name: ${{ github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[create-release]') && format('v{0}', steps.app-version.outputs.version) || github.ref_name }}
           target_commitish: ${{ github.sha }}
-          name: PDF Hub ${{ github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[create-release:v0.11.0]') && 'v0.11.0' || github.ref_name }}
+          name: PDF Hub ${{ github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[create-release]') && format('v{0}', steps.app-version.outputs.version) || github.ref_name }}
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
