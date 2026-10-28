@@ -812,3 +812,158 @@ def test_process_pdf_pipeline_preserves_existing_output_on_failed_final_stage(
 
     assert output.read_bytes() == original
     assert not list(tmp_path.glob("pdf-hub-pipeline-*"))
+
+
+def test_stamp_pdf_handles_page_rotation_and_nonzero_cropbox(tmp_path: Path) -> None:
+    from pypdf.generic import RectangleObject
+
+    source = tmp_path / "rotated-origin.pdf"
+    writer = PdfWriter()
+    writer.add_blank_page(width=595, height=842)
+    page = writer.pages[0]
+    page.mediabox = RectangleObject([100, 100, 695, 942])
+    page.cropbox = RectangleObject([120, 130, 650, 900])
+    page.rotate(90)
+    with source.open("wb") as stream:
+        writer.write(stream)
+
+    output = tmp_path / "stamped-rotated-origin.pdf"
+    stamp_pdf(source, output, page_numbering=True)
+
+    stamped = read_pdf(output).pages[0]
+    assert int(stamped.rotation or 0) == 0
+    assert "1 / 1" in stamped.extract_text()
+    positions: list[tuple[float, float]] = []
+
+    def collect(text, _cm, tm, _font_dict, _font_size):
+        if "1 / 1" in text:
+            positions.append((float(tm[4]), float(tm[5])))
+
+    stamped.extract_text(visitor_text=collect)
+    assert positions, "page-number text should have an inspectable text position"
+    box = stamped.cropbox
+    assert any(
+        float(box.left) <= x <= float(box.right)
+        and float(box.bottom) <= y <= float(box.top)
+        for x, y in positions
+    )
+
+
+def test_stamp_pdf_rejects_watermark_characters_unsupported_by_builtin_font(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [300])
+    output = tmp_path / "stamped.pdf"
+
+    with pytest.raises(ValueError, match="caracteres não suportados"):
+        stamp_pdf(source, output, watermark_text="Секретно")
+
+    assert not output.exists()
+
+
+def test_stamp_pdf_rejects_watermark_that_cannot_fit_without_clipping(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "source.pdf", [300])
+    output = tmp_path / "stamped.pdf"
+
+    with pytest.raises(ValueError, match="longo demais para caber"):
+        stamp_pdf(source, output, watermark_text="TEXTO MUITO LONGO " * 30, font_size=60)
+
+    assert not output.exists()
+
+
+def test_images_to_pdf_preserves_tones_from_16_bit_grayscale_png(tmp_path: Path) -> None:
+    source = tmp_path / "gradient-16bit.png"
+    output = tmp_path / "gradient.pdf"
+    image = Image.new("I;16", (256, 128))
+    image.putdata([round(x * 65535 / 255) for _y in range(128) for x in range(256)])
+    image.save(source)
+    image.close()
+
+    images_to_pdf([source], output)
+
+    embedded = read_pdf(output).pages[0].images
+    assert embedded
+    with embedded[0].image as result:
+        gray = result.convert("L")
+        try:
+            low, high = gray.getextrema()
+            assert high - low > 180
+        finally:
+            gray.close()
+
+
+def test_convert_image_preserves_tones_from_16_bit_grayscale_png(tmp_path: Path) -> None:
+    source = tmp_path / "gradient-16bit.png"
+    output = tmp_path / "gradient.jpg"
+    image = Image.new("I;16", (256, 128))
+    image.putdata([round(x * 65535 / 255) for _y in range(128) for x in range(256)])
+    image.save(source)
+    image.close()
+
+    convert_image(source, output, "JPEG")
+
+    with Image.open(output) as result:
+        gray = result.convert("L")
+        try:
+            low, high = gray.getextrema()
+            assert high - low > 180
+        finally:
+            gray.close()
+
+
+def test_split_pdf_falls_back_when_hard_links_are_not_supported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import errno
+
+    source = create_pdf(tmp_path / "source.pdf", [110, 120, 130])
+
+    def reject_hard_link(_source, _destination):
+        raise OSError(errno.EPERM, "hard links are unavailable")
+
+    monkeypatch.setattr(pdf_ops.os, "link", reject_hard_link)
+    outputs = split_pdf(source, tmp_path / "split", mode="every_n_pages", pages_per_file=1)
+
+    assert len(outputs) == 3
+    assert all(path.is_file() and len(read_pdf(path).pages) == 1 for path in outputs)
+
+
+def test_optimize_pdf_never_returns_a_larger_file(tmp_path: Path) -> None:
+    source = create_pdf(tmp_path / "tiny.pdf", [300])
+    output = tmp_path / "optimized.pdf"
+
+    optimize_pdf(source, output, mode="balanced", quality=95)
+
+    assert output.stat().st_size <= source.stat().st_size
+
+
+def test_optimize_pdf_lossless_does_not_access_image_resources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pypdf._page import PageObject
+
+    source = create_pdf(tmp_path / "source.pdf", [300])
+    output = tmp_path / "optimized.pdf"
+
+    def images_must_not_be_read(_page):
+        raise AssertionError("lossless optimization should not access page.images")
+
+    monkeypatch.setattr(PageObject, "images", property(images_must_not_be_read))
+    optimize_pdf(source, output, mode="lossless")
+
+    assert output.is_file()
+
+
+def test_optimize_pdf_skips_image_extraction_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pypdf._page import PageObject
+
+    source = create_pdf(tmp_path / "source.pdf", [300])
+    output = tmp_path / "optimized.pdf"
+
+    def broken_images(_page):
+        raise ValueError("simulated bad image XObject")
+
+    monkeypatch.setattr(PageObject, "images", property(broken_images))
+    optimize_pdf(source, output, mode="balanced")
+
+    assert output.is_file()
