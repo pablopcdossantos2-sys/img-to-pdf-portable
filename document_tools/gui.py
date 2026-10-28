@@ -960,6 +960,8 @@ TRANSLATIONS["es"].update({
 
 TRANSLATIONS["en"].update({
     "Para GIF/TIFF/WebP com vários quadros, a conversão usa somente o primeiro quadro.": "For GIF/TIFF/WebP files with multiple frames, conversion uses only the first frame.",
+    "Perfis de fluxo": "Pipeline profiles",
+    "Não foi possível alterar os perfis porque as configurações estão inválidas. Os dados existentes foram preservados.": "The profiles could not be changed because the settings are invalid. Existing data was preserved.",
     "Reordenar páginas": "Reorder pages",
     "Marca d'água e numeração": "Watermark and page numbers",
     "Otimizar PDF": "Optimize PDF",
@@ -980,6 +982,8 @@ TRANSLATIONS["en"].update({
 })
 TRANSLATIONS["es"].update({
     "Para GIF/TIFF/WebP com vários quadros, a conversão usa somente o primeiro quadro.": "Para archivos GIF/TIFF/WebP con varios fotogramas, la conversión usa solo el primero.",
+    "Perfis de fluxo": "Perfiles del flujo",
+    "Não foi possível alterar os perfis porque as configurações estão inválidas. Os dados existentes foram preservados.": "No se pudieron modificar los perfiles porque la configuración no es válida. Se conservaron los datos existentes.",
     "Reordenar páginas": "Reordenar páginas",
     "Marca d'água e numeração": "Marca de agua y numeración",
     "Otimizar PDF": "Optimizar PDF",
@@ -3552,7 +3556,7 @@ class DocumentToolsWindow(QMainWindow):
             )
         return normalized
 
-    def _write_pipeline_profiles(self, profiles: dict[str, dict[str, object]]) -> None:
+    def _write_pipeline_profiles(self, profiles: dict[str, dict[str, object]]) -> bool:
         """Persist recognized profiles without deleting entries from newer/unknown schemas."""
         raw = self.settings.value("pipeline_profiles", "{}")
         try:
@@ -3560,9 +3564,9 @@ class DocumentToolsWindow(QMainWindow):
         except (TypeError, ValueError):
             # Do not replace malformed settings automatically; that could destroy data
             # which a newer application version may still be able to recover.
-            return
+            return False
         if not isinstance(parsed, dict):
-            return
+            return False
 
         preserved: dict[str, object] = {}
         for name, profile in parsed.items():
@@ -3578,6 +3582,7 @@ class DocumentToolsWindow(QMainWindow):
         self.settings.setValue(
             "pipeline_profiles", json.dumps(preserved, ensure_ascii=False, sort_keys=True)
         )
+        return True
 
     def _capture_pipeline_profile(self) -> dict[str, object]:
         """Capture only processing options; never store a PDF path or password."""
@@ -3662,7 +3667,13 @@ class DocumentToolsWindow(QMainWindow):
             QMessageBox.information(self, self._t("Salvar perfil"), self._t(str(error)))
             return
         profiles[name] = profile
-        self._write_pipeline_profiles(profiles)
+        if not self._write_pipeline_profiles(profiles):
+            QMessageBox.warning(
+                self,
+                self._t("Perfis de fluxo"),
+                self._t("Não foi possível alterar os perfis porque as configurações estão inválidas. Os dados existentes foram preservados."),
+            )
+            return
         self.status_label.setText(self._t("Perfil salvo: {name}").format(name=name))
 
     def _load_pipeline_profile(self) -> None:
@@ -3709,7 +3720,13 @@ class DocumentToolsWindow(QMainWindow):
         if answer != QMessageBox.StandardButton.Yes:
             return
         profiles.pop(name, None)
-        self._write_pipeline_profiles(profiles)
+        if not self._write_pipeline_profiles(profiles):
+            QMessageBox.warning(
+                self,
+                self._t("Perfis de fluxo"),
+                self._t("Não foi possível alterar os perfis porque as configurações estão inválidas. Os dados existentes foram preservados."),
+            )
+            return
         self.status_label.setText(self._t("Perfil excluído: {name}").format(name=name))
 
     @staticmethod
@@ -3820,7 +3837,13 @@ class DocumentToolsWindow(QMainWindow):
             if answer != QMessageBox.StandardButton.Yes:
                 return
         profiles[name] = profile
-        self._write_pipeline_profiles(profiles)
+        if not self._write_pipeline_profiles(profiles):
+            QMessageBox.warning(
+                self,
+                self._t("Perfis de fluxo"),
+                self._t("Não foi possível alterar os perfis porque as configurações estão inválidas. Os dados existentes foram preservados."),
+            )
+            return
         self.status_label.setText(self._t("Perfil importado: {name}").format(name=name))
 
     def _update_pipeline_controls(self) -> None:
