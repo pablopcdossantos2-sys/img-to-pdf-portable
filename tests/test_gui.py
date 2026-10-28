@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QApplication, QAbstractItemView, QLabel, QLineEdit
 from PIL import Image as PILImage
 
 from document_tools.gui import APP_NAME, DocumentToolsWindow, ImageDropList, OperationWorker, PageThumbnailWorker, SideNavigationWidget
+from document_tools.pdf_rendering import export_pdf_pages_to_images
 
 
 @pytest.fixture(scope="module")
@@ -174,6 +175,140 @@ def test_reorder_grid_moves_the_actual_item_row(qt_app: QApplication) -> None:
     finally:
         widget.close()
         widget.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_reorder_grid_accepts_internal_drag_and_moves_the_dropped_page(qt_app: QApplication) -> None:
+    from PySide6.QtCore import QSize
+    from document_tools.gui import ReorderablePageList
+
+    class FakePosition:
+        def __init__(self, point) -> None:
+            self._point = point
+
+        def toPoint(self):
+            return self._point
+
+    class FakeDragEvent:
+        def __init__(self, source, point=None) -> None:
+            self._source = source
+            self._position = FakePosition(point)
+            self.accepted = False
+            self.ignored = False
+            self.action = None
+
+        def source(self):
+            return self._source
+
+        def position(self):
+            return self._position
+
+        def acceptProposedAction(self):
+            self.accepted = True
+
+        def setDropAction(self, action):
+            self.action = action
+
+        def accept(self):
+            self.accepted = True
+
+        def ignore(self):
+            self.ignored = True
+
+    widget = ReorderablePageList()
+    try:
+        widget.setViewMode(QListWidget.ViewMode.IconMode)
+        widget.setIconSize(QSize(76, 96))
+        widget.setGridSize(QSize(112, 132))
+        widget.resize(420, 180)
+        for page_number in (1, 2, 3):
+            item = QListWidgetItem(f"Page {page_number}")
+            item.setData(Qt.ItemDataRole.UserRole, page_number)
+            widget.addItem(item)
+        widget.show()
+        qt_app.processEvents()
+
+        source_item = widget.item(0)
+        target_item = widget.item(2)
+        widget.setCurrentItem(source_item)
+        enter_event = FakeDragEvent(widget)
+        widget.dragEnterEvent(enter_event)
+        assert enter_event.accepted and not enter_event.ignored
+        move_event = FakeDragEvent(widget)
+        widget.dragMoveEvent(move_event)
+        assert move_event.accepted and not move_event.ignored
+
+        target_point = widget.visualItemRect(target_item).center()
+        drop_event = FakeDragEvent(widget, target_point)
+        widget._dragged_item = source_item
+        widget.dropEvent(drop_event)
+        widget._dragged_item = None
+
+        assert drop_event.accepted and not drop_event.ignored
+        assert drop_event.action == Qt.DropAction.MoveAction
+        assert [widget.item(i).data(Qt.ItemDataRole.UserRole) for i in range(widget.count())] == [2, 3, 1]
+        assert widget.currentItem() is source_item
+    finally:
+        widget.close()
+        widget.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_pdf_pages_export_to_selected_png_pages_and_never_overwrite(
+    qt_app: QApplication, tmp_path: Path
+) -> None:
+    source = tmp_path / "export.pdf"
+    output = tmp_path / "images"
+    output.mkdir()
+    writer = PdfWriter()
+    writer.add_blank_page(width=72, height=144)
+    writer.add_blank_page(width=144, height=72)
+    with source.open("wb") as stream:
+        writer.write(stream)
+
+    exported = export_pdf_pages_to_images(
+        source, output, image_format="PNG", dpi=72, pages="2"
+    )
+    assert len(exported) == 1
+    assert exported[0].name == "export-pagina-002.png"
+    with PILImage.open(exported[0]) as image:
+        assert image.size == (144, 72)
+        assert image.format == "PNG"
+
+    rerun = export_pdf_pages_to_images(
+        source, output, image_format="PNG", dpi=72, pages="2"
+    )
+    assert rerun[0].name == "export-pagina-002-2.png"
+    assert exported[0].read_bytes() == (output / "export-pagina-002.png").read_bytes()
+
+    jpeg = export_pdf_pages_to_images(
+        source, output, image_format="JPEG", dpi=72, quality=80, pages="1"
+    )
+    with PILImage.open(jpeg[0]) as image:
+        assert image.size == (72, 144)
+        assert image.format == "JPEG"
+
+
+def test_pdf_to_images_tab_is_available_and_translated(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    try:
+        labels = [window.tabs.tabText(i).strip() for i in range(window.tabs.count())]
+        assert "PDF para imagens" in labels
+        assert window.pdf_to_images_quality.isEnabled() is False
+        window.pdf_to_images_format.setCurrentIndex(window.pdf_to_images_format.findData("JPEG"))
+        assert window.pdf_to_images_quality.isEnabled() is True
+        window.language_combo.setCurrentIndex(window.language_combo.findData("en"))
+        labels = [window.tabs.tabText(i).strip() for i in range(window.tabs.count())]
+        assert "PDF to images" in labels
+        window.language_combo.setCurrentIndex(window.language_combo.findData("es"))
+        labels = [window.tabs.tabText(i).strip() for i in range(window.tabs.count())]
+        assert "PDF a imágenes" in labels
+    finally:
+        window.language_combo.setCurrentIndex(window.language_combo.findData("pt"))
+        window.close()
+        window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         qt_app.processEvents()
 
