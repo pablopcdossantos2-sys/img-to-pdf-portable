@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pdf-hub"
-version = "0.11.0"
+dynamic = ["version"]
 description = "Desktop tools for locally processing PDF files and images."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -24,8 +24,11 @@ dev = [
     "pip-audit==2.10.1",
 ]
 
-[project.scripts]
+[project.gui-scripts]
 pdf-hub = "document_tools.gui:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "document_tools.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["document_tools*"]
