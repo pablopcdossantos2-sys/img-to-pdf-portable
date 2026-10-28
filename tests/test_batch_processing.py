@@ -302,3 +302,29 @@ def test_failure_only_retry_checkpoint_resumes_the_same_subset(tmp_path: Path, m
     assert all(item.success for item in resumed)
     assert calls == ["a.pdf", "b.pdf", "c.pdf", "a.pdf", "b.pdf"]
     assert not (output / CHECKPOINT_FILENAME).exists()
+
+
+def test_checkpoint_write_failures_do_not_abort_batch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source, output = tmp_path / "input", tmp_path / "output"
+    source.mkdir()
+    output.mkdir()
+    for name in ("a.pdf", "b.pdf", "c.pdf"):
+        (source / name).write_bytes(name.encode("ascii"))
+
+    def fake_pipeline(_input_path, output_path, **_kwargs):
+        Path(output_path).write_bytes(b"processed")
+        return Path(output_path)
+
+    def fail_checkpoint(*_args, **_kwargs):
+        raise OSError("simulated checkpoint disk error")
+
+    monkeypatch.setattr(batch, "process_pdf_pipeline", fake_pipeline)
+    monkeypatch.setattr(batch, "_write_checkpoint", fail_checkpoint)
+
+    results = process_pdf_folder(source, output, make_profile())
+
+    assert len(results) == 3
+    assert all(item.success for item in results)
+    assert len(list(output.glob("*-processed.pdf"))) == 3
