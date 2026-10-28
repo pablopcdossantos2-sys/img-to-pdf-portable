@@ -978,10 +978,14 @@ def test_saving_pipeline_profiles_preserves_future_schema_entries(qt_app: QAppli
     future_profile = {"schema_version": 999, "future_option": {"enabled": True}}
     try:
         window.settings.setValue("pipeline_profiles", json.dumps({"Future profile": future_profile}))
-        window._write_pipeline_profiles({"New profile": {"rotate_enabled": False}})
+        assert window._write_pipeline_profiles({"New profile": {"rotate_enabled": False}})
         persisted = json.loads(window.settings.value("pipeline_profiles", "{}"))
         assert persisted["Future profile"] == future_profile
         assert persisted["New profile"] == {"rotate_enabled": False}
+
+        window.settings.setValue("pipeline_profiles", "invalid json")
+        assert not window._write_pipeline_profiles({"Another profile": {"rotate_enabled": True}})
+        assert window.settings.value("pipeline_profiles") == "invalid json"
     finally:
         if previous_profiles is None:
             window.settings.remove("pipeline_profiles")
