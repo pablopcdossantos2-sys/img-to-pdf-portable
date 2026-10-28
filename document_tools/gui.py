@@ -960,6 +960,16 @@ TRANSLATIONS["es"].update({
 
 TRANSLATIONS["en"].update({
     "Para GIF/TIFF/WebP com vários quadros, a conversão usa somente o primeiro quadro.": "For GIF/TIFF/WebP files with multiple frames, conversion uses only the first frame.",
+    "Reordenar páginas": "Reorder pages",
+    "Marca d'água e numeração": "Watermark and page numbers",
+    "Otimizar PDF": "Optimize PDF",
+    "Escolha um PDF para reorganizar suas páginas. Visualize todas as páginas e arraste para definir a ordem final; todas devem permanecer na lista.": "Choose a PDF to reorder. Preview all pages and drag to set their final order; all pages must remain in the list.",
+    "Escolha o documento e defina o texto, a posição e a opacidade da marca d'água. O conteúdo original não é rasterizado.": "Choose a document and set the watermark text, position, and opacity. Original content is not rasterized.",
+    "Escolha entre preservar a qualidade (sem perdas) ou reduzir o tamanho recomprimindo imagens. O modo sem perdas comprime streams e remove objetos redundantes; o modo equilibrado também recomprime imagens opacas.": "Choose between preserving quality (lossless) or reducing file size by recompressing images. Lossless mode compresses streams and removes redundant objects; balanced mode also recompresses opaque images.",
+    "Adicionar PDFs": "Add PDFs",
+    "Escolher PDF para extrair páginas": "Choose PDF to extract pages",
+    "Escolher PDF para girar": "Choose PDF to rotate",
+    "Escolher PDF para dividir": "Choose PDF to split",
     "A marca d'água contém caracteres não suportados pela fonte padrão. Use caracteres latinos e símbolos compatíveis.": "The watermark contains characters unsupported by the built-in font. Use Latin characters and compatible symbols.",
     "O texto da marca d'água é longo demais para caber na página. Reduza o texto ou use uma posição central.": "The watermark is too long to fit on the page. Shorten the text or use a centered position.",
     "Não foi possível concluir a operação. Os detalhes internos foram ocultados.": "The operation could not be completed. Internal details were hidden.",
@@ -970,6 +980,16 @@ TRANSLATIONS["en"].update({
 })
 TRANSLATIONS["es"].update({
     "Para GIF/TIFF/WebP com vários quadros, a conversão usa somente o primeiro quadro.": "Para archivos GIF/TIFF/WebP con varios fotogramas, la conversión usa solo el primero.",
+    "Reordenar páginas": "Reordenar páginas",
+    "Marca d'água e numeração": "Marca de agua y numeración",
+    "Otimizar PDF": "Optimizar PDF",
+    "Escolha um PDF para reorganizar suas páginas. Visualize todas as páginas e arraste para definir a ordem final; todas devem permanecer na lista.": "Elige un PDF para reordenarlo. Previsualiza todas las páginas y arrástralas para fijar el orden final; deben permanecer todas en la lista.",
+    "Escolha o documento e defina o texto, a posição e a opacidade da marca d'água. O conteúdo original não é rasterizado.": "Elige un documento y define el texto, la posición y la opacidad de la marca de agua. El contenido original no se rasteriza.",
+    "Escolha entre preservar a qualidade (sem perdas) ou reduzir o tamanho recomprimindo imagens. O modo sem perdas comprime streams e remove objetos redundantes; o modo equilibrado também recomprime imagens opacas.": "Elige entre conservar la calidad (sin pérdida) o reducir el tamaño recomprimiendo imágenes. El modo sin pérdida comprime flujos y elimina objetos redundantes; el modo equilibrado también recomprime imágenes opacas.",
+    "Adicionar PDFs": "Añadir PDF",
+    "Escolher PDF para extrair páginas": "Elegir PDF para extraer páginas",
+    "Escolher PDF para girar": "Elegir PDF para girar",
+    "Escolher PDF para dividir": "Elegir PDF para dividir",
     "A marca d'água contém caracteres não suportados pela fonte padrão. Use caracteres latinos e símbolos compatíveis.": "La marca de agua contiene caracteres no compatibles con la fuente integrada. Usa caracteres latinos y símbolos compatibles.",
     "O texto da marca d'água é longo demais para caber na página. Reduza o texto ou use uma posição central.": "La marca de agua es demasiado larga para caber en la página. Acorta el texto o usa una posición centrada.",
     "Não foi possível concluir a operação. Os detalhes internos foram ocultados.": "No se pudo completar la operación. Se ocultaron los detalles internos.",
@@ -1390,7 +1410,11 @@ class DocumentToolsWindow(QMainWindow):
         brand_text = QVBoxLayout()
         title = QLabel(APP_NAME)
         title.setObjectName("appTitle")
-        subtitle = QLabel(f"PDF e imagens • v{__version__} • processamento local")
+        subtitle = QLabel(
+            self._t("PDF e imagens • v{version} • organizado, seguro e local").format(
+                version=__version__
+            )
+        )
         subtitle.setObjectName("subtitle")
         brand_text.addWidget(title)
         brand_text.addWidget(subtitle)
@@ -1547,6 +1571,12 @@ class DocumentToolsWindow(QMainWindow):
         for widget in self.findChildren(QWidget):
             if widget is self.language_combo:
                 continue
+            if (
+                widget is self.status_label
+                or widget is getattr(self, "reorder_preview", None)
+                or widget is getattr(self, "batch_pause_button", None)
+            ):
+                continue
             if isinstance(widget, (QLabel, QPushButton, QCheckBox, QToolButton)):
                 self._original_ui_texts[widget] = widget.text()
             if widget.toolTip():
@@ -1603,6 +1633,14 @@ class DocumentToolsWindow(QMainWindow):
         # Refresh the current status text too, so switching language does not leave stale Portuguese text.
         if self.status_label.text():
             self.status_label.setText(self._t(self.status_label.text()))
+        if hasattr(self, "reorder_list") and hasattr(self, "reorder_preview"):
+            self._preview_reorder_page(self.reorder_list.currentRow())
+        if hasattr(self, "batch_pause_button"):
+            control = getattr(self, "_batch_control", None)
+            if control is not None:
+                self.batch_pause_button.setText(
+                    self._t("Retomar lote" if control.is_paused else "Pausar lote")
+                )
         if hasattr(self, "batch_history_combo"):
             selected = self.batch_history_combo.currentData()
             self._refresh_batch_history_combo(selected if isinstance(selected, str) else None)
@@ -1675,14 +1713,14 @@ class DocumentToolsWindow(QMainWindow):
         QListWidget::item:selected { background: $LIST_SELECTED; color: $LIST_SELECTED_TEXT; }
         QListWidget::item:hover:!selected { background: $BUTTON; }
         QListWidget#reorderPageList::item {
-            background: #FFFFFF; color: $TEXT; border: 1px solid $BORDER;
+            background: #FFFFFF; color: #172B4D; border: 1px solid $BORDER;
             border-radius: 6px; padding: 6px; margin: 3px;
         }
         QListWidget#reorderPageList::item:selected {
-            background: #FFFFFF; color: $TEXT; border: 2px solid $PRIMARY;
+            background: #FFFFFF; color: #172B4D; border: 2px solid $PRIMARY;
         }
         QLabel#pagePreview {
-            background: #FFFFFF; color: $TEXT; border: 1px solid $BORDER;
+            background: #FFFFFF; color: #172B4D; border: 1px solid $BORDER;
             border-radius: 8px; padding: 8px;
         }
         QPushButton {
@@ -1739,6 +1777,7 @@ class DocumentToolsWindow(QMainWindow):
         layout.setSpacing(10)
         title_label = QLabel(title)
         title_label.setObjectName("sectionTitle")
+        title_label.setWordWrap(True)
         description_label = QLabel(description)
         description_label.setObjectName("muted")
         description_label.setWordWrap(True)
@@ -1812,9 +1851,10 @@ class DocumentToolsWindow(QMainWindow):
     ) -> str | None:
         desktop = self._desktop_directory()
         dialog = QFileDialog(
-            self, self._t("Salvar PDF resultante"), str(desktop / suggested_name), PDF_FILTER
+            self, self._t("Salvar PDF resultante"), str(desktop), PDF_FILTER
         )
         dialog.setDirectory(str(desktop))
+        dialog.selectFile(suggested_name)
         dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
         dialog.setFileMode(QFileDialog.FileMode.AnyFile)
         dialog.setDefaultSuffix("pdf")
@@ -3063,8 +3103,8 @@ class DocumentToolsWindow(QMainWindow):
 
     def _build_reorder_tab(self) -> QWidget:
         page, layout = self._new_page(
-            "Visualize todas as páginas e arraste para definir a ordem final. Todas as páginas devem permanecer na lista.",
-            "Escolha um PDF para reorganizar suas páginas.",
+            "Reordenar páginas",
+            "Escolha um PDF para reorganizar suas páginas. Visualize todas as páginas e arraste para definir a ordem final; todas devem permanecer na lista.",
         )
         path_row = QHBoxLayout()
         path_row.setContentsMargins(0, 0, 0, 0)
@@ -3144,8 +3184,8 @@ class DocumentToolsWindow(QMainWindow):
 
     def _build_stamp_tab(self) -> QWidget:
         page, layout = self._new_page(
-            "Adicionar uma marca d'água de texto, numeração, ou ambos. O conteúdo original não é rasterizado.",
-            "Escolha o documento e defina o texto, a posição e a opacidade da marca d'água.",
+            "Marca d'água e numeração",
+            "Escolha o documento e defina o texto, a posição e a opacidade da marca d'água. O conteúdo original não é rasterizado.",
         )
         form = QFormLayout()
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
@@ -3256,8 +3296,8 @@ class DocumentToolsWindow(QMainWindow):
 
     def _build_optimize_tab(self) -> QWidget:
         page, layout = self._new_page(
-            "Escolha entre preservar toda a qualidade (sem perdas) ou reduzir mais o tamanho recomprimindo imagens.",
-            "A otimização sem perdas comprime streams e remove objetos redundantes; a equilibrada também recomprime imagens opacas.",
+            "Otimizar PDF",
+            "Escolha entre preservar a qualidade (sem perdas) ou reduzir o tamanho recomprimindo imagens. O modo sem perdas comprime streams e remove objetos redundantes; o modo equilibrado também recomprime imagens opacas.",
         )
         form = QFormLayout()
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
