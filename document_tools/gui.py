@@ -3182,9 +3182,9 @@ class DocumentToolsWindow(QMainWindow):
         self.reorder_list.setViewMode(QListWidget.ViewMode.IconMode)
         self.reorder_list.setFlow(QListWidget.Flow.LeftToRight)
         self.reorder_list.setWrapping(True)
-        # Fixed, single-pass layout avoids thumbnail tiles being recycled or
-        # temporarily disappearing while a custom drag/drop reorders model rows.
-        self.reorder_list.setResizeMode(QListWidget.ResizeMode.Fixed)
+        # Single-pass responsive layout avoids batched thumbnail recycling
+        # while a custom drag/drop reorders model rows and adapts to window resizes.
+        self.reorder_list.setResizeMode(QListWidget.ResizeMode.Adjust)
         self.reorder_list.setMovement(QListWidget.Movement.Static)
         self.reorder_list.setLayoutMode(QListWidget.LayoutMode.SinglePass)
         self.reorder_list.setIconSize(QSize(76, 96))
