@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -442,25 +443,48 @@ def test_resume_after_interruption_does_not_duplicate_completed_outputs(
         return Path(output_path)
 
     monkeypatch.setattr(batch, "process_pdf_pipeline", fake_pipeline)
+    child_script = r"""
+import os
+import sys
+from pathlib import Path
+import document_tools.batch_processing as batch
 
-    def interrupt_after_nine(completed: int, _total: int, _name: str) -> None:
-        if completed == 9:
-            raise SystemExit("simulated hard interruption")
-
-    with pytest.raises(SystemExit, match="simulated hard interruption"):
-        process_pdf_folder(
-            source, output, make_profile(), resume=True,
-            progress_callback=interrupt_after_nine,
-        )
-
+source, output = Path(sys.argv[1]), Path(sys.argv[2])
+profile = {
+    "rotate_enabled": True, "rotate_angle": 90, "rotate_ranges": "",
+    "stamp_enabled": False, "stamp_text": "", "page_numbering": False,
+    "stamp_ranges": "", "optimize_enabled": False, "optimize_mode": "lossless",
+    "quality": 82, "output_suffix": "-processed",
+}
+def fake_pipeline(_input_path, output_path, **_kwargs):
+    Path(output_path).write_bytes(b"processed")
+    return Path(output_path)
+batch.process_pdf_pipeline = fake_pipeline
+def hard_exit_after_nine(completed, _total, _name):
+    if completed == 9:
+        os._exit(23)
+batch.process_pdf_folder(
+    source, output, profile, resume=True,
+    progress_callback=hard_exit_after_nine,
+)
+"""
+    interrupted = subprocess.run(
+        [sys.executable, "-c", child_script, str(source), str(output)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert interrupted.returncode == 23
     assert len(list(output.glob("*-processed.pdf"))) == 9
+
     resumed = process_pdf_folder(source, output, make_profile(), resume=True)
     assert len(resumed) == 15
     assert all(item.success for item in resumed)
     assert sum(item.message == "Concluído antes da interrupção; resultado reutilizado." for item in resumed) == 9
     assert len(list(output.glob("*-processed.pdf"))) == 15
     assert not list(output.glob("*-processed-2.pdf"))
-    assert processed == [f"f{index:02d}.pdf" for index in range(15)]
+    assert processed == [f"f{index:02d}.pdf" for index in range(9, 15)]
 
 
 def test_checkpoints_of_different_sources_do_not_collide(
