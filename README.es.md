@@ -14,7 +14,7 @@ Aplicación de escritorio para trabajar localmente con archivos PDF e imágenes,
 - **Interfaz y entrada rápida:** navegación lateral con iconos para cada herramienta, temas claro/oscuro en Configuración, importación de imágenes mediante arrastrar y soltar, recomendación automática de DPI a partir de las dimensiones y margen inicial de 0 mm.
 
 - **Imágenes a PDF:** convierte imágenes JPG, JPEG, PNG, BMP, WEBP, TIFF y GIF en páginas A4, eligiendo la orientación y conservando las proporciones. Por defecto, importa todas las páginas/fotogramas de archivos multipágina o animados, con una opción para usar solo el primero. La transparencia se coloca sobre fondo blanco.
-- **Unir PDF:** combina archivos en el orden elegido, solicita contraseñas para los PDFs protegidos e intenta conservar marcadores, metadatos y referencias internas compatibles.
+- **Unir PDF:** combina archivos en el orden elegido, permite seleccionar intervalos de páginas para cada PDF por separado, solicita contraseñas para los PDFs protegidos e intenta conservar marcadores, metadatos y referencias internas compatibles.
 - **Mezclar PDF:** intercala páginas de dos documentos, con intervalos opcionales, orden inverso para el segundo archivo y cantidad configurable de páginas por bloque. Admite contraseñas y conserva los originales.
 - **Insertar páginas repetidamente:** inserta páginas seleccionadas de un PDF en otro después de cada N páginas del documento de destino, repitiendo la selección elegida. Admite contraseñas y conserva los archivos originales.
 - **Extraer páginas:** guarda páginas o intervalos como `1-3, 5, 8-10`, permite repetir páginas y acepta contraseña. La navegación y las anotaciones se conservan cuando es posible, con referencias adaptadas a las páginas retenidas.
