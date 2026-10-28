@@ -886,6 +886,7 @@ def test_window_preserves_space_for_controls_and_aligned_file_pickers(qt_app: QA
             "batch_output_directory",
             "pdf_to_images_path",
             "pdf_to_images_directory",
+            "convert_directory",
         )
         for field_name in path_fields:
             field = getattr(window, field_name)
