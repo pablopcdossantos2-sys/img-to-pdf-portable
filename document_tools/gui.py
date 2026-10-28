@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import re
 import sys
 import tempfile
@@ -80,6 +81,17 @@ from document_tools.pdf_ops import (
 APP_NAME = "PDF Hub"
 IMAGE_FILTER = "Imagens (*.jpg *.jpeg *.png *.bmp *.webp *.tif *.tiff *.gif)"
 PDF_FILTER = "Documentos PDF (*.pdf)"
+
+
+def _same_existing_file(first: Path, second: Path) -> bool:
+    if first == second:
+        return True
+    try:
+        return first.exists() and second.exists() and os.path.samefile(first, second)
+    except OSError:
+        return False
+
+
 FORMAT_EXTENSIONS = {
     "JPEG": ".jpg",
     "PNG": ".png",
@@ -946,6 +958,17 @@ TRANSLATIONS["es"].update({
     "{count} arquivos criados em: {directory}": "{count} archivos creados en: {directory}"
 });
 
+TRANSLATIONS["en"].update({
+    "A marca d'água contém caracteres não suportados pela fonte padrão. Use caracteres latinos e símbolos compatíveis.": "The watermark contains characters unsupported by the built-in font. Use Latin characters and compatible symbols.",
+    "O texto da marca d'água é longo demais para caber na página. Reduza o texto ou use uma posição central.": "The watermark is too long to fit on the page. Shorten the text or use a centered position.",
+    "Não foi possível concluir a operação. Os detalhes internos foram ocultados.": "The operation could not be completed. Internal details were hidden.",
+})
+TRANSLATIONS["es"].update({
+    "A marca d'água contém caracteres não suportados pela fonte padrão. Use caracteres latinos e símbolos compatíveis.": "La marca de agua contiene caracteres no compatibles con la fuente integrada. Usa caracteres latinos y símbolos compatibles.",
+    "O texto da marca d'água é longo demais para caber na página. Reduza o texto ou use uma posição central.": "La marca de agua es demasiado larga para caber en la página. Acorta el texto o usa una posición centrada.",
+    "Não foi possível concluir a operação. Os detalhes internos foram ocultados.": "No se pudo completar la operación. Se ocultaron los detalles internos.",
+})
+
 class ReorderablePageList(QListWidget):
     """Thumbnail grid with explicit, same-widget drag-and-drop reordering."""
 
@@ -1251,27 +1274,7 @@ class OperationWorker(QThread):
 
     @staticmethod
     def _friendly_error_message(error: Exception) -> str:
-        if isinstance(error, PermissionError):
-            return "Não foi possível acessar ou salvar o arquivo. Confira as permissões e feche o documento em outros programas."
-        if isinstance(error, FileNotFoundError):
-            return "O arquivo ou a pasta não foi encontrado. Confira o caminho e tente novamente."
-        if isinstance(error, FileExistsError):
-            return f"Um arquivo de destino já existe. Escolha outra pasta ou nome. Detalhe: {error}"
-        error_type = error.__class__.__name__
-        module_name = error.__class__.__module__
-        if error_type in {"UnidentifiedImageError", "DecompressionBombError"}:
-            return "A imagem é inválida, muito grande para processar com segurança ou usa um formato não suportado."
-        if error_type == "WrongPasswordError":
-            return "Não foi possível interpretar o PDF. Ele pode estar danificado ou protegido por senha."
-        if module_name.startswith("pypdf"):
-            return "O PDF contém uma estrutura não suportada ou está danificado. Tente salvar uma nova cópia do PDF antes de processar."
-        if module_name.startswith("PIL"):
-            return "A imagem não pôde ser processada. Verifique se o arquivo está íntegro e usa um formato compatível."
-        if module_name.startswith("PySide6.QtPdf"):
-            return "Não foi possível renderizar o PDF. Ele pode usar recursos não suportados ou estar danificado."
-        if error_type in {"PdfReadError", "PdfStreamError"}:
-            return "Não foi possível interpretar o PDF. Ele pode estar danificado ou protegido por senha."
-        return str(error) or error_type
+        return friendly_error_message(error)
 
 
 class BatchFolderWorker(QThread):
@@ -1813,7 +1816,7 @@ class DocumentToolsWindow(QMainWindow):
             output = output.with_suffix(".pdf")
         output = output.resolve()
         sources = {Path(item).expanduser().resolve() for item in source_paths}
-        if output in sources:
+        if any(_same_existing_file(output, source) for source in sources):
             QMessageBox.warning(
                 self,
                 self._t("Escolha outro nome"),
@@ -1855,7 +1858,11 @@ class DocumentToolsWindow(QMainWindow):
             self._pending_output_directory = None
         else:
             location = Path(output_location).expanduser().resolve()
-            self._pending_output_directory = location if location.is_dir() else location.parent
+            # Directory-producing tasks may create the destination only after the worker
+            # starts (e.g. split PDF); do not collapse a not-yet-existing directory to its parent.
+            self._pending_output_directory = (
+                location.parent if location.suffix.lower() == ".pdf" else location
+            )
 
         worker = OperationWorker(task)
         self._worker = worker
@@ -2291,7 +2298,11 @@ class DocumentToolsWindow(QMainWindow):
                         return
                     passwords[index] = password
         except Exception as error:
-            QMessageBox.warning(self, self._t("Não foi possível verificar o PDF"), self._t(str(error)))
+            QMessageBox.warning(
+                self,
+                self._t("Não foi possível verificar o PDF"),
+                self._t(friendly_error_message(error)),
+            )
             return
         page_ranges = [
             str(self.pdf_list.item(index).data(Qt.ItemDataRole.UserRole + 1) or "").strip() or None
@@ -2912,7 +2923,11 @@ class DocumentToolsWindow(QMainWindow):
                     return
             count = pdf_page_count(path, password=password or None)
         except Exception as error:
-            QMessageBox.warning(self, self._t("Não foi possível abrir o PDF"), self._t(str(error)))
+            QMessageBox.warning(
+                self,
+                self._t("Não foi possível abrir o PDF"),
+                self._t(friendly_error_message(error)),
+            )
             return
         thumbnail_worker = self.reorder_thumbnail_worker
         if thumbnail_worker is not None:
@@ -2925,6 +2940,7 @@ class DocumentToolsWindow(QMainWindow):
         self.reorder_password = password or None
         if self.reorder_document is not None:
             self.reorder_document.close()
+            self.reorder_document.deleteLater()
         self.reorder_document = QPdfDocument(self)
         if password:
             self.reorder_document.setPassword(password)
@@ -4564,7 +4580,7 @@ class DocumentToolsWindow(QMainWindow):
                         )
                     )
                 except Exception as error:
-                    failures.append(f"{source.name}: {error}")
+                    failures.append(f"{source.name}: {self._t(friendly_error_message(error))}")
 
             summary = self._t("{count} imagem(ns) convertida(s) em {directory}.").format(
                 count=len(completed), directory=directory
@@ -4572,7 +4588,7 @@ class DocumentToolsWindow(QMainWindow):
             if failures:
                 summary += self._t(" Falhas: {count}.").format(count=len(failures)) + " " + " | ".join(failures[:3])
             if not completed:
-                raise RuntimeError(summary)
+                raise ValueError(summary)
             return summary
 
         self._run_task("Convertendo imagens…", task, output_location=directory)
