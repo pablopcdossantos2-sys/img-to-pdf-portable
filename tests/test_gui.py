@@ -1483,7 +1483,7 @@ def test_batch_report_csv_uses_semicolon_for_portuguese_and_spanish(
     "language,expected",
     [
         ("en", "requires a password"),
-        ("es", "exige una contraseña"),
+        ("es", "requiere una contraseña"),
     ],
 )
 def test_t_translates_formatted_password_message(
