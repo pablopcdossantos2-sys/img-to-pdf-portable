@@ -38,7 +38,7 @@ Aplicación de escritorio para trabajar localmente con archivos PDF e imágenes,
 
 ### Facilidad de uso, privacidad y robustez
 
-- Interfaz de escritorio con selector de idioma PT-BR/inglés/español, cuadrículas de miniaturas con vista previa, perfiles reutilizables de flujo por lotes, duplicación intencional e indicador de procesamiento. Los diálogos principales, solicitudes de contraseña, confirmaciones y errores habituales de intervalos siguen el idioma seleccionado. Los errores comunes de análisis pypdf, renderizado Qt PDF y procesamiento de imágenes reciben mensajes más claros y traducidos, sin exponer diagnósticos internos. Las contraseñas se escriben en campos ocultos, no se guardan en las preferencias y los campos se limpian al iniciar la operación.
+- Interfaz de escritorio con navegación lateral y selector de idioma PT-BR/inglés/español, cuadrículas de miniaturas con vista previa, perfiles reutilizables de flujo por lotes, duplicación intencional e indicador de procesamiento. Los diálogos principales, solicitudes de contraseña, confirmaciones y errores habituales de intervalos siguen el idioma seleccionado. Los errores comunes de análisis pypdf, renderizado Qt PDF y procesamiento de imágenes reciben mensajes más claros y traducidos, sin exponer diagnósticos internos. Las contraseñas se escriben en campos ocultos, no se guardan en las preferencias y los campos se limpian al iniciar la operación.
 - Controles de DPI y márgenes al convertir imágenes a PDF.
 - Las tareas largas se ejecutan fuera del hilo principal de la interfaz; la ventana no se puede cerrar mientras una tarea está activa.
 - Un botón permite abrir la carpeta de salida al finalizar el procesamiento.
@@ -46,6 +46,7 @@ Aplicación de escritorio para trabajar localmente con archivos PDF e imágenes,
 - Las operaciones normales no reemplazan los archivos originales.
 - Escrituras temporales/atómicas para operaciones PDF; la división se detiene si ya existe un archivo con el nombre de destino.
 - Preferencia persistente de permisos de salida en Linux/macOS: solo el usuario (0600, recomendado por defecto) o lectura compartida (0644). En Windows, los permisos los gestiona el sistema operativo.
+- **PDF protegidos y privacidad:** se necesita la contraseña para procesar un PDF protegido, pero el archivo generado no hereda automáticamente el cifrado ni las restricciones del original. Protege de nuevo el resultado si necesitas confidencialidad. Se pueden conservar metadatos básicos del documento.
 - **Nota sobre calidad:** la optimización equilibrada puede reducir la calidad de imagen y no garantiza que todos los PDFs sean más pequeños; conserva el original y compara los resultados. Las marcas de agua usan la fuente Helvetica integrada y pueden no admitir todos los caracteres Unicode.
 - Las pruebas automatizadas y la auditoría de dependencias se ejecutan en GitHub Actions. El flujo valida los paquetes de Windows, Linux y macOS y genera checksums SHA-256.
 
