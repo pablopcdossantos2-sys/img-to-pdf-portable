@@ -39,10 +39,17 @@ def parse_page_ranges(
 
     for segment in segments:
         pieces = [part.strip() for part in segment.split("-")]
-        if len(pieces) not in (1, 2) or not all(piece.isdecimal() for piece in pieces):
+        if len(pieces) == 1 and pieces[0].isdecimal():
+            start = end = int(pieces[0])
+        elif (
+            len(pieces) == 2
+            and pieces[0].isdecimal()
+            and (pieces[1].isdecimal() or pieces[1] == "")
+        ):
+            start = int(pieces[0])
+            end = int(pieces[1]) if pieces[1] else page_count
+        else:
             raise ValueError(f"Intervalo de páginas inválido: '{segment}'.")
-        start = int(pieces[0])
-        end = int(pieces[-1])
         if start < 1 or end < start or end > page_count:
             raise ValueError(f"O intervalo '{segment}' precisa estar entre 1 e {page_count}.")
 
@@ -257,13 +264,16 @@ def merge_pdfs(
     output_path: str | Path,
     *,
     passwords: Sequence[str | None] | None = None,
+    page_ranges: Sequence[str | None] | None = None,
     file_mode: int = 0o600,
 ) -> Path:
-    """Join PDFs, optionally using a per-document password, and import bookmarks where possible."""
+    """Join PDFs in order, optionally selecting a page range and password for every input."""
     if len(pdf_paths) < 2:
         raise ValueError("Selecione pelo menos dois PDFs para unir.")
     if passwords is not None and len(passwords) != len(pdf_paths):
         raise ValueError("Informe uma senha por PDF ou deixe a senha como None.")
+    if page_ranges is not None and len(page_ranges) != len(pdf_paths):
+        raise ValueError("Informe um intervalo de páginas por PDF ou deixe None para usar todas.")
     _validate_file_mode(file_mode)
     sources, output = _normalise_pdf_paths(pdf_paths, output_path)
 
@@ -273,7 +283,12 @@ def merge_pdfs(
             password = passwords[index] if passwords is not None else None
             with source.open("rb") as stream:
                 reader = _open_reader(source, stream, password=password)
-                writer.append(reader, import_outline=True)
+                selected_ranges = page_ranges[index] if page_ranges is not None else None
+                if selected_ranges and selected_ranges.strip():
+                    indexes = parse_page_ranges(selected_ranges, len(reader.pages))
+                    writer.append(reader, pages=indexes, import_outline=True)
+                else:
+                    writer.append(reader, import_outline=True)
                 if index == 0:
                     _copy_metadata(reader, writer)
         writer.write(temporary)
