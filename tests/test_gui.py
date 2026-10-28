@@ -139,7 +139,7 @@ def test_language_selector_translates_tabs_into_english_and_spanish(qt_app: QApp
 def test_new_pdf_tools_are_available_in_the_interface(qt_app: QApplication) -> None:
     window = DocumentToolsWindow()
     try:
-        assert window.reorder_list.dragDropMode() == QAbstractItemView.DragDropMode.InternalMove
+        assert window.reorder_list.dragDropMode() == QAbstractItemView.DragDropMode.DragDrop
         assert window.reorder_list.movement() == QListWidget.Movement.Static
         assert window.stamp_numbering.isChecked() is False
         assert window.optimize_mode.currentData() == "balanced"
@@ -163,6 +163,63 @@ def test_new_pdf_tools_are_available_in_the_interface(qt_app: QApplication) -> N
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         qt_app.processEvents()
+
+def test_reorder_titles_are_below_thumbnails_and_layout_is_stable(qt_app: QApplication) -> None:
+    from PySide6.QtWidgets import QStyleOptionViewItem
+    from document_tools.gui import ReorderPageDelegate
+
+    window = DocumentToolsWindow()
+    try:
+        delegate = window.reorder_list.itemDelegate()
+        assert isinstance(delegate, ReorderPageDelegate)
+        option = QStyleOptionViewItem()
+        delegate.initStyleOption(option, window.reorder_list.model().index(0, 0))
+        assert option.decorationPosition == QStyleOptionViewItem.Position.Top
+        assert window.reorder_list.layoutMode() == QListWidget.LayoutMode.SinglePass
+        assert window.reorder_list.resizeMode() == QListWidget.ResizeMode.Fixed
+        assert window.reorder_list.dragDropMode() == QAbstractItemView.DragDropMode.DragDrop
+
+        icon = window.tabs._reorder_pages_button.icon()
+        assert not icon.isNull()
+        light_pixmap = icon.pixmap(QSize(24, 24))
+        assert not light_pixmap.isNull()
+
+        window.theme_combo.setCurrentIndex(window.theme_combo.findData("dark"))
+        dark_pixmap = window.tabs._reorder_pages_button.icon().pixmap(QSize(24, 24))
+        assert not dark_pixmap.isNull()
+        assert light_pixmap.toImage() != dark_pixmap.toImage()
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_reorder_multiple_moves_keep_every_page(qt_app: QApplication) -> None:
+    from document_tools.gui import ReorderablePageList
+
+    widget = ReorderablePageList()
+    try:
+        for page_number in range(1, 7):
+            item = QListWidgetItem(f"Página {page_number:02d}")
+            item.setData(Qt.ItemDataRole.UserRole, page_number)
+            widget.addItem(item)
+
+        widget.move_page_to_row(0, 4)
+        widget.move_page_to_row(5, 1)
+        widget.move_page_to_row(2, 0)
+
+        assert widget.count() == 6
+        assert sorted(
+            widget.item(i).data(Qt.ItemDataRole.UserRole)
+            for i in range(widget.count())
+        ) == list(range(1, 7))
+    finally:
+        widget.close()
+        widget.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
 
 def test_reorder_grid_moves_the_actual_item_row(qt_app: QApplication) -> None:
     from document_tools.gui import ReorderablePageList
@@ -851,6 +908,41 @@ def test_reorder_custom_drag_does_not_remove_the_dropped_page(
         widget.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         qt_app.processEvents()
+
+
+def test_application_starts_the_window_maximized(qt_app: QApplication, monkeypatch: pytest.MonkeyPatch) -> None:
+    import document_tools.gui as gui
+
+    calls = {"maximized": False}
+
+    class FakeApplication:
+        def __init__(self, _args) -> None:
+            pass
+
+        def setApplicationName(self, _name) -> None:
+            pass
+
+        def setOrganizationName(self, _name) -> None:
+            pass
+
+        def setWindowIcon(self, _icon) -> None:
+            pass
+
+        def setFont(self, _font) -> None:
+            pass
+
+        def exec(self) -> int:
+            return 0
+
+    class FakeWindow:
+        def showMaximized(self) -> None:
+            calls["maximized"] = True
+
+    monkeypatch.setattr(gui, "QApplication", FakeApplication)
+    monkeypatch.setattr(gui, "DocumentToolsWindow", FakeWindow)
+
+    assert gui.main() == 0
+    assert calls["maximized"]
 
 
 def test_window_preserves_space_for_controls_and_aligned_file_pickers(qt_app: QApplication) -> None:
