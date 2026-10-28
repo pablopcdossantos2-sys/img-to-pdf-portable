@@ -1064,9 +1064,15 @@ class ReorderablePageList(QListWidget):
         # Let QListWidget handle its native drop indicator and autoscroll. The
         # custom dropEvent still performs the final move without Qt's source cleanup.
         if event.source() is self and self.count() > 0:
-            super().dragMoveEvent(event)
-            if not event.isAccepted():
+            try:
+                super().dragMoveEvent(event)
+            except TypeError:
+                # Unit tests and third-party integrations may provide a lightweight
+                # event adapter instead of a native QDragMoveEvent.
                 event.acceptProposedAction()
+            else:
+                if not event.isAccepted():
+                    event.acceptProposedAction()
         else:
             event.ignore()
 
