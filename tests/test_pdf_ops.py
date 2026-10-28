@@ -967,3 +967,15 @@ def test_optimize_pdf_skips_image_extraction_errors(
     optimize_pdf(source, output, mode="balanced")
 
     assert output.is_file()
+
+
+def test_convert_image_uses_lossless_tiff_compression(tmp_path: Path) -> None:
+    source = tmp_path / "source.png"
+    output = tmp_path / "converted.tif"
+    Image.effect_noise((256, 256), 80).convert("L").save(source)
+
+    convert_image(source, output, "TIFF")
+
+    with Image.open(output) as result:
+        assert result.format == "TIFF"
+        assert result.tag_v2.get(259) == 5
