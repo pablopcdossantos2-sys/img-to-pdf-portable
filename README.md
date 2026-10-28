@@ -57,9 +57,9 @@ O fluxo **PDF Hub CI, security and packages** testa o projeto e gera pacotes por
 4. Extraia o arquivo. No Windows, execute `PDFHub.exe`; no Linux, execute `PDFHub`; no macOS, abra `PDF Hub.app`.
 5. Os arquivos `.sha256` permitem verificar o checksum do pacote. Nas releases, compare o checksum com o mesmo pacote baixado da fonte oficial.
 
-O artefato contém o runtime necessário e não exige instalação separada do Python. O Windows pode apresentar um aviso de segurança para arquivos baixados; confirme a origem antes de executar.
+O artefato contém o runtime necessário e não exige instalação separada do Python. Os pacotes incluem `LICENSE` e `LICENSES-THIRD-PARTY.md`. O Windows pode apresentar um aviso de segurança para arquivos baixados; confirme a origem antes de executar.
 
-> Os artefatos de Actions são temporários e expiram conforme a retenção configurada no GitHub. Releases versionadas são criadas quando uma tag como `v0.10.0` é enviada ao repositório. Os executáveis não são assinados/notarizados digitalmente; Windows SmartScreen e macOS Gatekeeper podem exibir avisos.
+> Os artefatos de Actions são temporários e expiram conforme a retenção configurada no GitHub. Releases versionadas são criadas quando uma tag como `v0.11.0` é enviada ao repositório. Os executáveis não são assinados/notarizados digitalmente; Windows SmartScreen e macOS Gatekeeper podem exibir avisos.
 
 ## Executar a partir do código-fonte
 
