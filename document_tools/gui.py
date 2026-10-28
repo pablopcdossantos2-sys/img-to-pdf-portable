@@ -959,6 +959,7 @@ TRANSLATIONS["es"].update({
 });
 
 TRANSLATIONS["en"].update({
+    "Para GIF/TIFF/WebP com vários quadros, a conversão usa somente o primeiro quadro.": "For GIF/TIFF/WebP files with multiple frames, conversion uses only the first frame.",
     "A marca d'água contém caracteres não suportados pela fonte padrão. Use caracteres latinos e símbolos compatíveis.": "The watermark contains characters unsupported by the built-in font. Use Latin characters and compatible symbols.",
     "O texto da marca d'água é longo demais para caber na página. Reduza o texto ou use uma posição central.": "The watermark is too long to fit on the page. Shorten the text or use a centered position.",
     "Não foi possível concluir a operação. Os detalhes internos foram ocultados.": "The operation could not be completed. Internal details were hidden.",
@@ -968,6 +969,7 @@ TRANSLATIONS["en"].update({
     "A página ultrapassa o limite seguro de pixels. Reduza a resolução de saída.": "The page exceeds the safe pixel limit. Reduce the output resolution.",
 })
 TRANSLATIONS["es"].update({
+    "Para GIF/TIFF/WebP com vários quadros, a conversão usa somente o primeiro quadro.": "Para archivos GIF/TIFF/WebP con varios fotogramas, la conversión usa solo el primero.",
     "A marca d'água contém caracteres não suportados pela fonte padrão. Use caracteres latinos e símbolos compatíveis.": "La marca de agua contiene caracteres no compatibles con la fuente integrada. Usa caracteres latinos y símbolos compatibles.",
     "O texto da marca d'água é longo demais para caber na página. Reduza o texto ou use uma posição central.": "La marca de agua es demasiado larga para caber en la página. Acorta el texto o usa una posición centrada.",
     "Não foi possível concluir a operação. Os detalhes internos foram ocultados.": "No se pudo completar la operación. Se ocultaron los detalles internos.",
@@ -4537,6 +4539,12 @@ class DocumentToolsWindow(QMainWindow):
         form.addRow("Pasta de saída", out_container)
 
         layout.addLayout(form)
+        multi_frame_note = QLabel(
+            "Para GIF/TIFF/WebP com vários quadros, a conversão usa somente o primeiro quadro."
+        )
+        multi_frame_note.setObjectName("muted")
+        multi_frame_note.setWordWrap(True)
+        layout.addWidget(multi_frame_note)
         button_row = QHBoxLayout()
         button_row.addStretch(1)
         convert = QPushButton("Converter imagens")
