@@ -282,6 +282,106 @@ def merge_pdfs(
     return output
 
 
+def mix_pdfs(
+    first_path: str | Path,
+    second_path: str | Path,
+    output_path: str | Path,
+    *,
+    first_page_ranges: str | None = None,
+    second_page_ranges: str | None = None,
+    reverse_second: bool = False,
+    first_pace: int = 1,
+    second_pace: int = 1,
+    first_password: str | None = None,
+    second_password: str | None = None,
+    file_mode: int = 0o600,
+) -> Path:
+    """Interleave pages from two PDFs in blocks, optionally reversing the second selection."""
+    if first_pace < 1 or second_pace < 1:
+        raise ValueError("O número de páginas por bloco deve ser positivo.")
+    _validate_file_mode(file_mode)
+    sources, output = _normalise_pdf_paths([first_path, second_path], output_path)
+    first, second = sources
+
+    def write(temporary: Path) -> None:
+        with first.open("rb") as first_stream, second.open("rb") as second_stream:
+            first_reader = _open_reader(first, first_stream, password=first_password)
+            second_reader = _open_reader(second, second_stream, password=second_password)
+            first_indexes = (
+                list(range(len(first_reader.pages)))
+                if not first_page_ranges or not first_page_ranges.strip()
+                else parse_page_ranges(first_page_ranges, len(first_reader.pages))
+            )
+            second_indexes = (
+                list(range(len(second_reader.pages)))
+                if not second_page_ranges or not second_page_ranges.strip()
+                else parse_page_ranges(second_page_ranges, len(second_reader.pages))
+            )
+            if reverse_second:
+                second_indexes.reverse()
+
+            writer = PdfWriter()
+            _copy_metadata(first_reader, writer)
+            first_pos = 0
+            second_pos = 0
+            while first_pos < len(first_indexes) or second_pos < len(second_indexes):
+                for _ in range(first_pace):
+                    if first_pos >= len(first_indexes):
+                        break
+                    writer.add_page(first_reader.pages[first_indexes[first_pos]])
+                    first_pos += 1
+                for _ in range(second_pace):
+                    if second_pos >= len(second_indexes):
+                        break
+                    writer.add_page(second_reader.pages[second_indexes[second_pos]])
+                    second_pos += 1
+            writer.write(temporary)
+
+    _atomic_pdf_save(output, write, file_mode=file_mode)
+    return output
+
+
+def insert_pages_repeatedly(
+    target_path: str | Path,
+    insert_path: str | Path,
+    output_path: str | Path,
+    *,
+    every_n_pages: int = 1,
+    insert_page_ranges: str | None = None,
+    target_password: str | None = None,
+    insert_password: str | None = None,
+    file_mode: int = 0o600,
+) -> Path:
+    """Insert selected pages from one PDF after every N pages of another PDF."""
+    if every_n_pages < 1:
+        raise ValueError("O intervalo entre inserções deve ser positivo.")
+    _validate_file_mode(file_mode)
+    sources, output = _normalise_pdf_paths([target_path, insert_path], output_path)
+    target, insertion = sources
+
+    def write(temporary: Path) -> None:
+        with target.open("rb") as target_stream, insertion.open("rb") as insert_stream:
+            target_reader = _open_reader(target, target_stream, password=target_password)
+            insert_reader = _open_reader(insertion, insert_stream, password=insert_password)
+            insert_indexes = (
+                list(range(len(insert_reader.pages)))
+                if not insert_page_ranges or not insert_page_ranges.strip()
+                else parse_page_ranges(insert_page_ranges, len(insert_reader.pages))
+            )
+
+            writer = PdfWriter()
+            _copy_metadata(target_reader, writer)
+            for page_index, page in enumerate(target_reader.pages, start=1):
+                writer.add_page(page)
+                if page_index % every_n_pages == 0:
+                    for insert_index in insert_indexes:
+                        writer.add_page(insert_reader.pages[insert_index])
+            writer.write(temporary)
+
+    _atomic_pdf_save(output, write, file_mode=file_mode)
+    return output
+
+
 def extract_pages(
     input_path: str | Path,
     page_ranges: str,
