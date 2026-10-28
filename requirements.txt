@@ -1,2 +1,6 @@
-# Runtime dependencies are centrally declared in pyproject.toml.
--e .
+# Runtime dependencies; kept in sync with pyproject.toml for simple audits and setup.
+PySide6==6.12.0
+pypdf[crypto]==6.21.2
+cryptography==50.0.2
+Pillow==13.0.0
+reportlab==5.1.0
