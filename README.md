@@ -17,6 +17,7 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, desenvolvido co
 - **Extrair páginas:** salva páginas específicas ou intervalos como `1-3, 5, 8-10`, permite repetir páginas e aceita senha. A estrutura de navegação e as anotações são preservadas na medida do possível, com remapeamento para as páginas mantidas.
 - **Girar páginas:** rotação em 90°, 180° ou 270°, em todas as páginas ou somente nas selecionadas, inclusive em PDFs protegidos por senha.
 - **Dividir PDF:** oferece um arquivo por página, grupos de N páginas, quebra após páginas selecionadas, quebra após páginas pares ou ímpares, tamanho aproximado e divisão por marcadores do sumário com nível/filtro opcional. Cria a pasta se necessário, aceita senha, preserva estruturas compatíveis quando possível e nunca substitui arquivos existentes. O tamanho é estimado; uma página pode exceder o limite.
+- **PDF para imagens:** exporta todas as páginas ou apenas intervalos selecionados em PNG ou JPEG, com resolução ajustável (72–600 DPI), qualidade JPEG configurável, suporte a senha e nomes que evitam sobrescrever arquivos existentes.
 - **Reordenar páginas com miniaturas e prévia:** cada página aparece como miniatura numa grade; arraste para mudar a ordem e confira a página selecionada no painel de prévia. As miniaturas são geradas em segundo plano e acompanham a página original. Cada página precisa permanecer exatamente uma vez.
 - **Marca d'água e numeração seletivas:** adicione texto, numeração ou ambos a todas as páginas ou apenas a intervalos (por exemplo, `2-4, 7`). Ao selecionar um intervalo, a numeração continua indicando a posição original no documento. O conteúdo original não é rasterizado.
 - **Otimizar PDF:** modo sem perdas para comprimir streams e remover objetos repetidos; modo equilibrado para recomprimir imagens opacas em JPEG com qualidade ajustável. Imagens com transparência e imagens inline são mantidas sem recompressão.
@@ -55,7 +56,7 @@ O fluxo **PDF Hub CI, security and packages** testa o projeto e gera pacotes por
 
 O artefato contém o runtime necessário e não exige instalação separada do Python. O Windows pode apresentar um aviso de segurança para arquivos baixados; confirme a origem antes de executar.
 
-> Os artefatos de Actions são temporários e expiram conforme a retenção configurada no GitHub. Releases versionadas são criadas quando uma tag como `v0.8.0` é enviada ao repositório. Os executáveis não são assinados/notarizados digitalmente; Windows SmartScreen e macOS Gatekeeper podem exibir avisos.
+> Os artefatos de Actions são temporários e expiram conforme a retenção configurada no GitHub. Releases versionadas são criadas quando uma tag como `v0.10.0` é enviada ao repositório. Os executáveis não são assinados/notarizados digitalmente; Windows SmartScreen e macOS Gatekeeper podem exibir avisos.
 
 ## Executar a partir do código-fonte
 
