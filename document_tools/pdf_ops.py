@@ -80,13 +80,13 @@ def parse_page_ranges(
             end = parse_endpoint(pieces[1], segment) if pieces[1] else page_count
         else:
             raise ValueError(f"Intervalo de páginas inválido: '{segment}'.")
-        if start < 1 or end < 1:
+        if start < 1:
             raise ValueError(f"O intervalo '{segment}' precisa estar entre 1 e {page_count}.")
         if end < start:
             raise ValueError(
                 f"O intervalo '{segment}' está invertido: a página inicial não pode ser maior que a final."
             )
-        if end > page_count:
+        if end < 1 or end > page_count:
             raise ValueError(f"O intervalo '{segment}' precisa estar entre 1 e {page_count}.")
 
         for page_number in range(start, end + 1):
