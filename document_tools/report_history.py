@@ -137,7 +137,7 @@ def save_batch_report(
             prefix=".batch-report-", suffix=".tmp", delete=False,
         ) as stream:
             temporary = Path(stream.name)
-            json.dump(report, stream, ensure_ascii=False, indent=2)
+            json.dump(report, stream, ensure_ascii=True, indent=2)
             stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
@@ -173,7 +173,7 @@ def _candidate_files(directory: Path) -> list[Path]:
                 and math.isfinite(float(timestamp))
             ):
                 return float(timestamp), path.name
-        except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
+        except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError, RecursionError, MemoryError):
             pass
         try:
             timestamp = path.stat().st_mtime
@@ -206,7 +206,7 @@ def load_batch_history(directory: str | Path) -> list[dict[str, Any]]:
             if "created_timestamp" not in report:
                 report["created_timestamp"] = path.stat().st_mtime
             reports.append(report)
-        except (OSError, UnicodeError, json.JSONDecodeError):
+        except (OSError, UnicodeError, json.JSONDecodeError, RecursionError, MemoryError):
             continue
     reports.sort(
         key=lambda item: (float(item.get("created_timestamp", 0)), str(item.get("id", ""))),
