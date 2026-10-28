@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import atexit
 import os
 import sys
 import tempfile
 from pathlib import Path
+
+
+def _selftest_failure(code: int, stage: str) -> int:
+    print(f"PDF Hub selftest failed ({code}): {stage}", file=sys.stderr)
+    return code
 
 
 def selftest() -> int:
@@ -14,7 +20,7 @@ def selftest() -> int:
 
     from PIL import Image
     from pypdf import PdfReader, PdfWriter
-    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtCore import QCoreApplication, QEvent, QSettings
     from PySide6.QtWidgets import QApplication
     from document_tools.gui import DocumentToolsWindow, PageThumbnailWorker
     from document_tools.pdf_ops import (
@@ -24,6 +30,16 @@ def selftest() -> int:
         process_pdf_pipeline,
         reorder_pdf_pages,
         stamp_pdf,
+    )
+
+    # The packaged smoke test must not alter the real user's preferences.
+    settings_directory = tempfile.TemporaryDirectory(prefix="pdf-hub-selftest-settings-")
+    atexit.register(settings_directory.cleanup)
+    QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+    QSettings.setPath(
+        QSettings.Format.IniFormat,
+        QSettings.Scope.UserScope,
+        settings_directory.name,
     )
 
     application = QApplication([])
@@ -51,7 +67,7 @@ def selftest() -> int:
         )
         thumbnail_worker.run()
         if thumbnail_pages != [1]:
-            return 6
+            return _selftest_failure(6, "page thumbnail rendering")
         reorder_pdf_pages(image_pdf, [1], reordered_pdf)
         stamp_pdf(image_pdf, stamped_pdf, watermark_text="PDF Hub", page_numbering=True)
         optimize_pdf(stamped_pdf, optimized_pdf, mode="lossless")
@@ -74,19 +90,19 @@ def selftest() -> int:
         with extracted_path.open("rb") as stream:
             result = PdfReader(stream)
             if len(result.pages) != 1:
-                return 2
+                return _selftest_failure(2, "page extraction")
         with image_pdf.open("rb") as stream:
             result = PdfReader(stream)
             if len(result.pages) != 1:
-                return 3
+                return _selftest_failure(3, "image-to-PDF conversion")
         for generated in (reordered_pdf, stamped_pdf, optimized_pdf, pipeline_pdf):
             with generated.open("rb") as stream:
                 result = PdfReader(stream)
                 if len(result.pages) != 1:
-                    return 4
+                    return _selftest_failure(4, "PDF document operations")
         with optimized_pdf.open("rb") as stream:
             if "PDF Hub" not in PdfReader(stream).pages[0].extract_text():
-                return 5
+                return _selftest_failure(5, "optimized PDF text integrity")
 
     return 0
 
