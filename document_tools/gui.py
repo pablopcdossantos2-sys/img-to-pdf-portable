@@ -40,6 +40,8 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSpinBox,
     QStackedWidget,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -827,6 +829,27 @@ def create_app_icon() -> QIcon:
     return icon
 
 
+def create_reorder_pages_icon(theme: str = "light") -> QIcon:
+    """Draw a high-contrast reorder glyph that stays visible in either theme."""
+    color = QColor("#344054" if theme != "dark" else "#E5E7EB")
+    icon = QIcon()
+    for size in (18, 24, 36):
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.scale(size / 24.0, size / 24.0)
+        painter.setPen(QPen(color, 2))
+        painter.drawLine(3, 5, 14, 5)
+        painter.drawLine(3, 12, 14, 12)
+        painter.drawLine(3, 19, 14, 19)
+        painter.drawLine(16, 9, 20, 12)
+        painter.drawLine(20, 12, 16, 15)
+        painter.end()
+        icon.addPixmap(pixmap)
+    return icon
+
+
 TRANSLATIONS["en"].update({
     "Excluir páginas": "Delete pages",
     "Excluir páginas de um PDF": "Delete pages from a PDF",
@@ -1003,6 +1026,16 @@ TRANSLATIONS["es"].update({
     "A página ultrapassa o limite seguro de pixels. Reduza a resolução de saída.": "La página supera el límite seguro de píxeles. Reduce la resolución de salida.",
 })
 
+class ReorderPageDelegate(QStyledItemDelegate):
+    """Keep each page thumbnail above its readable caption."""
+
+    def initStyleOption(self, option, index) -> None:  # noqa: N802 - Qt override
+        super().initStyleOption(option, index)
+        option.decorationPosition = QStyleOptionViewItem.Position.Top
+        option.decorationAlignment = Qt.AlignmentFlag.AlignHCenter
+        option.displayAlignment = Qt.AlignmentFlag.AlignHCenter
+
+
 class ReorderablePageList(QListWidget):
     """Thumbnail grid with explicit, same-widget drag-and-drop reordering."""
 
@@ -1012,7 +1045,7 @@ class ReorderablePageList(QListWidget):
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
         self.setDropIndicatorShown(True)
-        self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.setDragDropOverwriteMode(False)
         self.setMovement(QListWidget.Movement.Static)
@@ -1153,6 +1186,7 @@ class SideNavigationWidget(QWidget):
         super().__init__(parent)
         self._labels: list[str] = []
         self._buttons: list[QPushButton] = []
+        self._reorder_pages_button: QPushButton | None = None
         outer = QHBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(12)
@@ -1207,7 +1241,7 @@ class SideNavigationWidget(QWidget):
             "Excluir páginas": QStyle.StandardPixmap.SP_TrashIcon,
             "Girar páginas": QStyle.StandardPixmap.SP_BrowserReload,
             "Dividir PDF": QStyle.StandardPixmap.SP_FileDialogListView,
-            "Reordenar páginas": QStyle.StandardPixmap.SP_ArrowRight,
+            "Reordenar páginas": QStyle.StandardPixmap.SP_FileDialogDetailedView,
             "Marca d'água e numeração": QStyle.StandardPixmap.SP_DialogApplyButton,
             "Otimizar PDF": QStyle.StandardPixmap.SP_ComputerIcon,
             "Fluxo em lote": QStyle.StandardPixmap.SP_MediaPlay,
@@ -1218,6 +1252,9 @@ class SideNavigationWidget(QWidget):
         }
         icon_kind = icon_by_label.get(label.strip(), QStyle.StandardPixmap.SP_FileIcon)
         button.setIcon(self.style().standardIcon(icon_kind))
+        if label.strip() == "Reordenar páginas":
+            self._reorder_pages_button = button
+            button.setIcon(create_reorder_pages_icon("light"))
         button.setIconSize(QSize(18, 18))
         button.setCheckable(True)
         button.setMinimumHeight(38)
@@ -1254,6 +1291,11 @@ class SideNavigationWidget(QWidget):
 
     def currentIndex(self) -> int:
         return self.stack.currentIndex()
+
+    def set_theme(self, theme: str) -> None:
+        """Update the custom reorder icon to preserve contrast in both themes."""
+        if self._reorder_pages_button is not None:
+            self._reorder_pages_button.setIcon(create_reorder_pages_icon(theme))
 
 
 class PageThumbnailWorker(QThread):
@@ -1474,6 +1516,7 @@ class DocumentToolsWindow(QMainWindow):
 
         self.setCentralWidget(central)
         self.setStyleSheet(self._stylesheet(self._theme))
+        self.tabs.set_theme(self._theme)
         self._capture_ui_texts()
         saved_language = str(self.settings.value("language", "pt"))
         language_index = self.language_combo.findData(saved_language)
@@ -2099,6 +2142,7 @@ class DocumentToolsWindow(QMainWindow):
         self._theme = selected if selected in {"light", "dark"} else "light"
         self.settings.setValue("theme", self._theme)
         self.setStyleSheet(self._stylesheet(self._theme))
+        self.tabs.set_theme(self._theme)
 
     def _build_image_pdf_tab(self) -> QWidget:
         page, layout = self._new_page(
@@ -3022,10 +3066,12 @@ class DocumentToolsWindow(QMainWindow):
             self.reorder_document = None
         self.reorder_list.clear()
         for page_number in range(1, count + 1):
-            item = QListWidgetItem(self._t("Página {number}").format(number=page_number))
+            item = QListWidgetItem(
+                self._t("Página {number}").format(number=f"{page_number:02d}")
+            )
             item.setData(Qt.ItemDataRole.UserRole, page_number)
             item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter)
-            item.setSizeHint(QSize(116, 156))
+            item.setSizeHint(QSize(116, 172))
             self.reorder_list.addItem(item)
             self._reorder_items_by_page[page_number] = item
         if count:
@@ -3136,19 +3182,23 @@ class DocumentToolsWindow(QMainWindow):
         self.reorder_list.setViewMode(QListWidget.ViewMode.IconMode)
         self.reorder_list.setFlow(QListWidget.Flow.LeftToRight)
         self.reorder_list.setWrapping(True)
-        self.reorder_list.setResizeMode(QListWidget.ResizeMode.Adjust)
-        # Positions are static; the drop handler reorders actual rows.
+        # Fixed, single-pass layout avoids thumbnail tiles being recycled or
+        # temporarily disappearing while a custom drag/drop reorders model rows.
+        self.reorder_list.setResizeMode(QListWidget.ResizeMode.Fixed)
         self.reorder_list.setMovement(QListWidget.Movement.Static)
-        self.reorder_list.setLayoutMode(QListWidget.LayoutMode.Batched)
-        self.reorder_list.setBatchSize(32)
+        self.reorder_list.setLayoutMode(QListWidget.LayoutMode.SinglePass)
         self.reorder_list.setIconSize(QSize(76, 96))
-        self.reorder_list.setGridSize(QSize(124, 164))
-        self.reorder_list.setWordWrap(True)
+        self.reorder_list.setGridSize(QSize(124, 184))
+        self.reorder_list.setItemDelegate(ReorderPageDelegate(self.reorder_list))
+        self.reorder_list.setWordWrap(False)
+        self.reorder_list.setTextElideMode(Qt.TextElideMode.ElideNone)
         self.reorder_list.setUniformItemSizes(True)
         self.reorder_list.setDragEnabled(True)
         self.reorder_list.setAcceptDrops(True)
         self.reorder_list.setDropIndicatorShown(True)
-        self.reorder_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        # This class performs its own row move in dropEvent; use DragDrop
+        # instead of Qt's native InternalMove post-drop source cleanup.
+        self.reorder_list.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
         self.reorder_list.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.reorder_list.currentRowChanged.connect(self._preview_reorder_page)
         reorder_controls = QHBoxLayout()
@@ -4719,5 +4769,5 @@ def main() -> int:
     application.setWindowIcon(create_app_icon())
     application.setFont(QFont("Segoe UI", 10))
     window = DocumentToolsWindow()
-    window.show()
+    window.showMaximized()
     return application.exec()
