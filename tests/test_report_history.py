@@ -141,3 +141,32 @@ def test_history_pruning_uses_report_timestamp_not_filesystem_mtime(
 
     assert not oldest.exists()
     assert newest.exists()
+
+
+
+def test_save_report_with_surrogate_path(tmp_path: Path, monkeypatch) -> None:
+    if os.name == "nt":
+        return
+    legacy_path = os.fsdecode(b"/legacy/a\\xe7.pdf")
+    saved = save_one(
+        tmp_path / "history",
+        results=[FakeResult(legacy_path, False, "", "Malformed PDF")],
+    )
+    history_file = tmp_path / "history" / f"batch-report-{saved['id']}.json"
+    assert "\\\\udce7" in history_file.read_text(encoding="utf-8")
+    loaded = load_batch_history(tmp_path / "history")
+    assert loaded[0]["results"][0]["source_path"] == legacy_path
+
+
+def test_deeply_nested_report_is_ignored_and_does_not_block_saving(tmp_path: Path) -> None:
+    history_dir = tmp_path / "history"
+    valid = save_one(history_dir, "valid.pdf")
+    corrupt_id = "e" * 32
+    corrupt = history_dir / f"batch-report-{corrupt_id}.json"
+    corrupt.write_text("[" * 2000 + "0" + "]" * 2000, encoding="utf-8")
+
+    loaded = load_batch_history(history_dir)
+    assert [report["id"] for report in loaded] == [valid["id"]]
+    second = save_one(history_dir, "second.pdf")
+    assert second["id"] != valid["id"]
+    assert len(load_batch_history(history_dir)) == 2
