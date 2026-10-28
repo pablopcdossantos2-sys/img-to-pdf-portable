@@ -201,6 +201,21 @@ def test_insert_pages_repeatedly_accepts_passwords_and_rejects_invalid_interval(
         insert_pages_repeatedly(target, insert, tmp_path / "invalid.pdf", every_n_pages=0)
 
 
+def test_parse_page_ranges_supports_open_ended_ranges() -> None:
+    assert parse_page_ranges("2-", 5) == [1, 2, 3, 4]
+
+
+def test_merge_pdfs_can_select_a_different_page_range_for_each_input(tmp_path: Path) -> None:
+    first = create_pdf(tmp_path / "first.pdf", [110, 120, 130, 140])
+    second = create_pdf(tmp_path / "second.pdf", [210, 220, 230])
+    output = tmp_path / "partial-merge.pdf"
+
+    merge_pdfs([first, second], output, page_ranges=["2-", "1, 3"])
+
+    widths = [round(float(page.mediabox.width)) for page in read_pdf(output).pages]
+    assert widths == [120, 130, 140, 210, 230]
+
+
 def test_extract_pages_keeps_requested_order(tmp_path: Path) -> None:
     source = create_pdf(tmp_path / "source.pdf", [110, 120, 130, 140, 150])
     output = tmp_path / "extracted.pdf"
