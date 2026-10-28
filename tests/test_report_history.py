@@ -125,8 +125,11 @@ def test_history_delete_removes_only_selected_report_and_rejects_invalid_ids(tmp
         raise AssertionError("Invalid report identifiers must be rejected.")
 
 
-def test_history_pruning_uses_report_timestamp_not_filesystem_mtime(tmp_path: Path) -> None:
+def test_history_pruning_uses_report_timestamp_not_filesystem_mtime(
+    tmp_path: Path, monkeypatch
+) -> None:
     history_dir = tmp_path / "history"
+    monkeypatch.setattr("document_tools.report_history._prune_history", lambda _directory: None)
     ids = [str(save_one(history_dir, f"{index}.pdf")["id"]) for index in range(MAX_HISTORY_REPORTS + 1)]
     oldest = history_dir / f"batch-report-{ids[0]}.json"
     newest = history_dir / f"batch-report-{ids[-1]}.json"
