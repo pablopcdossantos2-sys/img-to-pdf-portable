@@ -10,8 +10,8 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QSize, QThread, Signal, Qt, QUrl, QStandardPaths
-from PySide6.QtGui import QCloseEvent, QDesktopServices, QFont, QIcon, QImage, QPixmap
+from PySide6.QtCore import QSettings, QSize, QThread, Signal, Qt, QUrl, QStandardPaths, QMimeData, QPoint
+from PySide6.QtGui import QCloseEvent, QDesktopServices, QDrag, QFont, QIcon, QImage, QPixmap
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtWidgets import (
     QApplication,
@@ -892,15 +892,28 @@ class ReorderablePageList(QListWidget):
         self.setCurrentItem(item)
 
     def startDrag(self, supportedActions) -> None:  # noqa: N802 - Qt override
+        """Use a custom drag so Qt cannot remove a page after our manual drop."""
         item = self.currentItem()
         if item is None:
             selected = self.selectedItems()
             item = selected[0] if len(selected) == 1 else None
         if item is None:
             return
+
         self._dragged_item = item
+        drag = QDrag(self)
+        mime_data = QMimeData()
+        page_number = item.data(Qt.ItemDataRole.UserRole)
+        mime_data.setText(str(page_number if page_number is not None else item.text()))
+        drag.setMimeData(mime_data)
+        preview = item.icon().pixmap(self.iconSize())
+        if not preview.isNull():
+            drag.setPixmap(preview)
+            drag.setHotSpot(QPoint(preview.width() // 2, preview.height() // 2))
         try:
-            super().startDrag(supportedActions)
+            # QListWidget.startDrag performs post-drop source cleanup, which can
+            # remove the same item that dropEvent has just repositioned.
+            drag.exec(Qt.DropAction.MoveAction, Qt.DropAction.MoveAction)
         finally:
             self._dragged_item = None
 
@@ -1033,6 +1046,7 @@ class SideNavigationWidget(QWidget):
         scroll.setObjectName("contentScrollArea")
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setWidget(widget)
         self.stack.addWidget(scroll)
 
@@ -1222,8 +1236,15 @@ class DocumentToolsWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(APP_NAME)
-        self.setMinimumSize(900, 540)
-        self.resize(1160, 810)
+        screen = QApplication.primaryScreen()
+        available = screen.availableGeometry() if screen is not None else None
+        # Respect the usable desktop while preventing a resize that hides controls.
+        minimum_width = min(1120, available.width()) if available is not None else 1120
+        minimum_height = min(700, available.height()) if available is not None else 700
+        initial_width = min(1160, available.width()) if available is not None else 1160
+        initial_height = min(810, available.height()) if available is not None else 810
+        self.setMinimumSize(minimum_width, minimum_height)
+        self.resize(initial_width, initial_height)
         self.settings = QSettings("PDFHub", "PDF Hub")
         app_data = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
         self._batch_history_directory = Path(app_data or (Path.home() / ".pdf-hub")) / "batch-reports"
@@ -2579,7 +2600,7 @@ class DocumentToolsWindow(QMainWindow):
             item = QListWidgetItem(self._t("Página {number}").format(number=page_number))
             item.setData(Qt.ItemDataRole.UserRole, page_number)
             item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter)
-            item.setSizeHint(QSize(104, 128))
+            item.setSizeHint(QSize(116, 156))
             self.reorder_list.addItem(item)
             self._reorder_items_by_page[page_number] = item
         if count:
@@ -2696,7 +2717,8 @@ class DocumentToolsWindow(QMainWindow):
         self.reorder_list.setLayoutMode(QListWidget.LayoutMode.Batched)
         self.reorder_list.setBatchSize(32)
         self.reorder_list.setIconSize(QSize(76, 96))
-        self.reorder_list.setGridSize(QSize(112, 132))
+        self.reorder_list.setGridSize(QSize(124, 164))
+        self.reorder_list.setWordWrap(True)
         self.reorder_list.setUniformItemSizes(True)
         self.reorder_list.setDragEnabled(True)
         self.reorder_list.setAcceptDrops(True)
