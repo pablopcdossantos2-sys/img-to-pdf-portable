@@ -107,6 +107,7 @@ def test_language_selector_translates_tabs_into_english_and_spanish(qt_app: QApp
         window.language_combo.setCurrentIndex(window.language_combo.findData("en"))
         english_tabs = [window.tabs.tabText(i).strip() for i in range(window.tabs.count())]
         assert "Reorder pages" in english_tabs
+        assert "Delete pages" in english_tabs
         assert "Watermark and page numbers" in english_tabs
         assert "Optimize PDF" in english_tabs
         assert "Batch workflow" in english_tabs
@@ -119,6 +120,7 @@ def test_language_selector_translates_tabs_into_english_and_spanish(qt_app: QApp
         window.language_combo.setCurrentIndex(window.language_combo.findData("es"))
         spanish_tabs = [window.tabs.tabText(i).strip() for i in range(window.tabs.count())]
         assert "Reordenar páginas" in spanish_tabs
+        assert "Eliminar páginas" in spanish_tabs
         assert "Marca de agua y numeración" in spanish_tabs
         assert "Optimizar PDF" in spanish_tabs
         assert "Flujo por lotes" in spanish_tabs
@@ -675,6 +677,11 @@ def test_settings_theme_icon_and_left_navigation(qt_app: QApplication) -> None:
     previous_language = window.language_combo.currentData()
     try:
         assert isinstance(window.tabs, SideNavigationWidget)
+        assert window.tabs.count() == len(window.tabs._buttons)
+        assert all(not button.icon().isNull() for button in window.tabs._buttons)
+        pt_tabs = [window.tabs.tabText(i).strip() for i in range(window.tabs.count())]
+        assert "Excluir páginas" in pt_tabs
+        assert window.delete_pages_password.echoMode() == QLineEdit.EchoMode.Password
         assert window.tabs.sidebar.minimumWidth() >= 276
         navigation_scroll = window.tabs.findChild(QScrollArea, "navigationScroll")
         assert navigation_scroll is not None
