@@ -205,7 +205,12 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Tags publish as usual. A deliberate marker on a main-branch commit requests
+    # a one-time release only after all tests and three platform packages succeed.
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.ref == 'refs/heads/main' &&
+      contains(github.event.head_commit.message, '[create-release:v0.11.0]'))
     needs: [test, package-windows, package-linux, package-macos]
     runs-on: ubuntu-latest
     permissions:
@@ -219,9 +224,9 @@ jobs:
       - name: Publish release and attach packages
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[create-release:v0.11.0]') && 'v0.11.0' || github.ref_name }}
           target_commitish: ${{ github.sha }}
-          name: PDF Hub ${{ github.ref_name }}
+          name: PDF Hub ${{ github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[create-release:v0.11.0]') && 'v0.11.0' || github.ref_name }}
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
