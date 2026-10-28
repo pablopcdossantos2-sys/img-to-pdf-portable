@@ -1579,3 +1579,49 @@ def test_last_batch_context_changes_only_after_batch_succeeds(
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         qt_app.processEvents()
+
+
+
+def test_import_profile_confirms_before_replacing_unrecognized_profile_schema(
+    qt_app: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    window = DocumentToolsWindow()
+    previous_profiles = window.settings.value("pipeline_profiles", None)
+    future_profile = {"schema_version": 999, "future_option": {"enabled": True}}
+    try:
+        window.settings.setValue("pipeline_profiles", json.dumps({"Future profile": future_profile}))
+        target = tmp_path / "future-profile-import.json"
+        target.write_text(
+            json.dumps({
+                "schema_version": 2,
+                "name": "Future profile",
+                "profile": window._capture_pipeline_profile(),
+            }),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            "document_tools.gui.QFileDialog.getOpenFileName",
+            lambda *args, **kwargs: (str(target), "JSON files (*.json)"),
+        )
+        questions: list[str] = []
+
+        def decline_replacement(*args, **kwargs):
+            questions.append(str(args[2]))
+            return QMessageBox.StandardButton.No
+
+        monkeypatch.setattr("document_tools.gui.QMessageBox.question", decline_replacement)
+        window._import_pipeline_profile()
+
+        persisted = json.loads(window.settings.value("pipeline_profiles", "{}"))
+        assert persisted == {"Future profile": future_profile}
+        assert len(questions) == 1
+        assert "não reconhece" in questions[0]
+    finally:
+        if previous_profiles is None:
+            window.settings.remove("pipeline_profiles")
+        else:
+            window.settings.setValue("pipeline_profiles", previous_profiles)
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
