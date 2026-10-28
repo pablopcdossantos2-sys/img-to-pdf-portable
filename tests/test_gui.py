@@ -17,6 +17,7 @@ from PIL import Image as PILImage
 
 from document_tools.gui import APP_NAME, DocumentToolsWindow, ImageDropList, OperationWorker, PageThumbnailWorker, SideNavigationWidget
 from document_tools.pdf_rendering import export_pdf_pages_to_images
+from document_tools.batch_processing import BatchControl, BatchFileResult
 
 
 @pytest.fixture(scope="module")
@@ -1331,6 +1332,244 @@ def test_saving_pipeline_profiles_preserves_future_schema_entries(qt_app: QAppli
         window.settings.setValue("pipeline_profiles", "invalid json")
         assert not window._write_pipeline_profiles({"Another profile": {"rotate_enabled": True}})
         assert window.settings.value("pipeline_profiles") == "invalid json"
+    finally:
+        if previous_profiles is None:
+            window.settings.remove("pipeline_profiles")
+        else:
+            window.settings.setValue("pipeline_profiles", previous_profiles)
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+
+def test_save_profile_confirms_before_replacing_unrecognized_profile_schema(
+    qt_app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window = DocumentToolsWindow()
+    previous_profiles = window.settings.value("pipeline_profiles", None)
+    future_profile = {"schema_version": 999, "future_option": {"enabled": True}}
+    questions: list[str] = []
+    try:
+        window.settings.setValue("pipeline_profiles", json.dumps({"Future profile": future_profile}))
+        monkeypatch.setattr(
+            "document_tools.gui.QInputDialog.getText",
+            lambda *args, **kwargs: ("Future profile", True),
+        )
+
+        def decline_replacement(*args, **kwargs):
+            questions.append(str(args[2]))
+            return QMessageBox.StandardButton.No
+
+        monkeypatch.setattr("document_tools.gui.QMessageBox.question", decline_replacement)
+        window._save_pipeline_profile()
+
+        persisted = json.loads(window.settings.value("pipeline_profiles", "{}"))
+        assert persisted == {"Future profile": future_profile}
+        assert len(questions) == 1
+        assert "não reconhece" in questions[0]
+    finally:
+        if previous_profiles is None:
+            window.settings.remove("pipeline_profiles")
+        else:
+            window.settings.setValue("pipeline_profiles", previous_profiles)
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_export_csv_confirms_overwrite_after_suffix_normalization(
+    qt_app: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    window = DocumentToolsWindow()
+    try:
+        target = tmp_path / "relatorio.csv"
+        target.write_text("keep existing report", encoding="utf-8")
+        window.batch_results = [
+            BatchFileResult(str(tmp_path / "source.pdf"), True, str(tmp_path / "out.pdf"), "Processado com sucesso.")
+        ]
+        monkeypatch.setattr(
+            "document_tools.gui.QFileDialog.getSaveFileName",
+            lambda *args, **kwargs: (str(tmp_path / "relatorio"), "CSV files (*.csv)"),
+        )
+        questions: list[str] = []
+
+        def decline_replacement(*args, **kwargs):
+            questions.append(str(args[2]))
+            return QMessageBox.StandardButton.No
+
+        monkeypatch.setattr("document_tools.gui.QMessageBox.question", decline_replacement)
+        window._export_batch_report()
+        assert target.read_text(encoding="utf-8") == "keep existing report"
+        assert len(questions) == 1
+        assert "relatorio.csv" in questions[0]
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_export_profile_confirms_overwrite_after_suffix_normalization(
+    qt_app: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    window = DocumentToolsWindow()
+    previous_profiles = window.settings.value("pipeline_profiles", None)
+    profile = {
+        "rotate_enabled": True, "rotate_angle": 90, "rotate_ranges": "",
+        "stamp_enabled": False, "stamp_text": "", "page_numbering": False,
+        "stamp_ranges": "", "optimize_enabled": False, "optimize_mode": "lossless",
+        "quality": 82, "output_suffix": "-processed",
+    }
+    try:
+        window.settings.setValue("pipeline_profiles", json.dumps({"Portable review": profile}))
+        target = tmp_path / "profile.json"
+        target.write_text("preserve existing JSON", encoding="utf-8")
+        monkeypatch.setattr(
+            "document_tools.gui.QInputDialog.getItem",
+            lambda *args, **kwargs: ("Portable review", True),
+        )
+        monkeypatch.setattr(
+            "document_tools.gui.QFileDialog.getSaveFileName",
+            lambda *args, **kwargs: (str(tmp_path / "profile"), "JSON files (*.json)"),
+        )
+        monkeypatch.setattr(
+            "document_tools.gui.QMessageBox.question",
+            lambda *args, **kwargs: QMessageBox.StandardButton.No,
+        )
+
+        window._export_pipeline_profile()
+        assert target.read_text(encoding="utf-8") == "preserve existing JSON"
+    finally:
+        if previous_profiles is None:
+            window.settings.remove("pipeline_profiles")
+        else:
+            window.settings.setValue("pipeline_profiles", previous_profiles)
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+@pytest.mark.parametrize("language", ["pt", "es"])
+def test_batch_report_csv_uses_semicolon_for_portuguese_and_spanish(
+    qt_app: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, language: str
+) -> None:
+    window = DocumentToolsWindow()
+    try:
+        window._language = language
+        target = tmp_path / f"report-{language}.csv"
+        window.batch_results = [
+            BatchFileResult(str(tmp_path / "source.pdf"), True, str(tmp_path / "output.pdf"), "Processado com sucesso.")
+        ]
+        monkeypatch.setattr(
+            "document_tools.gui.QFileDialog.getSaveFileName",
+            lambda *args, **kwargs: (str(target), "CSV files (*.csv)"),
+        )
+        window._export_batch_report()
+        first_line = target.read_text(encoding="utf-8-sig").splitlines()[0]
+        assert ";" in first_line
+        assert first_line.count(";") == 3
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+@pytest.mark.parametrize(
+    "language,expected",
+    [
+        ("en", "requires a password"),
+        ("es", "exige una contraseña"),
+    ],
+)
+def test_t_translates_formatted_password_message(
+    qt_app: QApplication, language: str, expected: str
+) -> None:
+    window = DocumentToolsWindow()
+    try:
+        window._language = language
+        translated = window._t("O PDF 'b.pdf' exige uma senha. Informe-a para continuar.")
+        assert "b.pdf" in translated
+        assert expected in translated
+        assert "exige uma senha" not in translated
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_progress_while_paused_shows_paused_status(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    control = BatchControl()
+    control.pause()
+    try:
+        window._batch_control = control
+        window._batch_progress_changed(2, 5, "current.pdf")
+        assert "Lote pausado após 2 de 5 arquivo(s)." == window.status_label.text()
+        window._language = "en"
+        window._batch_progress_changed(2, 5, "current.pdf")
+        assert "Batch paused after 2 of 5 file(s)." == window.status_label.text()
+    finally:
+        control.resume()
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_last_batch_context_changes_only_after_batch_succeeds(
+    qt_app: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    window = DocumentToolsWindow()
+    previous_profiles = window.settings.value("pipeline_profiles", None)
+    source, output = tmp_path / "input", tmp_path / "output"
+    source.mkdir()
+    output.mkdir()
+    (source / "a.pdf").write_bytes(b"source")
+    profile = {
+        "rotate_enabled": True, "rotate_angle": 90, "rotate_ranges": "",
+        "stamp_enabled": False, "stamp_text": "", "page_numbering": False,
+        "stamp_ranges": "", "optimize_enabled": False, "optimize_mode": "lossless",
+        "quality": 82, "output_suffix": "-processed",
+    }
+    previous = {
+        "profile": dict(profile), "profile_name": "previous",
+        "source_directory": "previous-source", "output_directory": "previous-output",
+        "recursive": False, "file_mode": 0o600,
+    }
+    try:
+        window._last_batch_profile = dict(profile)
+        window._last_batch_profile_name = "previous"
+        window._last_batch_source_directory = "previous-source"
+        window._last_batch_output_directory = "previous-output"
+        window.settings.setValue("pipeline_profiles", json.dumps({"new profile": profile}))
+        window.batch_source_directory.setText(str(source))
+        window.batch_output_directory.setText(str(output))
+        monkeypatch.setattr(
+            "document_tools.gui.QInputDialog.getItem",
+            lambda *args, **kwargs: ("new profile", True),
+        )
+        starts = []
+        monkeypatch.setattr(window, "_start_folder_batch", lambda *args, **kwargs: starts.append((args, kwargs)))
+
+        window._run_pipeline_folder()
+        assert len(starts) == 1
+        assert window._last_batch_source_directory == previous["source_directory"]
+        assert window._last_batch_profile_name == "previous"
+        assert window._pending_batch_context is not None
+
+        monkeypatch.setattr(window, "_save_current_batch_history", lambda *args, **kwargs: None)
+        result = BatchFileResult(str(source / "a.pdf"), False, "", "simulated failure")
+        window._batch_operation_succeeded([result])
+        assert window._last_batch_source_directory == str(source.resolve())
+        assert window._last_batch_output_directory == str(output.resolve())
+        assert window._last_batch_profile_name == "new profile"
+        assert window._pending_batch_context is None
     finally:
         if previous_profiles is None:
             window.settings.remove("pipeline_profiles")
