@@ -36,8 +36,8 @@ def friendly_error_message(error: Exception) -> str:
     origin = _origin_root(error)
     if isinstance(error, MemoryError):
         return "Não há memória suficiente para concluir a operação. Feche outros aplicativos ou tente uma imagem menor."
-    if isinstance(error, IsADirectoryError):
-        return "O caminho selecionado é uma pasta, mas era esperado um arquivo."
+    if isinstance(error, (IsADirectoryError, NotADirectoryError)):
+        return "O caminho selecionado não corresponde a um arquivo ou pasta válido."
     if isinstance(error, OSError) and error.errno in {errno.ENOSPC, getattr(errno, "EDQUOT", -1)}:
         return "Não há espaço disponível no disco para salvar o resultado. Libere espaço e tente novamente."
     if error_type == "DependencyError" and (module_name.startswith("pypdf") or origin == "pypdf"):
