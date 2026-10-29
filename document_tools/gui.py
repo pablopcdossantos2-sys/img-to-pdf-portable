@@ -1254,7 +1254,12 @@ for _language, _table in TRANSLATIONS.items():
     _clean_table = {}
     for _key, _value in _table.items():
         _clean_key = _key.replace("\u200b", "").replace("\u200c", "").replace("\u200d", "").replace("\ufeff", "").strip()
-        _clean_value = _value.strip() if _clean_key != _key else _value
+        if _clean_key != _key:
+            _leading = _key[:len(_key) - len(_key.lstrip())]
+            _trailing = _key[len(_key.rstrip()):]
+            _clean_value = _leading + _value.strip() + _trailing
+        else:
+            _clean_value = _value
         _clean_table[_clean_key] = _clean_value
     TRANSLATIONS[_language] = _clean_table
 
@@ -3533,7 +3538,7 @@ class DocumentToolsWindow(QMainWindow):
     ) -> None:
         if generation is not None and generation != self._reorder_generation:
             return
-        self.status_label.setText(self._t(message))
+        self._set_status(message)
 
     def _preview_reorder_page(self, row: int) -> None:
         document = self.reorder_document
@@ -4931,13 +4936,15 @@ class DocumentToolsWindow(QMainWindow):
         successes = sum(int(item.success) for item in results)
         failures = len(results) - successes
         if cancelled:
-            self.status_label.setText(self._t(
-                "Lote cancelado com segurança após {completed} arquivo(s). O progresso foi preservado; execute novamente com a retomada ativada."
-            ).format(completed=len(results)))
+            self._set_status(
+                "Lote cancelado com segurança após {completed} arquivo(s). O progresso foi preservado; execute novamente com a retomada ativada.",
+                completed=len(results),
+            )
         else:
-            self.status_label.setText(self._t(
-                "Lote concluído: {success} sucesso(s), {failed} falha(s) de {total} PDF(s)."
-            ).format(success=successes, failed=failures, total=len(results)))
+            self._set_status(
+                "Lote concluído: {success} sucesso(s), {failed} falha(s) de {total} PDF(s).",
+                success=successes, failed=failures, total=len(results),
+            )
         self.open_directory_button.setVisible(
             self._pending_output_directory is not None and self._pending_output_directory.is_dir()
         )
@@ -5002,7 +5009,7 @@ class DocumentToolsWindow(QMainWindow):
                     temporary.unlink(missing_ok=True)
                 except OSError:
                     pass
-        self.status_label.setText(self._t("Relatório salvo: {path}").format(path=output.resolve()))
+        self._set_status("Relatório salvo: {path}", path=str(output.resolve()))
 
     def _choose_pdf_to_images_source(self) -> None:
         path = self._choose_pdf("Escolher PDF para exportar imagens")
