@@ -149,6 +149,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
 
+      - name: Generate third-party license notices
+        run: python scripts/generate_third_party_notices.py --output THIRD-PARTY-NOTICES.txt
+
       - name: Build executable
         run: python -m PyInstaller --noconfirm --clean --onefile --name PDFHub main.py
 
