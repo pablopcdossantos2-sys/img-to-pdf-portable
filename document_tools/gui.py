@@ -11,7 +11,7 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QItemSelectionModel, QSettings, QSize, QThread, Signal, Qt, QUrl, QStandardPaths, QMimeData, QPoint
+from PySide6.QtCore import QItemSelectionModel, QSettings, QSize, QThread, QTimer, Signal, Qt, QUrl, QStandardPaths, QMimeData, QPoint
 from PySide6.QtGui import QCloseEvent, QDesktopServices, QDrag, QFont, QIcon, QImage, QPixmap
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtWidgets import (
@@ -93,6 +93,30 @@ def _same_existing_file(first: Path, second: Path) -> bool:
     except OSError:
         return False
 
+
+
+def _ensure_suffix(path: Path, suffix: str) -> Path:
+    """Append an extension without replacing dotted parts of the filename."""
+    normalized = suffix if suffix.startswith(".") else f".{suffix}"
+    if path.suffix.casefold() == normalized.casefold():
+        return path
+    return path.with_name(path.name + normalized)
+
+
+def _match_template(text: str, template: str) -> tuple[str, ...] | None:
+    """Match a rendered string against a template containing {placeholders}."""
+    parts = re.split(r"(\{[^{}]+\})", template)
+    pattern = "^" + "".join(
+        "(.+?)" if re.fullmatch(r"\{[^{}]+\}", part) else re.escape(part)
+        for part in parts
+    ) + "$"
+    match = re.fullmatch(pattern, text, flags=re.DOTALL)
+    return match.groups() if match else None
+
+
+def _fill_template(template: str, values: tuple[str, ...]) -> str:
+    iterator = iter(values)
+    return re.sub(r"\{[^{}]+\}", lambda _match: next(iterator, ""), template)
 
 FORMAT_EXTENSIONS = {
     "JPEG": ".jpg",
@@ -1046,6 +1070,194 @@ TRANSLATIONS["es"].update({
     "Prévia indisponível para este PDF.": "La vista previa no está disponible para este PDF.",
 })
 
+
+TRANSLATIONS["en"].update({
+        "O PDF não possui páginas.": "The PDF has no pages.",
+        "Informe páginas, por exemplo: 1-3, 5, 8-10.": "Enter pages, for example: 1-3, 5, 8-10.",
+        "O intervalo '{segment}' precisa estar entre 1 e {page_count}.": "Range '{segment}' must be between 1 and {page_count}.",
+        "Há um item vazio na lista de páginas.": "The page list contains an empty item.",
+        "Intervalo de páginas inválido: '{segment}'.": "Invalid page range: '{segment}'.",
+        "O intervalo '{segment}' está invertido: a página inicial não pode ser maior que a final.": "Range '{segment}' is reversed: the first page cannot exceed the last.",
+        "A página {page_number} foi informada mais de uma vez.": "Page {page_number} was specified more than once.",
+        "Selecione pelo menos um arquivo de origem.": "Select at least one source file.",
+        "O caminho de saída é uma pasta, não um arquivo PDF.": "The output path is a folder, not a PDF file.",
+        "O arquivo de saída precisa ter a extensão .pdf.": "The output file must use the .pdf extension.",
+        "A pasta de destino não existe.": "The destination folder does not exist.",
+        "O arquivo de saída não pode substituir um arquivo de origem.": "The output file cannot replace a source file.",
+        "Arquivo não encontrado: {missing[0]}": "File not found: {missing[0]}",
+        "As permissões de saída devem ser 0600 (somente usuário) ou 0644 (compartilhadas).": "Output permissions must be 0600 (owner only) or 0644 (shared).",
+        "O arquivo PDF temporário ficou vazio.": "The temporary PDF file is empty.",
+        "A senha informada para o PDF '{path.name}' está incorreta.": "The password for PDF '{path.name}' is incorrect.",
+        "O PDF '{path.name}' exige uma senha. Informe-a para continuar.": "PDF '{path.name}' requires a password. Enter it to continue.",
+        "O PDF '{path.name}' não contém páginas.": "PDF '{path.name}' has no pages.",
+        "Não foi possível verificar se o PDF exige senha. O arquivo pode estar danificado.": "Could not determine whether the PDF requires a password. The file may be damaged.",
+        "As margens não deixam espaço suficiente na página.": "The margins do not leave enough space on the page.",
+        "Adicione pelo menos uma imagem.": "Add at least one image.",
+        "A resolução precisa ficar entre 72 e 600 DPI.": "Resolution must be between 72 and 600 DPI.",
+        "A margem precisa ficar entre 0 e 40 mm.": "The margin must be between 0 and 40 mm.",
+        "O arquivo de saída não pode substituir uma imagem de origem.": "The output file cannot replace a source image.",
+        "Imagem não encontrada: {source}": "Image not found: {source}",
+        "Formato de imagem não suportado: {source.name}": "Unsupported image format: {source.name}",
+        "Selecione pelo menos dois PDFs para unir.": "Select at least two PDFs to merge.",
+        "Informe uma senha por PDF ou deixe a senha como None.": "Enter a password for each PDF or leave it as None.",
+        "Informe um intervalo de páginas por PDF ou deixe None para usar todas.": "Enter a page range for each PDF or leave it as None to use all pages.",
+        "O número de páginas por bloco deve ser positivo.": "The number of pages per block must be positive.",
+        "O intervalo entre inserções deve ser positivo.": "The insertion interval must be positive.",
+        "O intervalo entre inserções não pode exceder o número de páginas do PDF de destino.": "The insertion interval cannot exceed the number of pages in the destination PDF.",
+        "A exclusão precisa manter pelo menos uma página no PDF.": "Deleting pages must leave at least one page in the PDF.",
+        "Escolha uma rotação de 90, 180 ou 270 graus.": "Choose a rotation of 90, 180, or 270 degrees.",
+        "Modo de divisão inválido.": "Invalid split mode.",
+        "O número de páginas por arquivo deve ser positivo.": "The number of pages per file must be positive.",
+        "O tamanho alvo precisa ser um número finito maior que zero.": "The target size must be finite and greater than zero.",
+        "O nível do marcador precisa ser um inteiro positivo.": "The bookmark level must be a positive integer.",
+        "A expressão regular para filtrar marcadores é inválida.": "The regular expression for filtering bookmarks is invalid.",
+        "PDF não encontrado: {source}": "PDF not found: {source}",
+        "O arquivo de origem precisa ser PDF.": "The source file must be a PDF.",
+        "Informe páginas após as quais dividir, por exemplo: 2, 5, 8.": "Enter the pages after which to split, for example: 2, 5, 8.",
+        "Não foi possível estimar o tamanho armazenado da página {page_number}.": "Could not estimate the stored size of page {page_number}.",
+        "O PDF não contém marcadores no nível solicitado (ou nenhum corresponde ao filtro).": "The PDF has no bookmarks at the requested level (or none match the filter).",
+        "Não foi possível gerar divisões a partir das opções informadas.": "Could not create split files from the supplied options.",
+        "Não foi possível criar a pasta de destino.": "Could not create the destination folder.",
+        "A pasta já contém '{conflicts[0]}'. Escolha outra pasta ou remova os arquivos conflitantes.": "The folder already contains '{conflicts[0]}'. Choose another folder or remove conflicting files.",
+        "Formato de saída não suportado: {output_format}": "Unsupported output format: {output_format}",
+        "A extensão de saída não corresponde ao formato {image_format}.": "The output extension does not match format {image_format}.",
+        "A largura máxima precisa ser maior que zero.": "Maximum width must be greater than zero.",
+        "A altura máxima precisa ser maior que zero.": "Maximum height must be greater than zero.",
+        "A qualidade precisa ficar entre 1 e 100.": "Quality must be between 1 and 100.",
+        "O arquivo de imagem temporário ficou vazio.": "The temporary image file is empty.",
+        "A ordem deve conter cada página uma única vez, de 1 a {count}.": "The order must contain every page exactly once, from 1 to {count}.",
+        "A qualidade JPEG precisa ficar entre 50 e 95.": "JPEG quality must be between 50 and 95.",
+        "O tamanho da fonte precisa ficar entre 8 e 120.": "Font size must be between 8 and 120.",
+        "A opacidade precisa ficar entre 0,05 e 1.": "Opacity must be between 0.05 and 1.",
+        "Posição de marca d'água inválida.": "Invalid watermark position.",
+        "Posição de numeração inválida.": "Invalid page-number position.",
+        "O texto da marca d'água é longo demais para caber na página. Reduza o texto ou use uma posição central.": "The watermark text is too long to fit on the page. Shorten it or use a centered position.",
+        "Selecione pelo menos uma etapa para executar o fluxo em lote.": "Select at least one step to run the batch workflow.",
+        "Escolha PNG ou JPEG para exportar as páginas.": "Choose PNG or JPEG to export pages.",
+        "Escolha um arquivo PDF existente.": "Choose an existing PDF file.",
+        "Escolha uma pasta de saída existente.": "Choose an existing output folder.",
+        "A qualidade JPEG precisa ficar entre 1 e 100.": "JPEG quality must be between 1 and 100.",
+        "A senha do PDF está incorreta ou não foi informada.": "The PDF password is incorrect or was not provided.",
+        "Não foi possível abrir o PDF. Verifique se o arquivo está válido e se a senha está correta.": "Could not open the PDF. Check that the file is valid and the password is correct.",
+        "Não foi possível obter o tamanho da página {page_index + 1}.": "Could not get the size of page {page_index + 1}.",
+        "A página ultrapassa o limite seguro de pixels. Reduza a resolução de saída.": "The page exceeds the safe pixel limit. Reduce the output resolution.",
+        "Não foi possível renderizar a página {page_index + 1}.": "Could not render page {page_index + 1}.",
+        "Não foi possível salvar a imagem da página {page_index + 1}.": "Could not save the image for page {page_index + 1}.",
+        "Selecione uma pasta de origem.": "Select a source folder.",
+        "A pasta de saída não pode ser a pasta de origem nem ficar dentro dela.": "The output folder cannot be the source folder or a folder inside it.",
+        "Selecione pelo menos uma etapa do fluxo.": "Select at least one workflow step.",
+        "A etapa de marca d'água precisa de um texto ou da numeração ativada.": "The watermark step requires text or enabled page numbering.",
+        "A pasta selecionada não contém arquivos PDF.": "The selected folder contains no PDF files.",
+        "Não há PDFs selecionados para reprocessar.": "No PDFs are selected for reprocessing.",
+        "Identificador de relatório inválido.": "Invalid report identifier.",
+        "O relatório do lote contém dados inválidos.": "The batch report contains invalid data.",
+        "Criando PDF a partir das imagens": "Creating PDF from images",
+        "Abra esta pasta manualmente:\n{path}": "Open this folder manually:\n{path}",
+        "Escolha otimização sem perdas ou equilibrada.": "Choose lossless or balanced optimization.",
+        "Processamento local:": "Local processing:",
+        "Já existe um perfil chamado '{name}'. Deseja substituí-lo?": "A profile named '{name}' already exists. Replace it?",
+        "Não foi possível concluir a operação: {message}": "Could not complete the operation: {message}",
+        "Há um lote em andamento. Cancelar o lote e sair?": "A batch is running. Cancel the batch and exit?",
+        "Falhas: {count}.": "Failures: {count}.",
+})
+TRANSLATIONS["es"].update({
+        "O PDF não possui páginas.": "El PDF no tiene páginas.",
+        "Informe páginas, por exemplo: 1-3, 5, 8-10.": "Indica páginas, por ejemplo: 1-3, 5, 8-10.",
+        "O intervalo '{segment}' precisa estar entre 1 e {page_count}.": "El intervalo '{segment}' debe estar entre 1 y {page_count}.",
+        "Há um item vazio na lista de páginas.": "La lista de páginas contiene un elemento vacío.",
+        "Intervalo de páginas inválido: '{segment}'.": "Intervalo de páginas no válido: '{segment}'.",
+        "O intervalo '{segment}' está invertido: a página inicial não pode ser maior que a final.": "El intervalo '{segment}' está invertido: la página inicial no puede ser mayor que la final.",
+        "A página {page_number} foi informada mais de uma vez.": "La página {page_number} se indicó más de una vez.",
+        "Selecione pelo menos um arquivo de origem.": "Selecciona al menos un archivo de origen.",
+        "O caminho de saída é uma pasta, não um arquivo PDF.": "La ruta de salida es una carpeta, no un archivo PDF.",
+        "O arquivo de saída precisa ter a extensão .pdf.": "El archivo de salida debe tener la extensión .pdf.",
+        "A pasta de destino não existe.": "La carpeta de destino no existe.",
+        "O arquivo de saída não pode substituir um arquivo de origem.": "El archivo de salida no puede reemplazar un archivo de origen.",
+        "Arquivo não encontrado: {missing[0]}": "Archivo no encontrado: {missing[0]}",
+        "As permissões de saída devem ser 0600 (somente usuário) ou 0644 (compartilhadas).": "Los permisos de salida deben ser 0600 (solo propietario) o 0644 (compartidos).",
+        "O arquivo PDF temporário ficou vazio.": "El archivo PDF temporal está vacío.",
+        "A senha informada para o PDF '{path.name}' está incorreta.": "La contraseña del PDF '{path.name}' es incorrecta.",
+        "O PDF '{path.name}' exige uma senha. Informe-a para continuar.": "El PDF '{path.name}' requiere una contraseña. Indícala para continuar.",
+        "O PDF '{path.name}' não contém páginas.": "El PDF '{path.name}' no contiene páginas.",
+        "Não foi possível verificar se o PDF exige senha. O arquivo pode estar danificado.": "No se pudo comprobar si el PDF requiere contraseña. El archivo puede estar dañado.",
+        "As margens não deixam espaço suficiente na página.": "Los márgenes no dejan suficiente espacio en la página.",
+        "Adicione pelo menos uma imagem.": "Añade al menos una imagen.",
+        "A resolução precisa ficar entre 72 e 600 DPI.": "La resolución debe estar entre 72 y 600 DPI.",
+        "A margem precisa ficar entre 0 e 40 mm.": "El margen debe estar entre 0 y 40 mm.",
+        "O arquivo de saída não pode substituir uma imagem de origem.": "El archivo de salida no puede reemplazar una imagen de origen.",
+        "Imagem não encontrada: {source}": "Imagen no encontrada: {source}",
+        "Formato de imagem não suportado: {source.name}": "Formato de imagen no compatible: {source.name}",
+        "Selecione pelo menos dois PDFs para unir.": "Selecciona al menos dos PDF para unir.",
+        "Informe uma senha por PDF ou deixe a senha como None.": "Indica una contraseña para cada PDF o déjala como None.",
+        "Informe um intervalo de páginas por PDF ou deixe None para usar todas.": "Indica un intervalo de páginas para cada PDF o deja None para usar todas.",
+        "O número de páginas por bloco deve ser positivo.": "El número de páginas por bloque debe ser positivo.",
+        "O intervalo entre inserções deve ser positivo.": "El intervalo entre inserciones debe ser positivo.",
+        "O intervalo entre inserções não pode exceder o número de páginas do PDF de destino.": "El intervalo entre inserciones no puede superar el número de páginas del PDF de destino.",
+        "A exclusão precisa manter pelo menos uma página no PDF.": "La eliminación debe dejar al menos una página en el PDF.",
+        "Escolha uma rotação de 90, 180 ou 270 graus.": "Elige una rotación de 90, 180 o 270 grados.",
+        "Modo de divisão inválido.": "Modo de división no válido.",
+        "O número de páginas por arquivo deve ser positivo.": "El número de páginas por archivo debe ser positivo.",
+        "O tamanho alvo precisa ser um número finito maior que zero.": "El tamaño objetivo debe ser finito y mayor que cero.",
+        "O nível do marcador precisa ser um inteiro positivo.": "El nivel del marcador debe ser un entero positivo.",
+        "A expressão regular para filtrar marcadores é inválida.": "La expresión regular para filtrar marcadores no es válida.",
+        "PDF não encontrado: {source}": "PDF no encontrado: {source}",
+        "O arquivo de origem precisa ser PDF.": "El archivo de origen debe ser un PDF.",
+        "Informe páginas após as quais dividir, por exemplo: 2, 5, 8.": "Indica las páginas después de las cuales dividir, por ejemplo: 2, 5, 8.",
+        "Não foi possível estimar o tamanho armazenado da página {page_number}.": "No se pudo estimar el tamaño almacenado de la página {page_number}.",
+        "O PDF não contém marcadores no nível solicitado (ou nenhum corresponde ao filtro).": "El PDF no contiene marcadores en el nivel solicitado (o ninguno coincide con el filtro).",
+        "Não foi possível gerar divisões a partir das opções informadas.": "No se pudieron generar divisiones con las opciones indicadas.",
+        "Não foi possível criar a pasta de destino.": "No se pudo crear la carpeta de destino.",
+        "A pasta já contém '{conflicts[0]}'. Escolha outra pasta ou remova os arquivos conflitantes.": "La carpeta ya contiene '{conflicts[0]}'. Elige otra carpeta o elimina los archivos en conflicto.",
+        "Formato de saída não suportado: {output_format}": "Formato de salida no compatible: {output_format}",
+        "A extensão de saída não corresponde ao formato {image_format}.": "La extensión de salida no coincide con el formato {image_format}.",
+        "A largura máxima precisa ser maior que zero.": "El ancho máximo debe ser mayor que cero.",
+        "A altura máxima precisa ser maior que zero.": "La altura máxima debe ser mayor que cero.",
+        "A qualidade precisa ficar entre 1 e 100.": "La calidad debe estar entre 1 y 100.",
+        "O arquivo de imagem temporário ficou vazio.": "El archivo de imagen temporal está vacío.",
+        "A ordem deve conter cada página uma única vez, de 1 a {count}.": "El orden debe contener cada página una sola vez, del 1 al {count}.",
+        "A qualidade JPEG precisa ficar entre 50 e 95.": "La calidad JPEG debe estar entre 50 y 95.",
+        "O tamanho da fonte precisa ficar entre 8 e 120.": "El tamaño de fuente debe estar entre 8 y 120.",
+        "A opacidade precisa ficar entre 0,05 e 1.": "La opacidad debe estar entre 0,05 y 1.",
+        "Posição de marca d'água inválida.": "Posición de marca de agua no válida.",
+        "Posição de numeração inválida.": "Posición de numeración no válida.",
+        "O texto da marca d'água é longo demais para caber na página. Reduza o texto ou use uma posição central.": "El texto de la marca de agua es demasiado largo para caber en la página. Acórtalo o usa una posición central.",
+        "Selecione pelo menos uma etapa para executar o fluxo em lote.": "Selecciona al menos una etapa para ejecutar el flujo por lotes.",
+        "Escolha PNG ou JPEG para exportar as páginas.": "Elige PNG o JPEG para exportar las páginas.",
+        "Escolha um arquivo PDF existente.": "Elige un archivo PDF existente.",
+        "Escolha uma pasta de saída existente.": "Elige una carpeta de salida existente.",
+        "A qualidade JPEG precisa ficar entre 1 e 100.": "La calidad JPEG debe estar entre 1 y 100.",
+        "A senha do PDF está incorreta ou não foi informada.": "La contraseña del PDF es incorrecta o no se indicó.",
+        "Não foi possível abrir o PDF. Verifique se o arquivo está válido e se a senha está correta.": "No se pudo abrir el PDF. Comprueba que el archivo sea válido y que la contraseña sea correcta.",
+        "Não foi possível obter o tamanho da página {page_index + 1}.": "No se pudo obtener el tamaño de la página {page_index + 1}.",
+        "A página ultrapassa o limite seguro de pixels. Reduza a resolução de saída.": "La página supera el límite seguro de píxeles. Reduce la resolución de salida.",
+        "Não foi possível renderizar a página {page_index + 1}.": "No se pudo renderizar la página {page_index + 1}.",
+        "Não foi possível salvar a imagem da página {page_index + 1}.": "No se pudo guardar la imagen de la página {page_index + 1}.",
+        "Selecione uma pasta de origem.": "Selecciona una carpeta de origen.",
+        "A pasta de saída não pode ser a pasta de origem nem ficar dentro dela.": "La carpeta de salida no puede ser la carpeta de origen ni estar dentro de ella.",
+        "Selecione pelo menos uma etapa do fluxo.": "Selecciona al menos una etapa del flujo.",
+        "A etapa de marca d'água precisa de um texto ou da numeração ativada.": "La etapa de marca de agua requiere texto o numeración activada.",
+        "A pasta selecionada não contém arquivos PDF.": "La carpeta seleccionada no contiene archivos PDF.",
+        "Não há PDFs selecionados para reprocessar.": "No hay PDF seleccionados para volver a procesar.",
+        "Identificador de relatório inválido.": "Identificador de informe no válido.",
+        "O relatório do lote contém dados inválidos.": "El informe del lote contiene datos no válidos.",
+        "Criando PDF a partir das imagens": "Creando PDF a partir de las imágenes",
+        "Abra esta pasta manualmente:\n{path}": "Abre esta carpeta manualmente:\n{path}",
+        "Escolha otimização sem perdas ou equilibrada.": "Elige optimización sin pérdida o equilibrada.",
+        "Processamento local:": "Procesamiento local:",
+        "Já existe um perfil chamado '{name}'. Deseja substituí-lo?": "Ya existe un perfil llamado '{name}'. ¿Quieres reemplazarlo?",
+        "Não foi possível concluir a operação: {message}": "No se pudo completar la operación: {message}",
+        "Há um lote em andamento. Cancelar o lote e sair?": "Hay un lote en curso. ¿Cancelar el lote y salir?",
+        "Falhas: {count}.": "Fallos: {count}.",
+})
+
+for _language, _table in TRANSLATIONS.items():
+    _clean_table = {}
+    for _key, _value in _table.items():
+        _clean_key = _key.replace("\u200b", "").replace("\u200c", "").replace("\u200d", "").replace("\ufeff", "").strip()
+        _clean_value = _value.strip() if _clean_key != _key else _value
+        _clean_table[_clean_key] = _clean_value
+    TRANSLATIONS[_language] = _clean_table
+
 class ReorderPageDelegate(QStyledItemDelegate):
     """Keep each page thumbnail above its readable caption."""
 
@@ -1450,6 +1662,7 @@ class DocumentToolsWindow(QMainWindow):
         self._worker: QThread | None = None
         self._batch_control: BatchControl | None = None
         self._folder_batch_running = False
+        self._close_when_idle = False
         self._folder_batch_tab_index = -1
         self._last_batch_profile: dict[str, object] | None = None
         self._last_batch_profile_name: str | None = None
@@ -1522,6 +1735,7 @@ class DocumentToolsWindow(QMainWindow):
 
         footer = QHBoxLayout()
         self.status_label = QLabel("Pronto. Selecione uma ferramenta no menu lateral.")
+        self._status_source: tuple[str, dict[str, object]] = ("Pronto. Selecione uma ferramenta no menu lateral.", {})
         self.status_label.setObjectName("statusLabel")
         self.status_label.setWordWrap(True)
         footer.addWidget(self.status_label, 1)
@@ -1553,9 +1767,7 @@ class DocumentToolsWindow(QMainWindow):
         self._load_batch_history()
 
     def _t(self, text: str) -> str:
-        """Translate a Brazilian Portuguese UI string to the active interface language."""
-        if self._language == "pt":
-            return text
+        """Translate Brazilian Portuguese messages and their rendered translations."""
         leading = text[:len(text) - len(text.lstrip())]
         trailing = text[len(text.rstrip()):]
         core = text.strip()
@@ -1569,6 +1781,25 @@ class DocumentToolsWindow(QMainWindow):
         mapping = TRANSLATIONS.get(self._language, {})
         if core in mapping:
             return leading + mapping[core] + trailing
+        # Translate dynamic messages by matching the original template and preserving values.
+        source_templates = dict.fromkeys((*TRANSLATIONS["en"].keys(), *TRANSLATIONS["es"].keys()))
+        for source_template in source_templates:
+            if "{" not in source_template:
+                continue
+            captures = _match_template(core, source_template)
+            if captures is not None:
+                target_template = source_template if self._language == "pt" else mapping.get(source_template)
+                if target_template is not None:
+                    return leading + _fill_template(target_template, captures) + trailing
+            for source_language in ("en", "es"):
+                translated_source = TRANSLATIONS[source_language].get(source_template)
+                if not translated_source:
+                    continue
+                captures = _match_template(core, translated_source)
+                if captures is not None:
+                    target_template = source_template if self._language == "pt" else mapping.get(source_template)
+                    if target_template is not None:
+                        return leading + _fill_template(target_template, captures) + trailing
         # Allow switching between non-Portuguese languages when a status is already translated.
         for language in ("en", "es"):
             reverse = {translated: source for source, translated in TRANSLATIONS[language].items()}
@@ -1647,6 +1878,24 @@ class DocumentToolsWindow(QMainWindow):
                 return leading + translated.split("{message}")[0] + core[len(prefix):] + trailing
         return text
 
+    def _render_status(self) -> None:
+        if not hasattr(self, "status_label"):
+            return
+        source_text, values = self._status_source
+        translated = self._t(source_text)
+        if values:
+            formatted_values = {
+                key: (self._t(value) if key == "message" and isinstance(value, str) else value)
+                for key, value in values.items()
+            }
+            translated = translated.format(**formatted_values)
+        self.status_label.setText(translated)
+
+    def _set_status(self, source_text: str, **values: object) -> None:
+        """Store the source message so it can be translated again later."""
+        self._status_source = (source_text, dict(values))
+        self._render_status()
+
     def _capture_ui_texts(self) -> None:
         for widget in self.findChildren(QWidget):
             if widget is self.language_combo:
@@ -1717,7 +1966,7 @@ class DocumentToolsWindow(QMainWindow):
             ])
         # Refresh the current status text too, so switching language does not leave stale Portuguese text.
         if self.status_label.text():
-            self.status_label.setText(self._t(self.status_label.text()))
+            self._render_status()
         if hasattr(self, "reorder_list") and hasattr(self, "reorder_preview"):
             self._preview_reorder_page(self.reorder_list.currentRow())
         if hasattr(self, "batch_pause_button"):
@@ -1734,7 +1983,7 @@ class DocumentToolsWindow(QMainWindow):
         palettes = {
             "light": {
                 "WINDOW": "#F3F6FB", "PANEL": "#FFFFFF", "TEXT": "#172B4D",
-                "MUTED": "#64748B", "BORDER": "#D8E0EC", "INPUT": "#FFFFFF",
+                "MUTED": "#5B6B82", "BORDER": "#D8E0EC", "INPUT": "#FFFFFF",
                 "BUTTON": "#F1F4F9", "BUTTON_TEXT": "#344054", "HOVER": "#E6ECF5",
                 "PRESSED": "#DCE5F3", "DISABLED": "#F4F6F9", "NAV_SELECTED": "#E8EEFF",
                 "NAV_SELECTED_TEXT": "#3346A8", "LIST_SELECTED": "#E8EEFF",
@@ -1750,8 +1999,8 @@ class DocumentToolsWindow(QMainWindow):
                 "BUTTON": "#374151", "BUTTON_TEXT": "#E5E7EB", "HOVER": "#4B5563",
                 "PRESSED": "#596579", "DISABLED": "#252E3D", "NAV_SELECTED": "#263755",
                 "NAV_SELECTED_TEXT": "#DBEAFE", "LIST_SELECTED": "#263755",
-                "LIST_SELECTED_TEXT": "#DBEAFE", "PRIMARY": "#5477F5",
-                "PRIMARY_HOVER": "#6C89F6", "SECONDARY": "#263755",
+                "LIST_SELECTED_TEXT": "#DBEAFE", "PRIMARY": "#4766F0",
+                "PRIMARY_HOVER": "#3F5FE0", "SECONDARY": "#263755",
                 "SECONDARY_TEXT": "#DBEAFE", "PROGRESS_BG": "#374151",
                 "FOCUS": "#8BA3FF", "HEADER": "#0B1220", "HEADER_TEXT": "#FFFFFF",
                 "HEADER_MUTED": "#CBD5E1", "TOOLTIP": "#263244", "TOOLTIP_TEXT": "#FFFFFF",
@@ -1766,7 +2015,7 @@ class DocumentToolsWindow(QMainWindow):
             font-size: 13px;
         }
         QLabel { background: transparent; }
-        QFrame#headerCard { background: $HEADER; border: none; border-radius: 14px; }
+        QFrame#headerCard { background: $HEADER; border: none; border-radius: 10px; }
         QLabel#brandMark { background: transparent; }
         QLabel#appTitle { color: $HEADER_TEXT; font-size: 20px; font-weight: 700; }
         QLabel#subtitle { color: $HEADER_MUTED; font-size: 12px; }
@@ -1774,7 +2023,7 @@ class DocumentToolsWindow(QMainWindow):
         QFrame#sidePanel {
             background: $PANEL;
             border: 1px solid $BORDER;
-            border-radius: 12px;
+            border-radius: 10px;
         }
         QScrollArea#navigationScroll, QScrollArea#contentScrollArea,
         QStackedWidget#pageStack, QWidget#navigationContent { background: transparent; border: none; }
@@ -1789,7 +2038,7 @@ class DocumentToolsWindow(QMainWindow):
         QLabel#sectionTitle { color: $TEXT; font-size: 17px; font-weight: 700; }
         QListWidget {
             background: $INPUT; color: $TEXT; border: 1px solid $BORDER;
-            border-radius: 10px; padding: 6px; outline: none;
+            border-radius: 8px; padding: 6px; outline: none;
         }
         QListWidget::item {
             background: transparent; padding: 8px 10px; margin: 2px 0; border-radius: 7px;
@@ -1809,7 +2058,7 @@ class DocumentToolsWindow(QMainWindow):
         }
         QPushButton {
             background: $BUTTON; color: $BUTTON_TEXT; border: 1px solid $BORDER;
-            border-radius: 8px; padding: 9px 11px; font-weight: 600;
+            border-radius: 6px; padding: 9px 11px; font-weight: 600;
         }
         QPushButton:hover { background: $HOVER; }
         QPushButton:pressed { background: $PRESSED; }
@@ -1822,9 +2071,12 @@ class DocumentToolsWindow(QMainWindow):
         QPushButton#secondaryButton {
             background: $SECONDARY; color: $SECONDARY_TEXT; border-color: $BORDER;
         }
+        QPushButton#primaryButton:disabled, QPushButton#secondaryButton:disabled {
+            background: $DISABLED; color: $MUTED; border-color: $BORDER;
+        }
         QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
             background: $INPUT; color: $TEXT; border: 1px solid $BORDER;
-            border-radius: 8px; padding: 8px 9px; min-height: 18px;
+            border-radius: 6px; padding: 8px 9px; min-height: 18px;
         }
         QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
             border-color: $FOCUS;
@@ -1951,7 +2203,7 @@ class DocumentToolsWindow(QMainWindow):
         output = Path(filename).expanduser()
         normalized_suffix = suffix if suffix.startswith(".") else f".{suffix}"
         if output.suffix.casefold() != normalized_suffix.casefold():
-            output = output.with_suffix(normalized_suffix)
+            output = _ensure_suffix(output, normalized_suffix)
         output = output.resolve()
         if output.exists():
             answer = QMessageBox.question(
@@ -1962,7 +2214,7 @@ class DocumentToolsWindow(QMainWindow):
                 QMessageBox.StandardButton.No,
             )
             if answer != QMessageBox.StandardButton.Yes:
-                self.status_label.setText(self._t("Operação cancelada. O arquivo existente foi preservado."))
+                self._set_status("Operação cancelada. O arquivo existente foi preservado.")
                 return None
         return output
 
@@ -1987,7 +2239,7 @@ class DocumentToolsWindow(QMainWindow):
 
         output = Path(dialog.selectedFiles()[0]).expanduser()
         if output.suffix.lower() != ".pdf":
-            output = output.with_suffix(".pdf")
+            output = _ensure_suffix(output, ".pdf")
         output = output.resolve()
         sources = {Path(item).expanduser().resolve() for item in source_paths}
         if any(_same_existing_file(output, source) for source in sources):
@@ -2007,7 +2259,7 @@ class DocumentToolsWindow(QMainWindow):
                 QMessageBox.StandardButton.No,
             )
             if answer != QMessageBox.StandardButton.Yes:
-                self.status_label.setText(self._t("Operação cancelada. O arquivo existente foi preservado."))
+                self._set_status("Operação cancelada. O arquivo existente foi preservado.")
                 return None
         return str(output)
 
@@ -2024,7 +2276,7 @@ class DocumentToolsWindow(QMainWindow):
     ) -> None:
         if self._worker is not None and self._worker.isRunning():
             return
-        self.status_label.setText(self._t(description))
+        self._set_status(description)
         self.open_directory_button.hide()
         self.progress.show()
         self.tabs.setEnabled(False)
@@ -2043,7 +2295,7 @@ class DocumentToolsWindow(QMainWindow):
         worker.start()
 
     def _operation_succeeded(self, message: str) -> None:
-        self.status_label.setText(self._t(message))
+        self._set_status(message)
         location = self._pending_output_location
         if location is not None:
             self._pending_output_directory = (
@@ -2056,7 +2308,7 @@ class DocumentToolsWindow(QMainWindow):
 
     def _operation_failed(self, message: str) -> None:
         self.open_directory_button.hide()
-        self.status_label.setText(self._t(f"Não foi possível concluir a operação: {message}"))
+        self._set_status("Não foi possível concluir a operação: {message}", message=message)
         QMessageBox.warning(self, self._t("Operação não concluída"), self._t(message))
 
     def _operation_finished(self) -> None:
@@ -2091,11 +2343,14 @@ class DocumentToolsWindow(QMainWindow):
             worker.wait()
             worker.deleteLater()
         self._worker = None
+        if self._close_when_idle:
+            self._close_when_idle = False
+            QTimer.singleShot(0, self.close)
 
     def _open_output_directory(self) -> None:
         directory = self._pending_output_directory
         if directory is None or not directory.is_dir():
-            self.status_label.setText(self._t("A pasta de saída não está disponível."))
+            self._set_status("A pasta de saída não está disponível.")
             self.open_directory_button.hide()
             return
         if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(directory))):
@@ -2104,6 +2359,19 @@ class DocumentToolsWindow(QMainWindow):
     def closeEvent(self, event: QCloseEvent) -> None:
         worker = self._worker
         if worker is not None and worker.isRunning():
+            if self._folder_batch_running and self._batch_control is not None:
+                answer = QMessageBox.question(
+                    self, APP_NAME,
+                    self._t("Há um lote em andamento. Cancelar o lote e sair?"),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if answer == QMessageBox.StandardButton.Yes:
+                    self._batch_control.cancel()
+                    self._close_when_idle = True
+                    self._set_status("Cancelamento solicitado; o lote será encerrado assim que for seguro.")
+                event.ignore()
+                return
             QMessageBox.information(
                 self,
                 APP_NAME,
@@ -2305,18 +2573,20 @@ class DocumentToolsWindow(QMainWindow):
         added = self._add_paths(self.image_list, paths)
         if added:
             self._update_image_dpi_from_sources()
-        status = self._t("{added} imagem(ns) adicionada(s).").format(added=added) if added else self._t("Nenhuma imagem nova adicionada.")
-        self.status_label.setText(status)
+        if added:
+            self._set_status("{added} imagem(ns) adicionada(s).", added=added)
+        else:
+            self._set_status("Nenhuma imagem nova adicionada.")
 
     def _handle_dropped_images(self, paths: list[str]) -> None:
         accepted = [path for path in paths if Path(path).suffix.casefold() in SUPPORTED_IMAGE_SUFFIXES]
         added = self._add_paths(self.image_list, accepted)
         if added:
             self._update_image_dpi_from_sources()
-        self.status_label.setText(
-            self._t("{added} imagem(ns) adicionada(s).").format(added=added)
-            if added else self._t("Nenhuma imagem nova adicionada.")
-        )
+        if added:
+            self._set_status("{added} imagem(ns) adicionada(s).", added=added)
+        else:
+            self._set_status("Nenhuma imagem nova adicionada.")
 
     def _update_image_dpi_from_sources(self) -> None:
         sources = self._all_paths(self.image_list)
@@ -2339,9 +2609,7 @@ class DocumentToolsWindow(QMainWindow):
         # suggestion; a different value belongs to the user's manual choice.
         if self.image_dpi.value() == previous_auto:
             self.image_dpi.setValue(recommended)
-            self.status_label.setText(
-                self._t("Resolução recomendada calculada a partir das imagens.")
-            )
+            self._set_status("Resolução recomendada calculada a partir das imagens.")
         self._image_dpi_auto = recommended
 
     def _remove_image_inputs(self) -> None:
@@ -2476,8 +2744,10 @@ class DocumentToolsWindow(QMainWindow):
         added = self._add_paths(self.pdf_list, paths)
         if added and self.pdf_list.currentRow() < 0 and self.pdf_list.count():
             self.pdf_list.setCurrentRow(0)
-        status = self._t("{added} PDF(s) adicionado(s).").format(added=added) if added else self._t("Nenhum PDF novo adicionado.")
-        self.status_label.setText(status)
+        if added:
+            self._set_status("{added} PDF(s) adicionado(s).", added=added)
+        else:
+            self._set_status("Nenhum PDF novo adicionado.")
 
     def _load_merge_selected_range(self, current, _previous=None) -> None:
         self.merge_page_ranges.setEnabled(current is not None)
@@ -3233,9 +3503,7 @@ class DocumentToolsWindow(QMainWindow):
             )
             self.reorder_thumbnail_worker = thumbnail_worker
             thumbnail_worker.start()
-        self.status_label.setText(
-            self._t("{count} páginas carregadas. Arraste para reorganizar.").format(count=count)
-        )
+        self._set_status("{count} páginas carregadas. Arraste para reorganizar.", count=count)
 
     def _cleanup_retired_thumbnail_worker_for(
         self, worker: PageThumbnailWorker
@@ -3384,7 +3652,7 @@ class DocumentToolsWindow(QMainWindow):
         self.reorder_list.setIconSize(QSize(76, 96))
         self.reorder_list.setGridSize(QSize(124, 184))
         self.reorder_list.setItemDelegate(ReorderPageDelegate(self.reorder_list))
-        self.reorder_list.setWordWrap(False)
+        self.reorder_list.setWordWrap(True)
         self.reorder_list.setTextElideMode(Qt.TextElideMode.ElideNone)
         self.reorder_list.setUniformItemSizes(True)
         self.reorder_list.setDragEnabled(True)
@@ -3953,7 +4221,7 @@ class DocumentToolsWindow(QMainWindow):
                 self._t("Não foi possível alterar os perfis porque as configurações estão inválidas. Os dados existentes foram preservados."),
             )
             return
-        self.status_label.setText(self._t("Perfil salvo: {name}").format(name=name))
+        self._set_status("Perfil salvo: {name}", name=name)
 
     def _load_pipeline_profile(self) -> None:
         profiles = self._read_pipeline_profiles()
@@ -3972,7 +4240,7 @@ class DocumentToolsWindow(QMainWindow):
         if profile is None:
             return
         self._apply_pipeline_profile(profile)
-        self.status_label.setText(self._t("Perfil carregado: {name}").format(name=name))
+        self._set_status("Perfil carregado: {name}", name=name)
 
     def _delete_pipeline_profile(self) -> None:
         profiles = self._read_pipeline_profiles()
@@ -4006,7 +4274,7 @@ class DocumentToolsWindow(QMainWindow):
                 self._t("Não foi possível alterar os perfis porque as configurações estão inválidas. Os dados existentes foram preservados."),
             )
             return
-        self.status_label.setText(self._t("Perfil excluído: {name}").format(name=name))
+        self._set_status("Perfil excluído: {name}", name=name)
 
     @staticmethod
     def _validate_pipeline_profile_document(document: object) -> tuple[str, dict[str, object]]:
@@ -4079,7 +4347,7 @@ class DocumentToolsWindow(QMainWindow):
                     temporary.unlink(missing_ok=True)
                 except OSError:
                     pass
-        self.status_label.setText(self._t("Perfil exportado: {name}").format(name=name))
+        self._set_status("Perfil exportado: {name}", name=name)
 
     def _import_pipeline_profile(self) -> None:
         filename, _ = QFileDialog.getOpenFileName(
@@ -4111,7 +4379,7 @@ class DocumentToolsWindow(QMainWindow):
                 self._t("Não foi possível alterar os perfis porque as configurações estão inválidas. Os dados existentes foram preservados."),
             )
             return
-        self.status_label.setText(self._t("Perfil importado: {name}").format(name=name))
+        self._set_status("Perfil importado: {name}", name=name)
 
     def _update_pipeline_controls(self) -> None:
         rotate_enabled = self.pipeline_rotate_enabled.isChecked()
@@ -4421,7 +4689,7 @@ class DocumentToolsWindow(QMainWindow):
         self._folder_batch_running = True
         self._pending_output_directory = Path(output).expanduser().resolve()
         self.open_directory_button.hide()
-        self.status_label.setText(self._t("Executando fluxo em lote…"))
+        self._set_status("Executando fluxo em lote…")
         self.progress.setRange(0, 0)
         self.progress.show()
         for tab_index in range(self.tabs.count()):
@@ -4452,13 +4720,11 @@ class DocumentToolsWindow(QMainWindow):
         if control.is_paused:
             control.resume()
             self.batch_pause_button.setText(self._t("Pausar lote"))
-            self.status_label.setText(self._t("Retomando lote…"))
+            self._set_status("Retomando lote…")
         else:
             control.pause()
             self.batch_pause_button.setText(self._t("Retomar lote"))
-            self.status_label.setText(self._t(
-                "Pausa solicitada; o PDF atual será concluído antes de pausar."
-            ))
+            self._set_status("Pausa solicitada; o PDF atual será concluído antes de pausar.")
 
     def _cancel_batch(self) -> None:
         control = self._batch_control
@@ -4467,22 +4733,16 @@ class DocumentToolsWindow(QMainWindow):
         control.cancel()
         self.batch_pause_button.setEnabled(False)
         self.batch_cancel_button.setEnabled(False)
-        self.status_label.setText(self._t(
-            "Cancelamento solicitado; o PDF atual será concluído antes de parar."
-        ))
+        self._set_status("Cancelamento solicitado; o PDF atual será concluído antes de parar.")
 
     def _batch_progress_changed(self, completed: int, total: int, filename: str) -> None:
         self.progress.setRange(0, total)
         self.progress.setValue(completed)
         control = self._batch_control
         if control is not None and control.is_paused:
-            self.status_label.setText(self._t(
-                "Lote pausado após {completed} de {total} arquivo(s)."
-            ).format(completed=completed, total=total))
+            self._set_status("Lote pausado após {completed} de {total} arquivo(s).", completed=completed, total=total)
             return
-        self.status_label.setText(self._t("Processando arquivo {completed} de {total}: {name}").format(
-            completed=completed, total=total, name=filename
-        ))
+        self._set_status("Processando arquivo {completed} de {total}: {name}", completed=completed, total=total, name=filename)
 
     def _render_batch_results(self, results: list[BatchFileResult]) -> None:
         self.batch_results = results
@@ -4575,7 +4835,7 @@ class DocumentToolsWindow(QMainWindow):
                 key=lambda item: (float(item.get("created_timestamp", 0)), str(item.get("id", ""))),
             )
             self._restore_batch_history_report(newest, activate_tab=False)
-            self.status_label.setText(self._t("Histórico de relatórios restaurado."))
+            self._set_status("Histórico de relatórios restaurado.")
 
     def _restore_batch_history_report(
         self, report: dict[str, object], *, activate_tab: bool
@@ -4621,7 +4881,7 @@ class DocumentToolsWindow(QMainWindow):
         self.open_directory_button.setVisible(
             self._pending_output_directory is not None and self._pending_output_directory.is_dir()
         )
-        self.status_label.setText(self._t("Relatório histórico carregado."))
+        self._set_status("Relatório histórico carregado.")
         if activate_tab:
             self.tabs.setCurrentIndex(self._folder_batch_tab_index)
 
@@ -4652,7 +4912,7 @@ class DocumentToolsWindow(QMainWindow):
         self._batch_history.pop(report_id, None)
         self._refresh_batch_history_combo()
         if deleted:
-            self.status_label.setText(self._t("Relatório removido do histórico."))
+            self._set_status("Relatório removido do histórico.")
 
     def _batch_operation_succeeded(self, results: object, cancelled: bool = False) -> None:
         if not isinstance(results, list) or not all(isinstance(item, BatchFileResult) for item in results):
@@ -4959,7 +5219,7 @@ class DocumentToolsWindow(QMainWindow):
         paths = self._choose_multiple("Escolher imagens para converter", IMAGE_FILTER)
         added = self._add_paths(self.convert_list, paths)
         status = self._t("{added} imagem(ns) adicionada(s).").format(added=added) if added else self._t("Nenhuma imagem nova adicionada.")
-        self.status_label.setText(status)
+        self._set_status(status)
 
     def _select_convert_directory(self) -> None:
         path = self._choose_directory("Escolher pasta para salvar as imagens")

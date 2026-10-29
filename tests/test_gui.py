@@ -15,7 +15,7 @@ from pypdf.errors import PdfReadError
 from PySide6.QtWidgets import QApplication, QAbstractItemView, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QScrollArea
 from PIL import Image as PILImage
 
-from document_tools.gui import APP_NAME, DocumentToolsWindow, ImageDropList, OperationWorker, PageThumbnailWorker, SideNavigationWidget
+from document_tools.gui import APP_NAME, TRANSLATIONS, DocumentToolsWindow, ImageDropList, OperationWorker, PageThumbnailWorker, SideNavigationWidget, _ensure_suffix
 from document_tools.pdf_rendering import export_pdf_pages_to_images
 from document_tools.batch_processing import BatchControl, BatchFileResult
 
@@ -1215,7 +1215,7 @@ def test_window_preserves_space_for_controls_and_aligned_file_pickers(qt_app: QA
         )
 
         assert window.reorder_list.gridSize().height() >= 160
-        assert not window.reorder_list.wordWrap()
+        assert window.reorder_list.wordWrap()
         assert window.reorder_list.textElideMode() == Qt.TextElideMode.ElideNone
 
         path_fields = (
@@ -1625,3 +1625,93 @@ def test_import_profile_confirms_before_replacing_unrecognized_profile_schema(
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         qt_app.processEvents()
+
+
+def _contrast_ratio(first: str, second: str) -> float:
+    def luminance(value: str) -> float:
+        channels = [int(value[index:index + 2], 16) / 255 for index in (1, 3, 5)]
+        linear = [
+            channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4
+            for channel in channels
+        ]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+    high, low = sorted((luminance(first), luminance(second)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
+
+
+def test_translation_keys_are_clean_and_backend_errors_translate(qt_app: QApplication) -> None:
+    invisible = ("\u200b", "\u200c", "\u200d", "\ufeff")
+    for language in ("en", "es"):
+        assert all(key == key.strip() for key in TRANSLATIONS[language])
+        assert not any(char in key for key in TRANSLATIONS[language] for char in invisible)
+    window = DocumentToolsWindow()
+    try:
+        window.language_combo.setCurrentIndex(window.language_combo.findData("en"))
+        assert window._t("O PDF não possui páginas.") == "The PDF has no pages."
+        assert window._t("Imagem não encontrada: exemplo.png") == "Image not found: exemplo.png"
+        window.language_combo.setCurrentIndex(window.language_combo.findData("es"))
+        assert window._t("O PDF não possui páginas.") == "El PDF no tiene páginas."
+        assert window._t("Imagem não encontrada: ejemplo.png") == "Imagen no encontrada: ejemplo.png"
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_failed_operation_status_is_fully_translated(qt_app: QApplication, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args, **kwargs: None)
+    window = DocumentToolsWindow()
+    try:
+        message = "O arquivo ou a pasta não foi encontrado. Confira o caminho e tente novamente."
+        window.language_combo.setCurrentIndex(window.language_combo.findData("en"))
+        window._operation_failed(message)
+        assert window.status_label.text() == "Could not complete operation: The file or folder could not be found. Check the path and try again."
+        window.language_combo.setCurrentIndex(window.language_combo.findData("es"))
+        window._operation_failed(message)
+        assert "No se pudo completar la operación:" in window.status_label.text()
+        assert "El archivo o la carpeta" in window.status_label.text()
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_status_round_trips_pt_en_es_with_dynamic_values(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    try:
+        window._set_status("Perfil salvo: {name}", name="Meu Perfil")
+        window.language_combo.setCurrentIndex(window.language_combo.findData("en"))
+        assert window.status_label.text() == "Profile saved: Meu Perfil"
+        window.language_combo.setCurrentIndex(window.language_combo.findData("es"))
+        assert window.status_label.text() == "Perfil guardado: Meu Perfil"
+        window.language_combo.setCurrentIndex(window.language_combo.findData("pt"))
+        assert window.status_label.text() == "Perfil salvo: Meu Perfil"
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_output_suffix_appends_without_replacing_dotted_filename() -> None:
+    assert _ensure_suffix(Path("relatorio 28.10.2026"), ".pdf") == Path("relatorio 28.10.2026.pdf")
+    assert _ensure_suffix(Path("contrato.v2"), ".pdf") == Path("contrato.v2.pdf")
+    assert _ensure_suffix(Path("relatorio.PDF"), ".pdf") == Path("relatorio.PDF")
+    assert _ensure_suffix(Path("perfil.v2"), ".json") == Path("perfil.v2.json")
+
+
+def test_stylesheet_has_wcag_aa_primary_contrast_and_disabled_feedback(qt_app: QApplication) -> None:
+    for theme in ("light", "dark"):
+        stylesheet = DocumentToolsWindow._stylesheet(theme)
+        primary = re.search(r"QPushButton#primaryButton \{[^}]*background: (#[0-9A-Fa-f]{6}); color: (#[0-9A-Fa-f]{6});", stylesheet)
+        hover = re.search(r"QPushButton#primaryButton:hover \{ background: (#[0-9A-Fa-f]{6});", stylesheet)
+        muted = re.search(r"QLabel#statusLabel \{ color: (#[0-9A-Fa-f]{6});", stylesheet)
+        window_bg = re.search(r"QMainWindow, QWidget \{\s*background: (#[0-9A-Fa-f]{6});", stylesheet)
+        assert primary and hover and muted and window_bg
+        assert _contrast_ratio(primary.group(2), primary.group(1)) >= 4.5
+        assert _contrast_ratio("#FFFFFF", hover.group(1)) >= 4.5
+        assert _contrast_ratio(muted.group(1), window_bg.group(1)) >= 4.5
+        assert "QPushButton#primaryButton:disabled" in stylesheet
+        assert "QPushButton#secondaryButton:disabled" in stylesheet
