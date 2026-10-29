@@ -89,3 +89,10 @@ def test_pillow_origin_oserror_is_described_as_an_image_problem() -> None:
 def test_not_a_directory_error_is_actionable() -> None:
     message = friendly_error_message(NotADirectoryError())
     assert "caminho" in message.lower() or "pasta" in message.lower()
+
+
+def test_decompression_bomb_warning_is_actionable() -> None:
+    warning = type(
+        "DecompressionBombWarning", (Warning,), {"__module__": "PIL.Image"}
+    )()
+    assert "imagem" in friendly_error_message(warning).lower()

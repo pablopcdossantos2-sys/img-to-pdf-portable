@@ -106,3 +106,11 @@ def test_recommend_dpi_skips_syntax_error_images(tmp_path: Path, monkeypatch: py
     broken.write_bytes(b"not a jpeg")
     monkeypatch.setattr(Image, "open", open_with_syntax_error)
     assert recommend_dpi_from_images([broken, valid], margin_mm=0) == 150
+
+
+def test_recommend_dpi_skips_decompression_bomb_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = create_image(tmp_path / "warning-threshold.png", (14, 14))
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 100)
+    assert recommend_dpi_from_images([source], margin_mm=0) is None

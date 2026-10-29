@@ -1445,3 +1445,18 @@ def test_image_frame_count_reports_real_frames_and_ignores_mpo(tmp_path: Path) -
     finally:
         for frame in frames:
             frame.close()
+
+
+def test_images_to_pdf_rejects_decompression_bomb_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "warning-threshold.png"
+    with Image.new("RGB", (14, 14), "white") as image:
+        image.save(source)
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 100)
+    output = tmp_path / "too-large.pdf"
+
+    with pytest.raises(Image.DecompressionBombWarning):
+        images_to_pdf([source], output, dpi=72)
+
+    assert not output.exists()
