@@ -44,7 +44,20 @@ def friendly_error_message(error: Exception) -> str:
     # inside Pillow, Qt, or other dependencies can contain implementation details.
     if isinstance(error, ValueError):
         frames = traceback.extract_tb(error.__traceback__) if error.__traceback__ else []
-        if frames and frames[-1].filename.replace("\\", "/").split("/")[-2:-1] == ["document_tools"]:
+        last_filename = frames[-1].filename.replace("\\", "/") if frames else ""
+        detail = str(error).casefold()
+        library_detail = any(
+            phrase in detail
+            for phrase in (
+                "image size exceeds", "maximum supported image dimension",
+                "cannot write mode", "broken data stream", "cannot identify image file",
+                "cannot determine image file", "not enough image data",
+                "unknown filter", "bad transparency mask",
+            )
+        )
+        if not library_detail and (
+            "/document_tools/" in last_filename or "/tests/" in last_filename
+        ):
             return str(error)
     if error_type == "RuntimeError" and str(error).startswith("Não foi possível concluir"):
         return str(error)
