@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import QSettings
 
 _TEST_ROOT = Path(tempfile.mkdtemp(prefix="pdf-hub-test-user-state-"))
 _CONFIG_ROOT = _TEST_ROOT / "config"
@@ -21,13 +22,8 @@ os.environ["XDG_DATA_HOME"] = str(_DATA_ROOT)
 os.environ["APPDATA"] = str(_CONFIG_ROOT)
 os.environ["LOCALAPPDATA"] = str(_DATA_ROOT)
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-
-def pytest_sessionstart(session) -> None:
-    from PySide6.QtCore import QSettings
-
-    QSettings.setDefaultFormat(QSettings.Format.IniFormat)
-    QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(_CONFIG_ROOT))
+QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(_CONFIG_ROOT))
 
 
 @atexit.register
