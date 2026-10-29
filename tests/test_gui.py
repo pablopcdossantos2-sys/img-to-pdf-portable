@@ -13,7 +13,7 @@ from PySide6.QtPdf import QPdfDocument
 from PySide6.QtGui import QImage
 from pypdf import PdfWriter
 from pypdf.errors import PdfReadError
-from PySide6.QtWidgets import QApplication, QAbstractItemView, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QScrollArea
+from PySide6.QtWidgets import QApplication, QAbstractItemView, QFileDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QScrollArea
 from PIL import Image as PILImage
 
 from document_tools.gui import APP_NAME, TRANSLATIONS, DocumentToolsWindow, ImageDropList, OperationWorker, PageThumbnailWorker, SideNavigationWidget, _ensure_suffix
@@ -1644,6 +1644,7 @@ def test_translation_keys_are_clean_and_backend_errors_translate(qt_app: QApplic
     invisible = ("\u200b", "\u200c", "\u200d", "\ufeff")
     for language in ("en", "es"):
         assert all(key == key.strip() for key in TRANSLATIONS[language])
+    assert set(TRANSLATIONS["en"]) == set(TRANSLATIONS["es"])
         assert not any(char in key for key in TRANSLATIONS[language] for char in invisible)
     window = DocumentToolsWindow()
     try:
@@ -1730,6 +1731,19 @@ def test_gui_test_settings_and_history_use_isolated_paths(qt_app: QApplication) 
     try:
         assert Path(window.settings.fileName()).is_relative_to(Path(os.environ["HOME"]))
         assert window._batch_history_directory.is_relative_to(Path(os.environ["XDG_DATA_HOME"]))
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+def test_choose_output_pdf_preserves_dotted_filename(qt_app: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    window = DocumentToolsWindow()
+    selected = tmp_path / "relatorio 28.10.2026"
+    monkeypatch.setattr(QFileDialog, "exec", lambda self: QFileDialog.DialogCode.Accepted)
+    monkeypatch.setattr(QFileDialog, "selectedFiles", lambda self: [str(selected)])
+    try:
+        assert window._choose_output_pdf("x.pdf") == str((tmp_path / "relatorio 28.10.2026.pdf").resolve())
     finally:
         window.close()
         window.deleteLater()
