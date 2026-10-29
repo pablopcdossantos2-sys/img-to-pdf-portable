@@ -42,7 +42,9 @@ def friendly_error_message(error: Exception) -> str:
         return "Não há espaço disponível no disco para salvar o resultado. Libere espaço e tente novamente."
     if error_type == "DependencyError" and (module_name.startswith("pypdf") or origin == "pypdf"):
         return "Falta uma dependência necessária para abrir este PDF criptografado. Reinstale o PDF Hub usando o pacote oficial."
-    if origin == "PIL" or error_type in {"UnidentifiedImageError", "DecompressionBombError"}:
+    if origin == "PIL" or error_type in {
+        "UnidentifiedImageError", "DecompressionBombError", "DecompressionBombWarning"
+    }:
         return "A imagem não pôde ser processada. Verifique se o arquivo está íntegro, não excede os limites de segurança e usa um formato compatível."
     if (
         error_type in {"WrongPasswordError", "FileNotDecryptedError"}

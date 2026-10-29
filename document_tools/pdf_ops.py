@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import tempfile
+import warnings
 from io import BytesIO
 from pathlib import Path
 from typing import Callable, Sequence
@@ -34,10 +35,17 @@ MULTI_FRAME_FORMATS = {"GIF", "TIFF", "WEBP", "PNG"}
 MAX_DUPLICATE_PAGE_SELECTION = 100_000
 
 
+def _open_image_safely(path: str | Path):
+    """Treat Pillow's decompression-bomb warning as a refusal, not a soft warning."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", Image.DecompressionBombWarning)
+        return Image.open(path)
+
+
 def image_frame_count(input_path: str | Path) -> int:
     """Return meaningful image frames, excluding MPO's auxiliary JPEG frames."""
     source = Path(input_path).expanduser()
-    with Image.open(source) as opened:
+    with _open_image_safely(source) as opened:
         if opened.format not in MULTI_FRAME_FORMATS:
             return 1
         return max(1, int(getattr(opened, "n_frames", 1)))
@@ -526,7 +534,7 @@ def images_to_pdf(
         with tempfile.TemporaryDirectory(prefix="pdf-hub-pages-") as temp_dir:
             page_directory = Path(temp_dir)
             for source in sources:
-                with Image.open(source) as opened:
+                with _open_image_safely(source) as opened:
                     frame_count = max(1, int(getattr(opened, "n_frames", 1)))
                     import_all_frames = all_frames and opened.format in MULTI_FRAME_FORMATS
                     frame_indexes = range(frame_count) if import_all_frames else range(1)
@@ -1101,7 +1109,7 @@ def convert_image(
     image: Image.Image | None = None
     final_image: Image.Image | None = None
     try:
-        with Image.open(source) as opened:
+        with _open_image_safely(source) as opened:
             original_mode = opened.mode
             icc_profile = opened.info.get("icc_profile")
             image = ImageOps.exif_transpose(opened)

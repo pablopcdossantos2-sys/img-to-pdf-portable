@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path
+import warnings
 
 from PIL import Image
 
@@ -19,15 +20,17 @@ A4_HEIGHT_MM = 297.0
 def _cached_oriented_size(path_text: str, modified_ns: int, file_size: int) -> tuple[int, int]:
     """Read image dimensions and EXIF orientation, caching by file identity/version."""
     del modified_ns, file_size  # cache-key values intentionally invalidate changed files
-    with Image.open(path_text) as opened:
-        width, height = opened.size
-        try:
-            orientation = opened.getexif().get(0x0112)
-        except (OSError, ValueError, EOFError, SyntaxError, Image.DecompressionBombError):
-            orientation = None
-        if orientation in {5, 6, 7, 8}:
-            return height, width
-        return width, height
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", Image.DecompressionBombWarning)
+        with Image.open(path_text) as opened:
+            width, height = opened.size
+            try:
+                orientation = opened.getexif().get(0x0112)
+            except (OSError, ValueError, EOFError, SyntaxError, Image.DecompressionBombError):
+                orientation = None
+            if orientation in {5, 6, 7, 8}:
+                return height, width
+            return width, height
 
 
 def recommend_dpi_from_images(
@@ -54,7 +57,8 @@ def recommend_dpi_from_images(
                 str(path.resolve()), stat_result.st_mtime_ns, stat_result.st_size
             )
         except (
-            OSError, ValueError, EOFError, SyntaxError, Image.DecompressionBombError
+            OSError, ValueError, EOFError, SyntaxError,
+            Image.DecompressionBombError, Image.DecompressionBombWarning,
         ):
             continue
 
