@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt
@@ -23,6 +27,8 @@ def export_pdf_pages_to_images(
     quality: int = 90,
     pages: str = "",
     password: str | None = None,
+    progress_callback: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> list[Path]:
     """Render selected PDF pages to PNG or JPEG files without overwriting outputs."""
     source = Path(source_path).expanduser().resolve()
@@ -66,6 +72,8 @@ def export_pdf_pages_to_images(
         encoder = "PNG" if selected_format == "PNG" else "JPEG"
         scale = int(dpi) / 72.0
 
+        # Validate every selected page before creating any output files.
+        render_plan: list[tuple[int, QSize]] = []
         for page_index in indexes:
             point_size = document.pagePointSize(page_index)
             width = float(point_size.width())
@@ -78,34 +86,91 @@ def export_pdf_pages_to_images(
                 raise ValueError(
                     "A página ultrapassa o limite seguro de pixels. Reduza a resolução de saída."
                 )
-            image_size = QSize(pixel_width, pixel_height)
+            render_plan.append((page_index, QSize(pixel_width, pixel_height)))
+
+        for completed, (page_index, image_size) in enumerate(render_plan, start=1):
+            if should_cancel is not None and should_cancel():
+                raise RuntimeError("A exportação de páginas foi cancelada.")
             rendered = document.render(page_index, image_size)
             if rendered.isNull():
-                raise ValueError(f"Não foi possível renderizar a página {page_index + 1}.")
+                raise MemoryError(
+                    f"Não foi possível alocar memória para renderizar a página {page_index + 1}."
+                )
 
             base_name = f"{source.stem}-pagina-{page_index + 1:03d}"
-            destination = output / f"{base_name}{suffix}"
-            duplicate_number = 2
-            while destination.exists():
-                destination = output / f"{base_name}-{duplicate_number}{suffix}"
-                duplicate_number += 1
-
             image = rendered
-            if encoder == "JPEG":
-                # JPEG does not support alpha; composite over white instead of
-                # allowing transparent pixels to turn black in the exported file.
-                image = QImage(image_size, QImage.Format.Format_RGB32)
-                image.fill(Qt.GlobalColor.white)
-                painter = QPainter(image)
-                painter.drawImage(0, 0, rendered)
-                painter.end()
-            if not image.save(str(destination), encoder, int(quality) if encoder == "JPEG" else -1):
-                raise OSError(f"Não foi possível salvar a imagem da página {page_index + 1}.")
-            created.append(destination)
+            try:
+                # Use an opaque white background for PNG and JPEG whenever Qt
+                # returns alpha; JPEG always needs an opaque RGB image.
+                if encoder == "JPEG" or rendered.hasAlphaChannel():
+                    image = QImage(image_size, QImage.Format.Format_RGB32)
+                    if image.isNull():
+                        raise MemoryError(
+                            f"Não há memória suficiente para preparar a página {page_index + 1}."
+                        )
+                    image.fill(Qt.GlobalColor.white)
+                    painter = QPainter(image)
+                    painter.drawImage(0, 0, rendered)
+                    painter.end()
+                    rendered = QImage()
+
+                descriptor, temporary_name = tempfile.mkstemp(
+                    prefix=".pdf-hub-", suffix=suffix, dir=str(output)
+                )
+                os.close(descriptor)
+                temporary = Path(temporary_name)
+                try:
+                    quality_value = int(quality) if encoder == "JPEG" else -1
+                    if not image.save(str(temporary), encoder, quality_value):
+                        raise OSError(
+                            f"Não foi possível salvar a imagem da página {page_index + 1}."
+                        )
+                    duplicate_number = 1
+                    while True:
+                        filename = (
+                            f"{base_name}{suffix}"
+                            if duplicate_number == 1
+                            else f"{base_name}-{duplicate_number}{suffix}"
+                        )
+                        destination = output / filename
+                        try:
+                            os.link(temporary, destination)
+                            break
+                        except FileExistsError:
+                            duplicate_number += 1
+                        except OSError:
+                            # Filesystems without hard-link support still use an
+                            # exclusive create, so a concurrent run cannot overwrite.
+                            try:
+                                file_descriptor = os.open(
+                                    destination,
+                                    os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                                    0o600,
+                                )
+                            except FileExistsError:
+                                duplicate_number += 1
+                                continue
+                            try:
+                                with os.fdopen(file_descriptor, "wb") as target, temporary.open("rb") as source_stream:
+                                    shutil.copyfileobj(source_stream, target)
+                            except Exception:
+                                destination.unlink(missing_ok=True)
+                                raise
+                            break
+                    created.append(destination)
+                finally:
+                    temporary.unlink(missing_ok=True)
+            finally:
+                if image is not rendered:
+                    image = QImage()
+            if progress_callback is not None:
+                progress_callback(completed, len(render_plan))
         return created
     except Exception:
-        # Keep successful earlier outputs; report the error without silently deleting
-        # files the user may already have inspected.
+        # The operation owns every file in created; remove these outputs on failure
+        # so the destination folder never looks like a complete export when it is not.
+        for path in created:
+            path.unlink(missing_ok=True)
         raise
     finally:
         document.close()
