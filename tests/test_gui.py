@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -1715,3 +1716,22 @@ def test_stylesheet_has_wcag_aa_primary_contrast_and_disabled_feedback(qt_app: Q
         assert _contrast_ratio(muted.group(1), window_bg.group(1)) >= 4.5
         assert "QPushButton#primaryButton:disabled" in stylesheet
         assert "QPushButton#secondaryButton:disabled" in stylesheet
+
+
+def test_output_suffix_appends_without_replacing_dotted_filename() -> None:
+    assert _ensure_suffix(Path("relatorio 28.10.2026"), ".pdf") == Path("relatorio 28.10.2026.pdf")
+    assert _ensure_suffix(Path("contrato.v2"), ".pdf") == Path("contrato.v2.pdf")
+    assert _ensure_suffix(Path("relatorio.PDF"), ".pdf") == Path("relatorio.PDF")
+    assert _ensure_suffix(Path("perfil.v2"), ".json") == Path("perfil.v2.json")
+
+
+def test_gui_test_settings_and_history_use_isolated_paths(qt_app: QApplication) -> None:
+    window = DocumentToolsWindow()
+    try:
+        assert Path(window.settings.fileName()).is_relative_to(Path(os.environ["HOME"]))
+        assert window._batch_history_directory.is_relative_to(Path(os.environ["XDG_DATA_HOME"]))
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
