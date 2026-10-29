@@ -63,6 +63,7 @@ from document_tools.profiles import (
 )
 from document_tools.pdf_ops import (
     same_existing_file as _same_existing_file,
+    image_frame_count,
     convert_image,
     delete_pages,
     extract_pages,
@@ -1291,6 +1292,7 @@ TRANSLATIONS["en"].update({
     "Processamento local:": "Local processing:",
     "Qualidade JPEG precisa ficar entre 50 e 95.": "JPEG quality must be between 50 and 95.",
     "Selecione pelo menos um arquivo de origem.": "Select at least one source file.",
+    "{count} arquivo(s) tinham vários quadros; somente o primeiro foi convertido.": "{count} file(s) had multiple frames; only the first frame was converted.",
 })
 TRANSLATIONS["es"].update({
     "O PDF não possui páginas.": "El PDF no tiene páginas.",
@@ -1319,6 +1321,7 @@ TRANSLATIONS["es"].update({
     "Processamento local:": "Procesamiento local:",
     "Qualidade JPEG precisa ficar entre 50 e 95.": "La calidad JPEG debe estar entre 50 y 95.",
     "Selecione pelo menos um arquivo de origem.": "Selecciona al menos un archivo de origen.",
+    "{count} arquivo(s) tinham vários quadros; somente o primeiro foi convertido.": "{count} archivo(s) tenían varios fotogramas; solo se convirtió el primero.",
 })
 
 class ReorderPageDelegate(QStyledItemDelegate):
@@ -5319,8 +5322,15 @@ class DocumentToolsWindow(QMainWindow):
         def task() -> str:
             completed: list[Path] = []
             failures: list[str] = []
+            multi_frame_sources = 0
             for source_text in sources:
                 source = Path(source_text)
+                try:
+                    if image_frame_count(source) > 1:
+                        multi_frame_sources += 1
+                except Exception:
+                    # The conversion step below records the actionable input error.
+                    pass
                 destination = directory / f"{source.stem}{extension}"
                 suffix = 2
                 while destination.exists() or destination.resolve() == source.resolve():
@@ -5344,6 +5354,10 @@ class DocumentToolsWindow(QMainWindow):
             summary = self._t("{count} imagem(ns) convertida(s) em {directory}.").format(
                 count=len(completed), directory=directory
             )
+            if multi_frame_sources:
+                summary += " " + self._t(
+                    "{count} arquivo(s) tinham vários quadros; somente o primeiro foi convertido."
+                ).format(count=multi_frame_sources)
             if failures:
                 summary += self._t("Falhas: {count}.").format(count=len(failures)) + " " + " | ".join(failures[:3])
             if not completed:

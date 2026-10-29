@@ -34,6 +34,15 @@ MULTI_FRAME_FORMATS = {"GIF", "TIFF", "WEBP", "PNG"}
 MAX_DUPLICATE_PAGE_SELECTION = 100_000
 
 
+def image_frame_count(input_path: str | Path) -> int:
+    """Return meaningful image frames, excluding MPO's auxiliary JPEG frames."""
+    source = Path(input_path).expanduser()
+    with Image.open(source) as opened:
+        if opened.format not in MULTI_FRAME_FORMATS:
+            return 1
+        return max(1, int(getattr(opened, "n_frames", 1)))
+
+
 def parse_page_ranges(
     specification: str,
     page_count: int,
