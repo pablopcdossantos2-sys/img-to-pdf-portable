@@ -48,7 +48,8 @@ def test_workflow_has_bounded_jobs_and_protects_releases() -> None:
     assert workflow.count("timeout-minutes:") >= 5
     assert "Tag $GITHUB_REF_NAME does not match application version $expected." in workflow
     assert "already exists" in workflow
-    assert "cancel-in-progress: $" + "{{ github.event_name == 'pull_request' }}" in workflow
+    assert "cancel-in-progress: " + "${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[create-release]')) }}" in workflow
+    assert "&& 'release' || 'routine'" in workflow
 
 
 def test_third_party_notice_generator_lists_runtime_dependencies() -> None:
