@@ -1250,6 +1250,15 @@ TRANSLATIONS["es"].update({
         "Falhas: {count}.": "Fallos: {count}.",
 })
 
+TRANSLATIONS["en"].update({
+    "Criando PDF a partir das imagens…": "Creating PDF from images…",
+    "Escolha uma senha por PDF ou deixe a senha como None.": "Choose a password for each PDF or leave it as None.",
+})
+TRANSLATIONS["es"].update({
+    "Criando PDF a partir das imagens…": "Creando PDF a partir de las imágenes…",
+    "Escolha uma senha por PDF ou deixe a senha como None.": "Elige una contraseña para cada PDF o déjala como None.",
+})
+
 for _language, _table in TRANSLATIONS.items():
     _clean_table = {}
     for _key, _value in _table.items():
