@@ -2611,9 +2611,14 @@ class DocumentToolsWindow(QMainWindow):
             self.image_dpi.setValue(150)
             return
 
-        recommended = recommend_dpi_from_images(
-            sources, margin_mm=self.image_margin.value()
-        )
+        try:
+            recommended = recommend_dpi_from_images(
+                sources, margin_mm=self.image_margin.value()
+            )
+        except Exception:
+            # DPI is only a convenience suggestion; malformed/oversized images
+            # must not break adding, removing, or reordering the source list.
+            recommended = None
         if recommended is None:
             if self.image_dpi.value() == previous_auto:
                 self.image_dpi.setValue(150)
