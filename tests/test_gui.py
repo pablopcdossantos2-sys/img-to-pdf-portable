@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from types import SimpleNamespace
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -1745,6 +1746,49 @@ def test_choose_output_pdf_preserves_dotted_filename(qt_app: QApplication, monke
     try:
         assert window._choose_output_pdf("x.pdf") == str((tmp_path / "relatorio 28.10.2026.pdf").resolve())
     finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()
+
+
+def test_close_with_active_batch_offers_cancel_and_requests_it(qt_app: QApplication, monkeypatch: pytest.MonkeyPatch) -> None:
+    window = DocumentToolsWindow()
+    control = BatchControl()
+    control.pause()
+    assert control.is_paused
+
+    class FakeCloseEvent:
+        ignored = False
+        accepted = False
+
+        def ignore(self) -> None:
+            self.ignored = True
+
+        def accept(self) -> None:
+            self.accepted = True
+
+    event = FakeCloseEvent()
+    window._folder_batch_running = True
+    window._batch_control = control
+    window._worker = SimpleNamespace(isRunning=lambda: True)
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
+    )
+    try:
+        window.closeEvent(event)
+        assert event.ignored
+        assert not event.accepted
+        assert not control.is_paused
+        assert not control.wait_until_resumed()
+        assert window._close_when_idle
+    finally:
+        window._worker = None
+        window._folder_batch_running = False
+        window._batch_control = None
+        window._close_when_idle = False
         window.close()
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
