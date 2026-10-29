@@ -1414,9 +1414,34 @@ def test_normalise_i_mode_preserves_existing_8bit_tones() -> None:
         normalized = pdf_ops._normalise_high_bit_depth(source)
         try:
             assert normalized.mode == "L"
-            assert list(normalized.getdata()) == [50, 100, 200]
+            assert list(normalized.get_flattened_data()) == [50, 100, 200]
         finally:
             if normalized is not source:
                 normalized.close()
     finally:
         source.close()
+
+
+def test_image_frame_count_reports_real_frames_and_ignores_mpo(tmp_path: Path) -> None:
+    frames = [Image.new("RGB", (20, 16), color) for color in ("red", "green", "blue")]
+    try:
+        gif = tmp_path / "animated.gif"
+        frames[0].save(gif, format="GIF", save_all=True, append_images=frames[1:], duration=100)
+        assert pdf_ops.image_frame_count(gif) == 3
+
+        tiff = tmp_path / "multipage.tif"
+        frames[0].save(tiff, format="TIFF", save_all=True, append_images=frames[1:2])
+        assert pdf_ops.image_frame_count(tiff) == 2
+
+        mpo = tmp_path / "camera.jpg"
+        try:
+            frames[0].save(mpo, format="MPO", save_all=True, append_images=[frames[1]])
+        except (OSError, ValueError) as error:
+            pytest.skip(f"Pillow cannot create MPO fixtures here: {error}")
+        with Image.open(mpo) as opened:
+            if opened.format != "MPO" or getattr(opened, "n_frames", 1) < 2:
+                pytest.skip("This Pillow build does not expose auxiliary MPO frames.")
+        assert pdf_ops.image_frame_count(mpo) == 1
+    finally:
+        for frame in frames:
+            frame.close()

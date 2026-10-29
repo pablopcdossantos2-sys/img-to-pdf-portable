@@ -65,3 +65,11 @@ def test_translation_tables_are_symmetric_and_have_no_invisible_keys() -> None:
     spanish = TRANSLATIONS["es"]
     assert set(english) == set(spanish)
     assert all("\u200b" not in key for key in (*english.keys(), *spanish.keys()))
+
+
+def test_frame_conversion_warning_is_translated_in_both_languages() -> None:
+    from document_tools.gui import TRANSLATIONS
+
+    source = "{count} arquivo(s) tinham vários quadros; somente o primeiro foi convertido."
+    assert source in TRANSLATIONS["en"]
+    assert source in TRANSLATIONS["es"]

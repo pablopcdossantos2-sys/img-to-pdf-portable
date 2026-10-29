@@ -68,3 +68,24 @@ def test_library_value_error_details_are_not_echoed() -> None:
         message = friendly_error_message(caught)
     assert "Image size exceeds" not in message
     assert "detalhes internos" in message
+
+
+def test_pillow_origin_oserror_is_described_as_an_image_problem() -> None:
+    namespace = {"__name__": "PIL.ImageFile"}
+    code = compile(
+        "def fail():\n    raise OSError('image file is truncated')\n",
+        "/usr/local/lib/python/site-packages/PIL/ImageFile.py",
+        "exec",
+    )
+    exec(code, namespace)
+    try:
+        namespace["fail"]()
+    except OSError as error:
+        message = friendly_error_message(error)
+    assert "imagem" in message.lower()
+    assert "truncated" not in message.lower()
+
+
+def test_not_a_directory_error_is_actionable() -> None:
+    message = friendly_error_message(NotADirectoryError())
+    assert "caminho" in message.lower() or "pasta" in message.lower()
