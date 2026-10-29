@@ -5235,8 +5235,10 @@ class DocumentToolsWindow(QMainWindow):
     def _add_convert_images(self) -> None:
         paths = self._choose_multiple("Escolher imagens para converter", IMAGE_FILTER)
         added = self._add_paths(self.convert_list, paths)
-        status = self._t("{added} imagem(ns) adicionada(s).").format(added=added) if added else self._t("Nenhuma imagem nova adicionada.")
-        self._set_status(status)
+        if added:
+            self._set_status("{added} imagem(ns) adicionada(s).", added=added)
+        else:
+            self._set_status("Nenhuma imagem nova adicionada.")
 
     def _select_convert_directory(self) -> None:
         path = self._choose_directory("Escolher pasta para salvar as imagens")
