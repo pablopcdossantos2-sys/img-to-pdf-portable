@@ -30,8 +30,25 @@ QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(_CO
 # explicitly and ignores setDefaultFormat(). Redirect only the application's
 # constructor during tests so real HKCU preferences can never be read or changed.
 from document_tools import gui as _gui_module
+from PySide6.QtCore import QStandardPaths as _QStandardPaths
+
+_DATA_ROOT.mkdir(exist_ok=True)
+(_DATA_ROOT / "appdata").mkdir(exist_ok=True)
+(_CONFIG_ROOT / "appconfig").mkdir(exist_ok=True)
 
 _QSettings = QSettings
+
+
+class _IsolatedStandardPaths:
+    StandardLocation = _QStandardPaths.StandardLocation
+
+    @staticmethod
+    def writableLocation(location):
+        if location == _QStandardPaths.StandardLocation.AppDataLocation:
+            return str(_DATA_ROOT / "appdata")
+        if location == _QStandardPaths.StandardLocation.AppConfigLocation:
+            return str(_CONFIG_ROOT / "appconfig")
+        return _QStandardPaths.writableLocation(location)
 
 
 def _isolated_qsettings(*args, **kwargs):
@@ -46,6 +63,7 @@ def _isolated_qsettings(*args, **kwargs):
 
 
 _gui_module.QSettings = _isolated_qsettings
+_gui_module.QStandardPaths = _IsolatedStandardPaths
 
 
 @atexit.register
