@@ -1405,3 +1405,18 @@ def test_same_existing_file_detects_aliases_and_distinct_files(tmp_path: Path) -
     assert pdf_ops.same_existing_file(target, alias)
     assert not pdf_ops.same_existing_file(target, distinct)
     assert not pdf_ops.same_existing_file(target, tmp_path / "missing.txt")
+
+
+def test_normalise_i_mode_preserves_existing_8bit_tones() -> None:
+    source = Image.new("I", (3, 1))
+    source.putdata([50, 100, 200])
+    try:
+        normalized = pdf_ops._normalise_high_bit_depth(source)
+        try:
+            assert normalized.mode == "L"
+            assert list(normalized.getdata()) == [50, 100, 200]
+        finally:
+            if normalized is not source:
+                normalized.close()
+    finally:
+        source.close()

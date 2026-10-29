@@ -359,20 +359,32 @@ def _normalise_high_bit_depth(image: Image.Image) -> Image.Image:
     if image.mode.startswith("I;16"):
         grayscale = image.convert("I")
         try:
-            return grayscale.point(lambda value: value / 257).convert("L")
+            bits = None
+            tags = getattr(image, "tag_v2", None)
+            if tags is not None:
+                bits = tags.get(258)  # TIFF BitsPerSample; may be a tuple.
+                if isinstance(bits, tuple):
+                    bits = bits[0] if bits else None
+            maximum = (1 << bits) - 1 if isinstance(bits, int) and 1 <= bits <= 16 else 65535
+            return grayscale.point(
+                lambda value: max(0, min(255, round(value * 255 / maximum)))
+            ).convert("L")
         finally:
             grayscale.close()
     if image.mode in {"I", "F"}:
         low, high = image.getextrema()
         if not (float(low) == float(low) and float(high) == float(high)):
             return Image.new("L", image.size, 0)
+        if image.mode == "I" and 0 <= low <= high <= 255:
+            # Keep ordinary 8-bit sample values unchanged; don't auto-stretch them.
+            return image.convert("L")
+        if image.mode == "I" and 0 <= low <= high <= 65535:
+            return image.point(lambda value: value / 257).convert("L")
         if high > low:
-            # Normalize by this image's dynamic range. This preserves ordinary
-            # 0..255 values in Pillow's "I" mode instead of crushing them to black.
+            # Floating-point and wider integer rasters without declared bit depth
+            # are mapped linearly across their observed dynamic range.
             scale = 255.0 / float(high - low)
             return image.point(lambda value: (value - low) * scale).convert("L")
-        if image.mode == "I" and 0 <= low <= 65535:
-            return Image.new("L", image.size, round(float(low) / 257))
         return Image.new("L", image.size, 0)
     return image
 
@@ -390,6 +402,11 @@ def _convert_embedded_profile_to_srgb(image: Image.Image) -> Image.Image:
         if has_alpha:
             working = image.convert("RGBA")
             alpha = working.getchannel("A")
+        # Keep CMYK/gray/Lab samples in their profile's native mode; converting
+        # them to RGB before applying their ICC profile would misinterpret colors.
+        if image.mode in {"RGB", "CMYK", "L", "LAB"} and not has_alpha:
+            rgb = image.copy()
+        elif working is not None:
             rgb = working.convert("RGB")
         else:
             rgb = image.convert("RGB")
