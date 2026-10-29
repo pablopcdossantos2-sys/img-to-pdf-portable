@@ -111,3 +111,10 @@ O executável será criado em `dist/PDFHub.exe`. Para verificar se o pacote inic
 ```
 
 A opção `--selftest` cria a interface em modo sem janela visível e encerra com código de sucesso se a inicialização funcionar.
+
+## Notas de distribuição
+
+- Linux (Debian/Ubuntu): se o aplicativo não carregar o plugin de plataforma Qt xcb, instale as bibliotecas necessárias, incluindo libxcb-cursor0 (por exemplo, sudo apt install libxcb-cursor0). Outras distribuições podem usar nomes diferentes.
+- Para criar uma release pela main, inclua [create-release] na mensagem do commit e atualize document_tools/__init__.py antes da publicação. O workflow recusa tags incompatíveis com a versão do aplicativo e não substitui releases existentes.
+- Para ler o código de saída do selftest no Windows, execute: $p = Start-Process -Wait -PassThru -FilePath .\dist\PDFHub.exe -ArgumentList '--selftest'; $p.ExitCode. Em caso de falha, consulte %TEMP%\pdf-hub-selftest.log.
+- Os pacotes incluem THIRD-PARTY-NOTICES.txt, gerado a partir dos arquivos de licença encontrados nas dependências instaladas para o build.

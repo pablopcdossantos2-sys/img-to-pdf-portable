@@ -50,17 +50,17 @@ if exist ".venv\Scripts\python.exe" (
 
 echo [2/3] Instalando ou atualizando dependencias...
 ".venv\Scripts\python.exe" -m pip install --upgrade pip
-if errorlevel 1 (
-    echo Falha ao atualizar o pip.
-    pause
-    exit /b 1
-)
+if errorlevel 1 echo Aviso: nao foi possivel atualizar o pip; continuando com o ambiente atual.
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 (
-    echo Falha ao instalar as dependencias.
-    echo Confira a conexao com a internet e tente novamente.
-    pause
-    exit /b 1
+    ".venv\Scripts\python.exe" -c "import PySide6, pypdf, PIL, cryptography, reportlab" >nul 2>nul
+    if errorlevel 1 (
+        echo Falha ao instalar as dependencias.
+        echo Confira a conexao com a internet e tente novamente.
+        pause
+        exit /b 1
+    )
+    echo Aviso: sem conexao, usando as dependencias que ja estavam instaladas.
 )
 
 echo [3/3] Abrindo o aplicativo...

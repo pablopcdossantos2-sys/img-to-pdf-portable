@@ -24,3 +24,8 @@ Referências:
 - https://pypi.org/project/pillow/
 - https://pypi.org/project/reportlab/
 - https://pypi.org/project/pyinstaller/
+
+
+## Distributed notice file
+
+Windows, Linux and macOS packages also include THIRD-PARTY-NOTICES.txt, generated from license files present in the installed runtime distributions. Keep it alongside the binary when redistributing a package. This generated file supplements this index; review obligations for the exact Qt and other third-party components included in each build.
