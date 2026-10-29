@@ -407,7 +407,7 @@ def _normalise_high_bit_depth(image: Image.Image) -> Image.Image:
 
 
 def _convert_embedded_profile_to_srgb(image: Image.Image) -> Image.Image:
-    """Convert tagged pixels to sRGB before embedding them in a DeviceRGB PDF."""
+    """Convert valid tagged pixels to sRGB; ignore invalid profiles without aborting."""
     profile_bytes = image.info.get("icc_profile")
     if not profile_bytes:
         return image.copy()
@@ -438,10 +438,10 @@ def _convert_embedded_profile_to_srgb(image: Image.Image) -> Image.Image:
             converted.close()
             return result
         return converted
-    except (ImageCms.PyCMSError, OSError, ValueError) as error:
-        raise ValueError(
-            "O perfil de cor incorporado na imagem não pôde ser interpretado."
-        ) from error
+    except (ImageCms.PyCMSError, OSError, ValueError):
+        # A malformed or unsupported ICC profile should not make an otherwise
+        # readable image impossible to convert; preserve its decoded pixel values.
+        return image.copy()
     finally:
         if alpha is not None:
             alpha.close()

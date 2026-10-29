@@ -5,7 +5,7 @@ from pathlib import Path
 import random
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageCms
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as reportlab_canvas
@@ -1460,3 +1460,30 @@ def test_images_to_pdf_rejects_decompression_bomb_warning(
         images_to_pdf([source], output, dpi=72)
 
     assert not output.exists()
+
+
+def test_images_to_pdf_icc_conversion_keeps_srgb_pixels_unchanged() -> None:
+    source = Image.new("RGB", (2, 2), (20, 80, 160))
+    profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+    source.info["icc_profile"] = profile
+    try:
+        converted = pdf_ops._convert_embedded_profile_to_srgb(source)
+        try:
+            assert converted.getpixel((0, 0)) == (20, 80, 160)
+        finally:
+            converted.close()
+    finally:
+        source.close()
+
+
+def test_images_to_pdf_ignores_invalid_icc_profile() -> None:
+    source = Image.new("RGB", (2, 2), (20, 80, 160))
+    source.info["icc_profile"] = b"not a valid ICC profile"
+    try:
+        converted = pdf_ops._convert_embedded_profile_to_srgb(source)
+        try:
+            assert converted.getpixel((0, 0)) == (20, 80, 160)
+        finally:
+            converted.close()
+    finally:
+        source.close()
