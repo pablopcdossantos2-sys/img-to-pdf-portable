@@ -38,7 +38,7 @@ def test_readmes_share_structure_and_document_distribution_requirements() -> Non
 
 def test_workflow_actions_are_pinned_to_full_commit_sha() -> None:
     workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
-    uses = re.findall(r"^[ \t]*uses:[ \t]+([^ \t]+)", workflow, flags=re.MULTILINE)
+    uses = re.findall(r"^[ \t]*(?:-[ \t]*)?uses:[ \t]+([^ \t]+)", workflow, flags=re.MULTILINE)
     assert uses
     assert all(re.fullmatch(r"[^@]+@[0-9a-f]{40}", item) for item in uses)
 
