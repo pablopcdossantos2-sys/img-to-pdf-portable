@@ -1,27 +1,40 @@
 from __future__ import annotations
 
+import atexit
 import os
+import shutil
+import tempfile
+from pathlib import Path
 
 import pytest
 
+_TEST_ROOT = Path(tempfile.mkdtemp(prefix="pdf-hub-test-user-state-"))
+_CONFIG_ROOT = _TEST_ROOT / "config"
+_DATA_ROOT = _TEST_ROOT / "data"
+_CONFIG_ROOT.mkdir()
+_DATA_ROOT.mkdir()
 
-@pytest.fixture(scope="session", autouse=True)
-def isolated_pdf_hub_user_state(tmp_path_factory: pytest.TempPathFactory):
-    """Keep GUI tests away from the actual user's settings and batch reports."""
-    root = tmp_path_factory.mktemp("pdf-hub-user-state")
-    config = root / "config"
-    data = root / "data"
-    config.mkdir()
-    data.mkdir()
-    os.environ["HOME"] = str(root)
-    os.environ["XDG_CONFIG_HOME"] = str(config)
-    os.environ["XDG_DATA_HOME"] = str(data)
-    os.environ["APPDATA"] = str(config)
-    os.environ["LOCALAPPDATA"] = str(data)
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# Configure paths before pytest imports tests that load Qt or QStandardPaths.
+os.environ["HOME"] = str(_TEST_ROOT)
+os.environ["XDG_CONFIG_HOME"] = str(_CONFIG_ROOT)
+os.environ["XDG_DATA_HOME"] = str(_DATA_ROOT)
+os.environ["APPDATA"] = str(_CONFIG_ROOT)
+os.environ["LOCALAPPDATA"] = str(_DATA_ROOT)
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+
+def pytest_sessionstart(session) -> None:
     from PySide6.QtCore import QSettings
 
     QSettings.setDefaultFormat(QSettings.Format.IniFormat)
-    QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(config))
-    yield root
+    QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(_CONFIG_ROOT))
+
+
+@atexit.register
+def _cleanup_test_state() -> None:
+    shutil.rmtree(_TEST_ROOT, ignore_errors=True)
+
+
+@pytest.fixture(scope="session")
+def isolated_user_state() -> Path:
+    return _TEST_ROOT
