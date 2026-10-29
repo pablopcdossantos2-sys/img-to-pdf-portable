@@ -20,7 +20,7 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, desenvolvido co
 - **Excluir páginas:** remove páginas específicas ou intervalos, como `2, 4-6, 9`, gerando um novo PDF e preservando o original. Aceita senha para documentos protegidos e impede a exclusão de todas as páginas.
 - **Girar páginas:** rotação em 90°, 180° ou 270°, em todas as páginas ou somente nas selecionadas, inclusive em PDFs protegidos por senha.
 - **Dividir PDF:** oferece um arquivo por página, grupos de N páginas, quebra após páginas selecionadas, quebra após páginas pares ou ímpares, tamanho aproximado e divisão por marcadores do sumário com nível/filtro opcional. Cria a pasta se necessário, aceita senha, preserva estruturas compatíveis quando possível e nunca substitui arquivos existentes. O tamanho é estimado; uma página pode exceder o limite.
-- **PDF para imagens:** exporta todas as páginas ou apenas intervalos selecionados em PNG ou JPEG, com resolução ajustável (72–600 DPI), qualidade JPEG configurável, suporte a senha e nomes que evitam sobrescrever arquivos existentes.
+- **PDF para imagens:** exporta todas as páginas ou apenas intervalos selecionados em PNG ou JPEG, com resolução ajustável (72–600 DPI), qualidade JPEG configurável, suporte a senha e nomes que evitam sobrescrever arquivos existentes. A exportação mostra o progresso, pode ser cancelada e remove os arquivos gerados pela operação se houver falha.
 - **Reordenar páginas com miniaturas e prévia:** cada página aparece como miniatura numa grade; arraste para mudar a ordem e confira a página selecionada no painel de prévia. As miniaturas são geradas em segundo plano e acompanham a página original. Cada página precisa permanecer exatamente uma vez.
 - **Marca d'água e numeração seletivas:** adicione texto, numeração ou ambos a todas as páginas ou apenas a intervalos (por exemplo, `2-4, 7`). Ao selecionar um intervalo, a numeração continua indicando a posição original no documento. O conteúdo original não é rasterizado.
 - **Otimizar PDF:** modo sem perdas para comprimir streams e remover objetos repetidos; modo equilibrado para recomprimir imagens opacas em JPEG com qualidade ajustável. Imagens com transparência e imagens inline são mantidas sem recompressão. Em PDFs criptografados, a saída é regravada sem herdar a criptografia original, mesmo se isso aumentar o tamanho; o aplicativo não devolve silenciosamente o original criptografado como alternativa.
@@ -31,7 +31,7 @@ Aplicativo desktop para trabalhar com PDFs e imagens localmente, desenvolvido co
 ### Imagens
 - **Converter em lote:** JPEG, PNG, WEBP, BMP e TIFF.
 - **Redimensionar:** limites opcionais de largura e altura em pixels, preservando a proporção e sem ampliar imagens pequenas.
-- **Qualidade:** controle JPEG/WEBP e preservação de perfis ICC quando compatíveis com o modo de cor de destino.
+- **Qualidade:** controle JPEG/WEBP e preservação de perfis ICC quando compatíveis com o modo de cor de destino. Ao gerar PDFs, perfis ICC válidos são convertidos para sRGB; perfis inválidos não interrompem a conversão. Ao converter GIF/TIFF/WEBP/PNG animados para um formato de quadro único, o aplicativo avisa que somente o primeiro quadro será usado.
 - **CMYK e transparência:** modos que não são aceitos pelo formato de destino são convertidos para formatos compatíveis; a transparência para JPEG/BMP é composta sobre fundo branco.
 
 ### Usabilidade, privacidade e robustez

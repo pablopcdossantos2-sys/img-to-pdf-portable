@@ -21,7 +21,7 @@ A desktop application for working with PDF files and images locally, built with 
 - **Delete pages:** remove selected pages or ranges, such as `2, 4-6, 9`, into a new PDF while preserving the original. Supports password-protected documents and prevents deleting every page.
 - **Rotate pages:** rotate by 90°, 180°, or 270°, across the whole document or selected pages, including password-protected PDFs.
 - **Split PDF:** supports one file per page, groups of N pages, breaks after selected/even/odd pages, approximate target size, and bookmarks with a selected level and optional regular-expression filter. Creates the output folder if needed, accepts a password, preserves compatible structures where possible, and never overwrites existing files. Size is estimated; a single page can exceed the target.
-- **PDF to images:** export all pages or selected ranges as PNG or JPEG, with adjustable resolution (72–600 DPI), configurable JPEG quality, password support, and filenames that avoid overwriting existing files.
+- **PDF to images:** export all pages or selected ranges as PNG or JPEG, with adjustable resolution (72–600 DPI), configurable JPEG quality, password support, and filenames that avoid overwriting existing files. Export progress is shown, the operation can be cancelled, and files created by a failed run are removed.
 - **Reorder pages with thumbnails and preview:** every page appears as a thumbnail in a grid; drag to change the order and inspect the selected page in the preview panel. Thumbnails render in the background and track the original page; every page must appear exactly once.
 - **Selective watermarks and page numbers:** apply text, numbering, or both to all pages or only selected ranges (for example, `2-4, 7`). Numbering retains the page's original position in the document. Original content is not rasterized.
 - **Optimize PDF:** choose lossless stream compression/deduplication or balanced JPEG recompression of opaque raster images with adjustable quality. Transparent and inline images are left unchanged. For encrypted inputs, the output is rewritten without inheriting the source encryption even when that increases file size; the app will not silently return the original encrypted file as a fallback.
@@ -33,7 +33,7 @@ A desktop application for working with PDF files and images locally, built with 
 
 - **Batch conversion:** JPEG, PNG, WEBP, BMP, and TIFF.
 - **Resize:** optional maximum width and height in pixels, preserving aspect ratio and avoiding enlargement of smaller images.
-- **Quality controls:** JPEG/WEBP quality setting and ICC profile preservation when compatible with the destination color mode.
+- **Quality controls:** JPEG/WEBP quality setting and ICC profile preservation when compatible with the destination color mode. When creating PDFs, valid embedded ICC profiles are converted to sRGB; invalid profiles do not abort conversion. Converting animated GIF/TIFF/WEBP/PNG to a single-frame format displays a warning that only the first frame will be used.
 - **CMYK and transparency:** convert color modes that are unsupported by the destination format; transparency is composited onto white when exporting to JPEG/BMP.
 
 ### Usability, privacy, and reliability
