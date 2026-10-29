@@ -118,7 +118,7 @@ def selftest() -> int:
             if "PDF Hub" not in PdfReader(stream).pages[0].extract_text():
                 return _selftest_failure(5, "optimized PDF text integrity")
 
-        for image_format, extension in ((\"JPEG\", \".jpg\"), (\"WEBP\", \".webp\"), (\"TIFF\", \".tif\")):
+        for image_format, extension in (("JPEG", ".jpg"), ("WEBP", ".webp"), ("TIFF", ".tif")):
             converted = convert_image(image_path, root / f"converted{extension}", image_format, quality=80)
             with Image.open(converted) as check:
                 check.load()
