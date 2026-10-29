@@ -1644,8 +1644,8 @@ def test_translation_keys_are_clean_and_backend_errors_translate(qt_app: QApplic
     invisible = ("\u200b", "\u200c", "\u200d", "\ufeff")
     for language in ("en", "es"):
         assert all(key == key.strip() for key in TRANSLATIONS[language])
-    assert set(TRANSLATIONS["en"]) == set(TRANSLATIONS["es"])
         assert not any(char in key for key in TRANSLATIONS[language] for char in invisible)
+    assert set(TRANSLATIONS["en"]) == set(TRANSLATIONS["es"])
     window = DocumentToolsWindow()
     try:
         window.language_combo.setCurrentIndex(window.language_combo.findData("en"))
