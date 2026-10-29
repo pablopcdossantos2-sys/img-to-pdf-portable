@@ -11,7 +11,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Callable, Sequence
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageCms, ImageOps
 from pypdf import PdfReader, PdfWriter, Transformation
 from pypdf.generic import (
     ArrayObject,
@@ -22,6 +22,7 @@ from pypdf.generic import (
     RectangleObject,
     StreamObject,
 )
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
@@ -372,6 +373,46 @@ def _normalise_high_bit_depth(image: Image.Image) -> Image.Image:
     return image
 
 
+def _convert_embedded_profile_to_srgb(image: Image.Image) -> Image.Image:
+    """Convert tagged pixels to sRGB before embedding them in a DeviceRGB PDF."""
+    profile_bytes = image.info.get("icc_profile")
+    if not profile_bytes:
+        return image.copy()
+    alpha = None
+    working = None
+    rgb = None
+    try:
+        has_alpha = image.mode in ALPHA_MODES or "transparency" in image.info
+        if has_alpha:
+            working = image.convert("RGBA")
+            alpha = working.getchannel("A")
+            rgb = working.convert("RGB")
+        else:
+            rgb = image.convert("RGB")
+        source_profile = ImageCms.ImageCmsProfile(BytesIO(profile_bytes))
+        srgb_profile = ImageCms.createProfile("sRGB")
+        converted = ImageCms.profileToProfile(
+            rgb, source_profile, srgb_profile, outputMode="RGB"
+        )
+        if alpha is not None:
+            result = converted.convert("RGBA")
+            result.putalpha(alpha)
+            converted.close()
+            return result
+        return converted
+    except (ImageCms.PyCMSError, OSError, ValueError) as error:
+        raise ValueError(
+            "O perfil de cor incorporado na imagem não pôde ser interpretado."
+        ) from error
+    finally:
+        if alpha is not None:
+            alpha.close()
+        if working is not None:
+            working.close()
+        if rgb is not None:
+            rgb.close()
+
+
 def _flatten_to_rgb(image: Image.Image) -> Image.Image:
     """Composite transparency over white and return an independent RGB image."""
     normalized = _normalise_high_bit_depth(image)
@@ -407,12 +448,13 @@ def _resize_to_a4(image: Image.Image, *, dpi: int, margin_mm: float) -> Image.Im
     if min(available) < 1:
         raise ValueError("As margens não deixam espaço suficiente na página.")
     image.thumbnail(available, Image.Resampling.LANCZOS)
-    canvas = Image.new("RGB", (page_width, page_height), "white")
-    canvas.paste(
+    page_mode = "L" if image.mode == "L" else "RGB"
+    page_canvas = Image.new(page_mode, (page_width, page_height), "white")
+    page_canvas.paste(
         image,
         ((page_width - image.width) // 2, (page_height - image.height) // 2),
     )
-    return canvas
+    return page_canvas
 
 
 def images_to_pdf(
@@ -461,21 +503,62 @@ def images_to_pdf(
                     for frame_index in frame_indexes:
                         opened.seek(frame_index)
                         oriented = ImageOps.exif_transpose(opened)
+                        managed = None
+                        image = None
+                        page_image = None
                         try:
-                            image = _flatten_to_rgb(oriented)
+                            managed = (
+                                _convert_embedded_profile_to_srgb(oriented)
+                                if oriented.info.get("icc_profile")
+                                else oriented.copy()
+                            )
+                            normalized = _normalise_high_bit_depth(managed)
+                            if normalized is not managed:
+                                managed.close()
+                                managed = normalized
+                            has_alpha = managed.mode in ALPHA_MODES or "transparency" in managed.info
+                            if has_alpha:
+                                image = _flatten_to_rgb(managed)
+                            elif managed.mode == "L":
+                                image = managed.copy()
+                            elif managed.mode == "1":
+                                image = managed.convert("L")
+                            else:
+                                image = managed.convert("RGB")
+                            page_image = _resize_to_a4(image, dpi=dpi, margin_mm=margin_mm)
                         finally:
+                            if page_image is None and image is not None:
+                                image.close()
+                            if managed is not None:
+                                managed.close()
                             if oriented is not opened:
                                 oriented.close()
-                        try:
-                            canvas = _resize_to_a4(image, dpi=dpi, margin_mm=margin_mm)
-                        finally:
-                            image.close()
                         page_number += 1
                         page_pdf = page_directory / f"page-{page_number:06d}.pdf"
+                        # PNG/other sources are embedded losslessly with Flate; JPEG
+                        # sources keep a JPEG stream rather than being decoded and
+                        # recompressed through Pillow's PDF writer.
+                        raster_format = "JPEG" if opened.format == "JPEG" else "PNG"
+                        raster_path = page_directory / (
+                            f"page-{page_number:06d}."
+                            + ("jpg" if raster_format == "JPEG" else "png")
+                        )
                         try:
-                            canvas.save(page_pdf, format="PDF", resolution=dpi, quality=95)
+                            save_options = {"quality": 95, "optimize": True} if raster_format == "JPEG" else {"optimize": True}
+                            page_image.save(raster_path, format=raster_format, **save_options)
+                            page_width_pt = page_image.width * 72.0 / dpi
+                            page_height_pt = page_image.height * 72.0 / dpi
+                            pdf_page = canvas.Canvas(
+                                str(page_pdf), pagesize=(page_width_pt, page_height_pt)
+                            )
+                            pdf_page.drawImage(
+                                ImageReader(str(raster_path)),
+                                0, 0, width=page_width_pt, height=page_height_pt,
+                            )
+                            pdf_page.showPage()
+                            pdf_page.save()
                         finally:
-                            canvas.close()
+                            page_image.close()
                         with page_pdf.open("rb") as page_stream:
                             page_reader = PdfReader(page_stream, strict=False)
                             writer.add_page(page_reader.pages[0])
