@@ -544,7 +544,7 @@ TRANSLATIONS = {
         "Pronto. Selecione uma operação acima.": "Listo. Selecciona una operación arriba.",
         "Abrir pasta": "Abrir carpeta",
         "Não foi possível acessar ou salvar o arquivo. Confira as permissões e feche o documento em outros programas.": "No se pudo acceder o guardar el archivo. Comprueba los permisos y cierra el documento en otras aplicaciones.",
-        "O arquivo ou a pasta não foi encontrado. Confira o caminho e tente novamente.": "No se encontró el archivo o la carpeta. Comprueba la ruta.",
+        "O arquivo ou a pasta não foi encontrado. Confira o caminho e tente novamente.": "El archivo o la carpeta no se encontró. Comprueba la ruta e inténtalo de nuevo.",
         "A imagem é inválida, muito grande para processar com segurança ou usa um formato não suportado.": "La imagen no es válida, es demasiado grande para procesarla de forma segura o usa un formato no compatible.",
         "Não foi possível interpretar o PDF. Ele pode estar danificado ou protegido por senha.": "No se pudo leer el PDF. Puede estar dañado o protegido por contraseña.",
         "Adicionar imagens": "Añadir imágenes",
