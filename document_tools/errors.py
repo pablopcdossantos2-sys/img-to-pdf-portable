@@ -44,7 +44,11 @@ def friendly_error_message(error: Exception) -> str:
         return "Falta uma dependência necessária para abrir este PDF criptografado. Reinstale o PDF Hub usando o pacote oficial."
     if origin == "PIL" or error_type in {"UnidentifiedImageError", "DecompressionBombError"}:
         return "A imagem não pôde ser processada. Verifique se o arquivo está íntegro, não excede os limites de segurança e usa um formato compatível."
-    if error_type in {"WrongPasswordError", "FileNotDecryptedError"} or origin == "pypdf":
+    if (
+        error_type in {"WrongPasswordError", "FileNotDecryptedError"}
+        or origin == "pypdf"
+        or module_name.startswith("pypdf")
+    ):
         return "O PDF contém uma estrutura não suportada ou está danificado. Tente salvar uma nova cópia do PDF antes de processar."
     if origin == "reportlab":
         return "Não foi possível gerar o PDF com o conteúdo informado. Verifique os textos, fontes e caracteres usados."
