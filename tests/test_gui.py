@@ -1793,3 +1793,20 @@ def test_close_with_active_batch_offers_cancel_and_requests_it(qt_app: QApplicat
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         qt_app.processEvents()
+
+
+def test_pdf_export_cancel_control_is_hidden_by_default_and_translated(
+    qt_app: QApplication,
+) -> None:
+    window = DocumentToolsWindow()
+    try:
+        assert not window.cancel_operation_button.isVisible()
+        window.language_combo.setCurrentIndex(window.language_combo.findData("en"))
+        assert window.cancel_operation_button.text() == "Cancel operation"
+        window.language_combo.setCurrentIndex(window.language_combo.findData("es"))
+        assert window.cancel_operation_button.text() == "Cancelar operación"
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt_app.processEvents()

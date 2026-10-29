@@ -73,3 +73,12 @@ def test_frame_conversion_warning_is_translated_in_both_languages() -> None:
     source = "{count} arquivo(s) tinham vários quadros; somente o primeiro foi convertido."
     assert source in TRANSLATIONS["en"]
     assert source in TRANSLATIONS["es"]
+
+
+def test_page_export_cancel_messages_are_translated_in_both_languages() -> None:
+    from document_tools.gui import TRANSLATIONS
+
+    assert TRANSLATIONS["en"]["Cancelar operação"] == "Cancel operation"
+    assert TRANSLATIONS["es"]["Cancelar operação"] == "Cancelar operación"
+    assert TRANSLATIONS["en"]["Exportação cancelada."] == "Export cancelled."
+    assert TRANSLATIONS["es"]["Exportação cancelada."] == "Exportación cancelada."

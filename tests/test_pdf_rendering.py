@@ -81,3 +81,24 @@ def test_rendering_can_be_cancelled_before_creating_outputs(tmp_path: Path) -> N
     with pytest.raises(RuntimeError, match="cancelada"):
         export_pdf_pages_to_images(source, output, should_cancel=lambda: True)
     assert list(output.iterdir()) == []
+
+
+def test_pdf_rendering_emits_progress_callback(tmp_path: Path) -> None:
+    source = tmp_path / "progress.pdf"
+    output = tmp_path / "images"
+    output.mkdir()
+    writer = PdfWriter()
+    writer.add_blank_page(width=100, height=100)
+    writer.add_blank_page(width=100, height=100)
+    with source.open("wb") as stream:
+        writer.write(stream)
+
+    progress: list[tuple[int, int]] = []
+    exported = export_pdf_pages_to_images(
+        source,
+        output,
+        dpi=72,
+        progress_callback=lambda completed, total: progress.append((completed, total)),
+    )
+    assert len(exported) == 2
+    assert progress == [(1, 2), (2, 2)]
