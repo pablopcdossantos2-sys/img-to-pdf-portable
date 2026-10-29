@@ -56,3 +56,12 @@ def test_third_party_notice_generator_lists_runtime_dependencies() -> None:
     source = (ROOT / "scripts/generate_third_party_notices.py").read_text(encoding="utf-8")
     for package in ("PySide6", "shiboken6", "pypdf", "cryptography", "Pillow", "reportlab"):
         assert package in source
+
+
+def test_translation_tables_are_symmetric_and_have_no_invisible_keys() -> None:
+    from document_tools.gui import TRANSLATIONS
+
+    english = TRANSLATIONS["en"]
+    spanish = TRANSLATIONS["es"]
+    assert set(english) == set(spanish)
+    assert all("\u200b" not in key for key in (*english.keys(), *spanish.keys()))
