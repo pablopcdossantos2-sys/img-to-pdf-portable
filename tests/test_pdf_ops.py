@@ -1269,3 +1269,123 @@ def test_stamp_rejects_unsupported_unicode_and_fits_long_text(tmp_path: Path) ->
         font_size=60,
     )
     assert "ESTE DOCUMENTO" in (read_pdf(output).pages[0].extract_text() or "")
+
+
+def _first_pdf_image_filter(pdf_path: Path) -> set[str]:
+    page = read_pdf(pdf_path).pages[0]
+    xobjects = page["/Resources"].get_object()["/XObject"].get_object()
+    image_object = next(
+        value.get_object()
+        for value in xobjects.values()
+        if value.get_object().get("/Subtype") == "/Image"
+    )
+    filters = image_object.get("/Filter")
+    if isinstance(filters, list):
+        return {str(value) for value in filters}
+    return {str(filters)}
+
+
+def test_images_to_pdf_embeds_lossless_source_with_flate(tmp_path: Path) -> None:
+    source = tmp_path / "screen.png"
+    with Image.new("RGB", (80, 60), "white") as image:
+        image.save(source)
+    output = tmp_path / "screen.pdf"
+
+    images_to_pdf([source], output, dpi=72, margin_mm=0)
+
+    assert "/FlateDecode" in _first_pdf_image_filter(output)
+    assert "/DCTDecode" not in _first_pdf_image_filter(output)
+
+
+def test_images_to_pdf_keeps_jpeg_stream_as_dct(tmp_path: Path) -> None:
+    source = tmp_path / "photo.jpg"
+    with Image.new("RGB", (80, 60), (80, 120, 160)) as image:
+        image.save(source, quality=90)
+    output = tmp_path / "photo.pdf"
+
+    images_to_pdf([source], output, dpi=72, margin_mm=0)
+
+    assert "/DCTDecode" in _first_pdf_image_filter(output)
+
+
+def test_images_to_pdf_ignores_secondary_mpo_frames(tmp_path: Path) -> None:
+    source = tmp_path / "camera.jpg"
+    first = Image.new("RGB", (40, 30), "red")
+    second = Image.new("RGB", (40, 30), "blue")
+    try:
+        first.save(source, format="MPO", save_all=True, append_images=[second])
+    finally:
+        first.close()
+        second.close()
+    with Image.open(source) as opened:
+        if opened.format != "MPO" or getattr(opened, "n_frames", 1) < 2:
+            pytest.skip("Esta versão do Pillow não consegue criar um MPO multipágina de teste.")
+    output = tmp_path / "camera.pdf"
+
+    images_to_pdf([source], output)
+
+    assert len(read_pdf(output).pages) == 1
+
+
+def test_flatten_opaque_rgb_does_not_create_rgba_copy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_convert = Image.Image.convert
+    calls: list[str] = []
+
+    def track_convert(self, mode=None, *args, **kwargs):
+        calls.append(str(mode))
+        return original_convert(self, mode, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "convert", track_convert)
+    source = Image.new("RGB", (10, 10), "white")
+    try:
+        result = pdf_ops._flatten_to_rgb(source)
+        try:
+            assert result.mode == "RGB"
+            assert "RGBA" not in calls
+        finally:
+            result.close()
+    finally:
+        source.close()
+
+
+@pytest.mark.parametrize("mode", ["PA", "LAB"])
+def test_convert_image_handles_pa_and_lab_modes_to_png(
+    tmp_path: Path, mode: str
+) -> None:
+    source = tmp_path / f"source-{mode.lower()}.tif"
+    output = tmp_path / f"converted-{mode.lower()}.png"
+    if mode == "PA":
+        image = Image.new("P", (12, 8), 1)
+        image.putpalette([0, 0, 0, 255, 0, 0] + [0, 0, 0] * 254)
+        image.info["transparency"] = 0
+        image = image.convert("PA")
+    else:
+        image = Image.new("LAB", (12, 8), (128, 128, 128))
+    try:
+        image.save(source, format="TIFF")
+    finally:
+        image.close()
+
+    convert_image(source, output, "PNG")
+
+    with Image.open(output) as converted:
+        converted.load()
+        assert converted.mode in {"RGB", "RGBA"}
+
+
+@pytest.mark.parametrize(
+    ("format_name", "extension", "width"),
+    [("WEBP", ".webp", 16384), ("JPEG", ".jpg", 65501)],
+)
+def test_convert_image_rejects_encoder_dimension_limits(
+    tmp_path: Path, format_name: str, extension: str, width: int
+) -> None:
+    source = tmp_path / f"wide-{width}.png"
+    output = tmp_path / f"wide{extension}"
+    with Image.new("RGB", (width, 1), "white") as image:
+        image.save(source)
+
+    with pytest.raises(ValueError, match="aceita no máximo"):
+        convert_image(source, output, format_name)

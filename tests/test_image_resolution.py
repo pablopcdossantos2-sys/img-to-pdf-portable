@@ -80,3 +80,29 @@ def test_recommend_dpi_skips_decompression_bomb(
 def test_invalid_margin_is_rejected() -> None:
     with pytest.raises(ValueError, match="margem"):
         recommend_dpi_from_images([], margin_mm=41)
+
+
+def test_recommend_dpi_cache_invalidates_when_file_changes(tmp_path: Path) -> None:
+    source = create_image(tmp_path / "replace.png", (2480, 3508))
+    assert recommend_dpi_from_images([source], margin_mm=0) == 300
+    replacement = Image.new("RGB", (1240, 1754), "white")
+    try:
+        replacement.save(source)
+    finally:
+        replacement.close()
+    assert recommend_dpi_from_images([source], margin_mm=0) == 150
+
+
+def test_recommend_dpi_skips_syntax_error_images(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    valid = create_image(tmp_path / "valid.jpg", (1240, 1754))
+    original_open = Image.open
+
+    def open_with_syntax_error(path, *args, **kwargs):
+        if Path(path).name == "broken.jpg":
+            raise SyntaxError("library-specific parser detail")
+        return original_open(path, *args, **kwargs)
+
+    broken = tmp_path / "broken.jpg"
+    broken.write_bytes(b"not a jpeg")
+    monkeypatch.setattr(Image, "open", open_with_syntax_error)
+    assert recommend_dpi_from_images([broken, valid], margin_mm=0) == 150

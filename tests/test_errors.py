@@ -38,3 +38,33 @@ def test_unicode_error_is_friendly() -> None:
     message = friendly_error_message(error)
     assert "Renomeie o arquivo" in message
     assert "surrogates not allowed" not in message
+
+
+def test_memory_and_disk_full_errors_are_actionable() -> None:
+    memory = friendly_error_message(MemoryError())
+    disk = friendly_error_message(OSError(28, "No space left on device"))
+    assert "memória" in memory.lower()
+    assert "espaço" in disk.lower()
+
+
+def test_is_a_directory_error_is_actionable() -> None:
+    assert "pasta" in friendly_error_message(IsADirectoryError()).lower()
+
+
+def test_dependency_error_is_not_described_as_a_damaged_pdf() -> None:
+    error = type("DependencyError", (Exception,), {"__module__": "pypdf.errors"})(
+        "cryptography is missing"
+    )
+    message = friendly_error_message(error)
+    assert "dependência" in message.lower()
+    assert "danificado" not in message.lower()
+
+
+def test_library_value_error_details_are_not_echoed() -> None:
+    error = ValueError("Image size exceeds WebP limit")
+    try:
+        raise error
+    except ValueError as caught:
+        message = friendly_error_message(caught)
+    assert "Image size exceeds" not in message
+    assert "detalhes internos" in message
