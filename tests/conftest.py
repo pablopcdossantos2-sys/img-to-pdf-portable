@@ -26,6 +26,27 @@ from PySide6.QtCore import QSettings
 QSettings.setDefaultFormat(QSettings.Format.IniFormat)
 QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(_CONFIG_ROOT))
 
+# On Windows, QSettings("organization", "application") selects the registry
+# explicitly and ignores setDefaultFormat(). Redirect only the application's
+# constructor during tests so real HKCU preferences can never be read or changed.
+from document_tools import gui as _gui_module
+
+_QSettings = QSettings
+
+
+def _isolated_qsettings(*args, **kwargs):
+    if len(args) == 2 and args == ("PDFHub", "PDF Hub") and not kwargs:
+        return _QSettings(
+            _QSettings.Format.IniFormat,
+            _QSettings.Scope.UserScope,
+            "PDFHub",
+            "PDF Hub",
+        )
+    return _QSettings(*args, **kwargs)
+
+
+_gui_module.QSettings = _isolated_qsettings
+
 
 @atexit.register
 def _cleanup_test_state() -> None:
