@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from functools import lru_cache
 from pathlib import Path
 
 from PIL import Image
@@ -11,21 +10,6 @@ from PIL import Image
 MIN_DPI = 72
 MAX_DPI = 600
 MM_PER_INCH = 25.4
-_EXIF_ORIENTATION = 0x0112
-_SWAPPED_ORIENTATIONS = {5, 6, 7, 8}
-
-
-@lru_cache(maxsize=2048)
-def _cached_oriented_size(path_text: str, mtime_ns: int, file_size: int) -> tuple[int, int]:
-    """Cache dimensions and orientation by path and file metadata."""
-    del mtime_ns, file_size
-    with Image.open(path_text) as opened:
-        width, height = opened.size
-        try:
-            orientation = opened.getexif().get(_EXIF_ORIENTATION)
-        except (OSError, ValueError, SyntaxError, EOFError, Image.DecompressionBombError):
-            orientation = None
-        return (height, width) if orientation in _SWAPPED_ORIENTATIONS else (width, height)
 A4_WIDTH_MM = 210.0
 A4_HEIGHT_MM = 297.0
 
@@ -49,11 +33,16 @@ def recommend_dpi_from_images(
     for raw_path in image_paths:
         path = Path(raw_path).expanduser()
         try:
-            stat = path.stat()
-            width, height = _cached_oriented_size(
-                str(path.resolve()), stat.st_mtime_ns, stat.st_size
-            )
-        except (OSError, ValueError, EOFError, SyntaxError, Image.DecompressionBombError):
+            with Image.open(path) as opened:
+                # The DPI estimate needs dimensions and EXIF orientation, not pixels.
+                opened.seek(0)
+                width, height = opened.size
+                # Pillow's PNG EXIF reader can call load() to parse metadata.
+                # JPEG EXIF lives in the header, so read its orientation without
+                # decoding the raster; other formats keep their stored dimensions.
+                if opened.format == "JPEG" and opened.getexif().get(0x0112) in (5, 6, 7, 8):
+                    width, height = height, width
+        except (OSError, ValueError, EOFError, Image.DecompressionBombError):
             continue
 
         if width < 1 or height < 1:
