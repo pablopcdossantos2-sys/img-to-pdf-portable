@@ -367,7 +367,7 @@ def _normalise_high_bit_depth(image: Image.Image) -> Image.Image:
                     bits = bits[0] if bits else None
             maximum = (1 << bits) - 1 if isinstance(bits, int) and 1 <= bits <= 16 else 65535
             return grayscale.point(
-                lambda value: max(0, min(255, value * 255 / maximum))
+                lambda value: value * (255.0 / maximum)
             ).convert("L")
         finally:
             grayscale.close()
