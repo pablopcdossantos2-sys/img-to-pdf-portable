@@ -7,11 +7,14 @@ import os
 import re
 import shutil
 import tempfile
+import threading
+import warnings
+from contextlib import contextmanager
 from io import BytesIO
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Callable, Iterator, Sequence
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageCms, ImageOps
 from pypdf import PdfReader, PdfWriter, Transformation
 from pypdf.generic import (
     ArrayObject,
@@ -22,6 +25,8 @@ from pypdf.generic import (
     RectangleObject,
     StreamObject,
 )
+from reportlab import rl_config
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
@@ -29,7 +34,37 @@ from reportlab.pdfgen import canvas
 SUPPORTED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff", ".gif"}
 SUPPORTED_OUTPUT_FORMATS = {"JPEG", "PNG", "WEBP", "BMP", "TIFF"}
 ALPHA_MODES = {"RGBA", "LA", "PA"}
+MULTI_FRAME_FORMATS = {"GIF", "TIFF", "WEBP", "PNG"}
+LOSSY_SOURCE_FORMATS = {"JPEG", "MPO", "WEBP"}
+MAX_SAFE_IMAGE_PIXELS = 150_000_000
 MAX_DUPLICATE_PAGE_SELECTION = 100_000
+_REPORTLAB_CONFIG_LOCK = threading.RLock()
+
+
+@contextmanager
+def _open_bounded_image(path: str | Path) -> Iterator[Image.Image]:
+    """Open an image with a consistent application-specific pixel safety limit."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", Image.DecompressionBombWarning)
+        opened = Image.open(path)
+    try:
+        width, height = opened.size
+        if width * height > MAX_SAFE_IMAGE_PIXELS:
+            raise ValueError(
+                "A imagem ultrapassa o limite seguro de 150 megapixels. "
+                "Reduza suas dimensões antes de processá-la."
+            )
+        yield opened
+    finally:
+        opened.close()
+
+
+def image_frame_count(path: str | Path) -> int:
+    """Return meaningful content frames; MPO secondary gain/depth maps are never pages."""
+    with _open_bounded_image(Path(path).expanduser()) as opened:
+        if opened.format not in MULTI_FRAME_FORMATS:
+            return 1
+        return max(1, int(getattr(opened, "n_frames", 1)))
 
 
 def parse_page_ranges(
@@ -349,31 +384,49 @@ def _transform_page_annotation_coordinates(page, rotation: int) -> None:
 
 
 def _normalise_high_bit_depth(image: Image.Image) -> Image.Image:
-    """Convert high-bit-depth grayscale data to 8-bit without saturating it to white."""
+    """Map high-depth grayscale through nominal ranges rather than stretching each image."""
     if image.mode.startswith("I;16"):
         grayscale = image.convert("I")
         try:
+            # Assume full-range 16-bit samples. We do not guess 10/12-bit ranges
+            # from a single image's extrema, which would change tones per document.
             return grayscale.point(lambda value: value / 257).convert("L")
         finally:
             grayscale.close()
     if image.mode in {"I", "F"}:
-        low, high = image.getextrema()
-        if not (float(low) == float(low) and float(high) == float(high)):
+        low, high = (float(value) for value in image.getextrema())
+        if not (math.isfinite(low) and math.isfinite(high)):
             return Image.new("L", image.size, 0)
-        if high > low:
-            # Normalize by this image's dynamic range. This preserves ordinary
-            # 0..255 values in Pillow's "I" mode instead of crushing them to black.
-            scale = 255.0 / float(high - low)
-            return image.point(lambda value: (value - low) * scale).convert("L")
-        if image.mode == "I" and 0 <= low <= 65535:
-            return Image.new("L", image.size, round(float(low) / 257))
-        return Image.new("L", image.size, 0)
+        if image.mode == "F" and 0.0 <= low and high <= 1.0:
+            floor, ceiling = 0.0, 1.0
+        elif 0.0 <= low and high <= 255.0:
+            floor, ceiling = 0.0, 255.0
+        elif 0.0 <= low and high <= 65535.0:
+            floor, ceiling = 0.0, 65535.0
+        else:
+            floor, ceiling = low, high
+        if ceiling <= floor:
+            if low == high and floor == 0.0 and ceiling > 0.0:
+                value = round(max(0.0, min(255.0, low * 255.0 / ceiling)))
+                return Image.new("L", image.size, value)
+            return Image.new("L", image.size, 0)
+        scale = 255.0 / (ceiling - floor)
+        return image.point(
+            lambda value: max(0, min(255, round((float(value) - floor) * scale)))
+        ).convert("L")
     return image
 
 
 def _flatten_to_rgb(image: Image.Image) -> Image.Image:
     """Composite transparency over white and return an independent RGB image."""
     normalized = _normalise_high_bit_depth(image)
+    has_alpha = normalized.mode in ALPHA_MODES or "transparency" in normalized.info
+    if not has_alpha:
+        try:
+            return normalized.convert("RGB")
+        finally:
+            if normalized is not image:
+                normalized.close()
     rgba = normalized.convert("RGBA")
     flattened = Image.new("RGB", rgba.size, "white")
     try:
@@ -386,6 +439,45 @@ def _flatten_to_rgb(image: Image.Image) -> Image.Image:
         if normalized is not image:
             normalized.close()
     return flattened
+
+
+def _to_srgb(image: Image.Image, icc_profile: bytes | None) -> Image.Image:
+    """Convert RGB pixels with a valid embedded profile to sRGB, otherwise keep them."""
+    if not icc_profile or image.mode != "RGB":
+        return image
+    try:
+        source_profile = ImageCms.ImageCmsProfile(BytesIO(icc_profile))
+        target_profile = ImageCms.createProfile("sRGB")
+        converted = ImageCms.profileToProfile(
+            image, source_profile, target_profile,
+            renderingIntent=ImageCms.Intent.PERCEPTUAL, outputMode="RGB",
+        )
+        return converted if converted is not None else image
+    except (ImageCms.PyCMSError, OSError, ValueError, TypeError):
+        return image
+
+
+def _save_page_pdf(
+    image: Image.Image, target: Path, *, dpi: int, source_format: str | None
+) -> None:
+    """Use DCT for already-lossy sources and Flate for lossless originals."""
+    if source_format in LOSSY_SOURCE_FORMATS:
+        image.save(target, format="PDF", resolution=dpi, quality=95)
+        return
+    width_pt = image.width * 72.0 / dpi
+    height_pt = image.height * 72.0 / dpi
+    with _REPORTLAB_CONFIG_LOCK:
+        previous_use_a85 = rl_config.useA85
+        rl_config.useA85 = 0
+        try:
+            page_canvas = canvas.Canvas(
+                str(target), pagesize=(width_pt, height_pt), pageCompression=1
+            )
+            page_canvas.drawImage(ImageReader(image), 0, 0, width=width_pt, height=height_pt)
+            page_canvas.showPage()
+            page_canvas.save()
+        finally:
+            rl_config.useA85 = previous_use_a85
 
 
 def _resize_to_a4(image: Image.Image, *, dpi: int, margin_mm: float) -> Image.Image:
@@ -447,11 +539,19 @@ def images_to_pdf(
         with tempfile.TemporaryDirectory(prefix="pdf-hub-pages-") as temp_dir:
             page_directory = Path(temp_dir)
             for source in sources:
-                with Image.open(source) as opened:
+                with _open_bounded_image(source) as opened:
+                    source_format = opened.format
+                    icc_profile = opened.info.get("icc_profile")
                     frame_count = max(1, int(getattr(opened, "n_frames", 1)))
-                    frame_indexes = range(frame_count) if all_frames else range(1)
+                    import_all = all_frames and source_format in MULTI_FRAME_FORMATS
+                    frame_indexes = range(frame_count) if import_all else range(1)
                     for frame_index in frame_indexes:
                         opened.seek(frame_index)
+                        if opened.width * opened.height > MAX_SAFE_IMAGE_PIXELS:
+                            raise ValueError(
+                                "Um quadro da imagem ultrapassa o limite seguro de 150 megapixels. "
+                                "Reduza suas dimensões antes de processá-lo."
+                            )
                         oriented = ImageOps.exif_transpose(opened)
                         try:
                             image = _flatten_to_rgb(oriented)
@@ -459,15 +559,19 @@ def images_to_pdf(
                             if oriented is not opened:
                                 oriented.close()
                         try:
-                            canvas = _resize_to_a4(image, dpi=dpi, margin_mm=margin_mm)
+                            converted = _to_srgb(image, icc_profile)
+                            if converted is not image:
+                                image.close()
+                                image = converted
+                            page_image = _resize_to_a4(image, dpi=dpi, margin_mm=margin_mm)
                         finally:
                             image.close()
                         page_number += 1
                         page_pdf = page_directory / f"page-{page_number:06d}.pdf"
                         try:
-                            canvas.save(page_pdf, format="PDF", resolution=dpi, quality=95)
+                            _save_page_pdf(page_image, page_pdf, dpi=dpi, source_format=source_format)
                         finally:
-                            canvas.close()
+                            page_image.close()
                         with page_pdf.open("rb") as page_stream:
                             page_reader = PdfReader(page_stream, strict=False)
                             writer.add_page(page_reader.pages[0])
@@ -923,6 +1027,10 @@ def _format_image_for_output(image: Image.Image, image_format: str) -> Image.Ima
         return image.copy() if image.mode in {"RGB", "L"} else image.convert("RGB")
     if image_format == "BMP":
         return image.copy() if image.mode in {"RGB", "L"} else image.convert("RGB")
+    if image_format == "PNG":
+        png_native_modes = {"1", "L", "LA", "P", "RGB", "RGBA"}
+        if image.mode not in png_native_modes:
+            return image.convert("RGBA" if has_transparency else "RGB")
     if image_format in {"PNG", "WEBP"}:
         if image.mode == "CMYK" or (image_format == "WEBP" and image.mode not in {"RGB", "RGBA", "L"}):
             return image.convert("RGB")
@@ -976,7 +1084,7 @@ def convert_image(
     image: Image.Image | None = None
     final_image: Image.Image | None = None
     try:
-        with Image.open(source) as opened:
+        with _open_bounded_image(source) as opened:
             original_mode = opened.mode
             icc_profile = opened.info.get("icc_profile")
             image = ImageOps.exif_transpose(opened)
@@ -988,9 +1096,27 @@ def convert_image(
                 image = normalized
             if max_width or max_height:
                 bounds = (max_width or image.width, max_height or image.height)
+                needs_resize = (
+                    (max_width is not None and image.width > max_width)
+                    or (max_height is not None and image.height > max_height)
+                )
+                if needs_resize and image.mode in {"P", "PA", "1"}:
+                    keeps_alpha = image.mode == "PA" or "transparency" in image.info
+                    resized_input = image.convert(
+                        "RGBA" if keeps_alpha else ("L" if image.mode == "1" else "RGB")
+                    )
+                    if image is not opened:
+                        image.close()
+                    image = resized_input
                 image.thumbnail(bounds, Image.Resampling.LANCZOS)
 
             final_image = _format_image_for_output(image, image_format)
+            encoder_limit = {"WEBP": 16383, "JPEG": 65500}.get(image_format)
+            if encoder_limit is not None and max(final_image.size) > encoder_limit:
+                raise ValueError(
+                    f"O formato {image_format} aceita no máximo {encoder_limit} pixels por lado. "
+                    "Reduza as dimensões de saída ou escolha PNG ou TIFF."
+                )
             save_options: dict[str, object] = {}
             if image_format in {"JPEG", "WEBP"}:
                 save_options["quality"] = quality
