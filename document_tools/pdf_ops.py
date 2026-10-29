@@ -29,6 +29,7 @@ from reportlab.pdfgen import canvas
 SUPPORTED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff", ".gif"}
 SUPPORTED_OUTPUT_FORMATS = {"JPEG", "PNG", "WEBP", "BMP", "TIFF"}
 ALPHA_MODES = {"RGBA", "LA", "PA"}
+MULTI_FRAME_FORMATS = {"GIF", "TIFF", "WEBP", "PNG"}
 MAX_DUPLICATE_PAGE_SELECTION = 100_000
 
 
@@ -374,18 +375,24 @@ def _normalise_high_bit_depth(image: Image.Image) -> Image.Image:
 def _flatten_to_rgb(image: Image.Image) -> Image.Image:
     """Composite transparency over white and return an independent RGB image."""
     normalized = _normalise_high_bit_depth(image)
-    rgba = normalized.convert("RGBA")
-    flattened = Image.new("RGB", rgba.size, "white")
     try:
-        flattened.paste(rgba, (0, 0), rgba.getchannel("A"))
-    except Exception:
-        flattened.close()
-        raise
+        has_alpha = normalized.mode in ALPHA_MODES or "transparency" in normalized.info
+        if not has_alpha:
+            return normalized.convert("RGB")
+
+        rgba = normalized.convert("RGBA")
+        flattened = Image.new("RGB", rgba.size, "white")
+        try:
+            flattened.paste(rgba, (0, 0), rgba.getchannel("A"))
+        except Exception:
+            flattened.close()
+            raise
+        finally:
+            rgba.close()
+        return flattened
     finally:
-        rgba.close()
         if normalized is not image:
             normalized.close()
-    return flattened
 
 
 def _resize_to_a4(image: Image.Image, *, dpi: int, margin_mm: float) -> Image.Image:
@@ -449,7 +456,8 @@ def images_to_pdf(
             for source in sources:
                 with Image.open(source) as opened:
                     frame_count = max(1, int(getattr(opened, "n_frames", 1)))
-                    frame_indexes = range(frame_count) if all_frames else range(1)
+                    import_all_frames = all_frames and opened.format in MULTI_FRAME_FORMATS
+                    frame_indexes = range(frame_count) if import_all_frames else range(1)
                     for frame_index in frame_indexes:
                         opened.seek(frame_index)
                         oriented = ImageOps.exif_transpose(opened)
@@ -921,6 +929,10 @@ def _format_image_for_output(image: Image.Image, image_format: str) -> Image.Ima
         return image.copy() if image.mode in {"RGBA", "LA"} else image.convert("RGBA")
     if image_format == "JPEG":
         return image.copy() if image.mode in {"RGB", "L"} else image.convert("RGB")
+    if image_format == "PNG":
+        native_modes = {"1", "L", "LA", "P", "RGB", "RGBA", "I;16", "I"}
+        if image.mode not in native_modes:
+            return image.convert("RGBA" if has_transparency else "RGB")
     if image_format == "BMP":
         return image.copy() if image.mode in {"RGB", "L"} else image.convert("RGB")
     if image_format in {"PNG", "WEBP"}:
@@ -988,9 +1000,23 @@ def convert_image(
                 image = normalized
             if max_width or max_height:
                 bounds = (max_width or image.width, max_height or image.height)
+                if image.mode in {"1", "P"}:
+                    has_transparency = image.mode == "P" and "transparency" in image.info
+                    resized_source = image.convert(
+                        "RGBA" if has_transparency else ("L" if image.mode == "1" else "RGB")
+                    )
+                    if image is not opened:
+                        image.close()
+                    image = resized_source
                 image.thumbnail(bounds, Image.Resampling.LANCZOS)
 
             final_image = _format_image_for_output(image, image_format)
+            encoder_limit = {"WEBP": 16383, "JPEG": 65500}.get(image_format)
+            if encoder_limit and max(final_image.size) > encoder_limit:
+                raise ValueError(
+                    f"O formato {image_format} aceita no máximo {encoder_limit} px por lado. "
+                    "Reduza a largura/altura máxima ou escolha PNG ou TIFF."
+                )
             save_options: dict[str, object] = {}
             if image_format in {"JPEG", "WEBP"}:
                 save_options["quality"] = quality

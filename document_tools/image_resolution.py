@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from functools import lru_cache
 from pathlib import Path
 
 from PIL import Image
@@ -12,6 +13,21 @@ MAX_DPI = 600
 MM_PER_INCH = 25.4
 A4_WIDTH_MM = 210.0
 A4_HEIGHT_MM = 297.0
+
+
+@lru_cache(maxsize=2048)
+def _cached_oriented_size(path_text: str, modified_ns: int, file_size: int) -> tuple[int, int]:
+    """Read image dimensions and EXIF orientation, caching by file identity/version."""
+    del modified_ns, file_size  # cache-key values intentionally invalidate changed files
+    with Image.open(path_text) as opened:
+        width, height = opened.size
+        try:
+            orientation = opened.getexif().get(0x0112)
+        except (OSError, ValueError, EOFError, SyntaxError, Image.DecompressionBombError):
+            orientation = None
+        if orientation in {5, 6, 7, 8}:
+            return height, width
+        return width, height
 
 
 def recommend_dpi_from_images(
@@ -33,16 +49,13 @@ def recommend_dpi_from_images(
     for raw_path in image_paths:
         path = Path(raw_path).expanduser()
         try:
-            with Image.open(path) as opened:
-                # The DPI estimate needs dimensions and EXIF orientation, not pixels.
-                opened.seek(0)
-                width, height = opened.size
-                # Pillow's PNG EXIF reader can call load() to parse metadata.
-                # JPEG EXIF lives in the header, so read its orientation without
-                # decoding the raster; other formats keep their stored dimensions.
-                if opened.format == "JPEG" and opened.getexif().get(0x0112) in (5, 6, 7, 8):
-                    width, height = height, width
-        except (OSError, ValueError, EOFError, Image.DecompressionBombError):
+            stat_result = path.stat()
+            width, height = _cached_oriented_size(
+                str(path.resolve()), stat_result.st_mtime_ns, stat_result.st_size
+            )
+        except (
+            OSError, ValueError, EOFError, SyntaxError, Image.DecompressionBombError
+        ):
             continue
 
         if width < 1 or height < 1:
