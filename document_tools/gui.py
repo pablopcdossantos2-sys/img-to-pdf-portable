@@ -1356,6 +1356,17 @@ TRANSLATIONS["es"].update({
     "A senha do PDF está incorreta ou não foi informada.": "La contraseña del PDF es incorrecta o no se proporcionó.",
 })
 
+TRANSLATIONS["en"].update({
+    "Cancelar operação": "Cancel operation",
+    "Cancelando exportação de páginas…": "Cancelling page export…",
+    "Exportação cancelada.": "Export cancelled.",
+})
+TRANSLATIONS["es"].update({
+    "Cancelar operação": "Cancelar operación",
+    "Cancelando exportação de páginas…": "Cancelando la exportación de páginas…",
+    "Exportação cancelada.": "Exportación cancelada.",
+})
+
 class ReorderPageDelegate(QStyledItemDelegate):
     """Keep each page thumbnail above its readable caption."""
 
@@ -1676,6 +1687,7 @@ class OperationWorker(QThread):
 
     succeeded = Signal(str)
     failed = Signal(str)
+    progress = Signal(int, int)
 
     def __init__(self, task: Callable[[], str]) -> None:
         super().__init__()
@@ -1842,6 +1854,11 @@ class DocumentToolsWindow(QMainWindow):
         self.open_directory_button.hide()
         self.open_directory_button.clicked.connect(self._open_output_directory)
         footer.addWidget(self.open_directory_button)
+        self.cancel_operation_button = QPushButton("Cancelar operação")
+        self.cancel_operation_button.setObjectName("secondaryButton")
+        self.cancel_operation_button.hide()
+        self.cancel_operation_button.clicked.connect(self._cancel_current_operation)
+        footer.addWidget(self.cancel_operation_button)
         self.progress = QProgressBar()
         self.progress.setObjectName("progress")
         self.progress.setRange(0, 0)
@@ -2371,11 +2388,15 @@ class DocumentToolsWindow(QMainWindow):
         task: Callable[[], str],
         *,
         output_location: str | Path | None = None,
+        cancellable: bool = False,
     ) -> None:
         if self._worker is not None and self._worker.isRunning():
             return
         self._set_status(description)
         self.open_directory_button.hide()
+        self.cancel_operation_button.setVisible(cancellable)
+        self.cancel_operation_button.setEnabled(cancellable)
+        self.progress.setRange(0, 0)
         self.progress.show()
         self.tabs.setEnabled(False)
         if output_location is None:
@@ -2389,8 +2410,22 @@ class DocumentToolsWindow(QMainWindow):
         self._worker = worker
         worker.succeeded.connect(self._operation_succeeded)
         worker.failed.connect(self._operation_failed)
+        worker.progress.connect(self._update_operation_progress)
         worker.finished.connect(self._operation_finished)
         worker.start()
+
+    def _update_operation_progress(self, completed: int, total: int) -> None:
+        if total > 0:
+            self.progress.setRange(0, total)
+            self.progress.setValue(min(completed, total))
+
+    def _cancel_current_operation(self) -> None:
+        worker = self._worker
+        if worker is None or not worker.isRunning():
+            return
+        worker.requestInterruption()
+        self.cancel_operation_button.setEnabled(False)
+        self._set_status("Cancelando exportação de páginas…")
 
     def _operation_succeeded(self, message: str) -> None:
         self._set_status(message)
@@ -2406,11 +2441,17 @@ class DocumentToolsWindow(QMainWindow):
 
     def _operation_failed(self, message: str) -> None:
         self.open_directory_button.hide()
+        if message == "A exportação de páginas foi cancelada.":
+            self._set_status("Exportação cancelada.")
+            return
         self._set_status("Não foi possível concluir a operação: {message}", message=message)
         QMessageBox.warning(self, self._t("Operação não concluída"), self._t(message))
 
     def _operation_finished(self) -> None:
         self.progress.hide()
+        self.progress.setRange(0, 0)
+        self.cancel_operation_button.hide()
+        self.cancel_operation_button.setEnabled(False)
         if self._folder_batch_running:
             for tab_index in range(self.tabs.count()):
                 self.tabs.setTabEnabled(tab_index, True)
@@ -5150,6 +5191,14 @@ class DocumentToolsWindow(QMainWindow):
                 quality=quality,
                 pages=page_specification,
                 password=password,
+                progress_callback=lambda done, total: (
+                    self._worker.progress.emit(done, total)
+                    if self._worker is not None else None
+                ),
+                should_cancel=lambda: (
+                    self._worker is not None
+                    and self._worker.isInterruptionRequested()
+                ),
             )
             return self._t("Exportadas {count} página(s) para imagens em {directory}.").format(
                 count=len(images), directory=output_directory
@@ -5159,6 +5208,7 @@ class DocumentToolsWindow(QMainWindow):
             "Exportando páginas do PDF como imagens…",
             task,
             output_location=output_directory,
+            cancellable=True,
         )
 
     def _build_pdf_to_images_tab(self) -> QWidget:
