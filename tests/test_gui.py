@@ -1667,7 +1667,7 @@ def test_failed_operation_status_is_fully_translated(qt_app: QApplication, monke
         message = "O arquivo ou a pasta não foi encontrado. Confira o caminho e tente novamente."
         window.language_combo.setCurrentIndex(window.language_combo.findData("en"))
         window._operation_failed(message)
-        assert window.status_label.text() == "Could not complete operation: The file or folder could not be found. Check the path and try again."
+        assert window.status_label.text() == "Could not complete the operation: The file or folder could not be found. Check the path and try again."
         window.language_combo.setCurrentIndex(window.language_combo.findData("es"))
         window._operation_failed(message)
         assert "No se pudo completar la operación:" in window.status_label.text()
