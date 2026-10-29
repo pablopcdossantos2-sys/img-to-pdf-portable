@@ -62,6 +62,7 @@ from document_tools.profiles import (
     validate_profile_document,
 )
 from document_tools.pdf_ops import (
+    same_existing_file as _same_existing_file,
     convert_image,
     delete_pages,
     extract_pages,
@@ -83,16 +84,6 @@ from document_tools.pdf_ops import (
 APP_NAME = "PDF Hub"
 IMAGE_FILTER = "Imagens (*.jpg *.jpeg *.png *.bmp *.webp *.tif *.tiff *.gif)"
 PDF_FILTER = "Documentos PDF (*.pdf)"
-
-
-def _same_existing_file(first: Path, second: Path) -> bool:
-    if first == second:
-        return True
-    try:
-        return first.exists() and second.exists() and os.path.samefile(first, second)
-    except OSError:
-        return False
-
 
 
 def _ensure_suffix(path: Path, suffix: str) -> Path:
@@ -559,7 +550,6 @@ TRANSLATIONS = {
         "Quando desmarcado, usa somente a primeira página ou o primeiro quadro de cada arquivo.": "Si se desmarca, solo se usa la primera página o el primer fotograma de cada archivo.",
         "Formatos: JPG, PNG, BMP, WEBP, TIFF e GIF.": "Formatos: JPG, PNG, BMP, WEBP, TIFF y GIF.",
         "Criar PDF": "Crear PDF",
-        "Salv​ar somente as páginas necessárias": "Guardar solo las páginas necesarias",
         "Salvar somente as páginas necessárias": "Guardar solo las páginas necesarias",
         "Escolha o documento e informe os números das páginas ou intervalos que deseja manter.": "Elige el documento e indica los números o intervalos de páginas que deseas conservar.",
         "Arquivo de origem": "Archivo de origen",
@@ -1272,6 +1262,64 @@ for _language, _table in TRANSLATIONS.items():
             _clean_value = _value
         _clean_table[_clean_key] = _clean_value
     TRANSLATIONS[_language] = _clean_table
+
+# Keep backend validation messages translatable, including dynamic values.
+TRANSLATIONS["en"].update({
+    "O PDF não possui páginas.": "The PDF has no pages.",
+    "Informe páginas, por exemplo: 1-3, 5, 8-10.": "Enter pages, for example: 1-3, 5, 8-10.",
+    "Há um item vazio na lista de páginas.": "The page list contains an empty item.",
+    "O intervalo '{range}' está invertido: a página inicial não pode ser maior que a final.": "The range '{range}' is reversed: the start page cannot be greater than the end page.",
+    "O caminho de saída é uma pasta, não um arquivo PDF.": "The output path is a folder, not a PDF file.",
+    "O arquivo de saída precisa ter a extensão .pdf.": "The output file must use the .pdf extension.",
+    "A pasta de destino não existe.": "The destination folder does not exist.",
+    "O arquivo de saída não pode substituir uma imagem de origem.": "The output file cannot replace a source image.",
+    "Formato de imagem não suportado: {name}": "Unsupported image format: {name}",
+    "O formato {image_format} aceita no máximo {limit} px por lado. Reduza a largura/altura máxima ou escolha PNG ou TIFF.": "{image_format} supports a maximum of {limit} px per side. Reduce the maximum width/height or choose PNG or TIFF.",
+    "Não foi possível obter o tamanho da página {number}.": "Could not determine the size of page {number}.",
+    "Não foi possível renderizar a página {number}.": "Could not render page {number}.",
+    "Não foi possível salvar a imagem da página {number}.": "Could not save the image for page {number}.",
+    "O perfil de cor incorporado na imagem não pôde ser interpretado.": "The embedded image color profile could not be interpreted.",
+    "Não há memória suficiente para concluir a operação. Feche outros aplicativos ou tente uma imagem menor.": "There is not enough memory to complete the operation. Close other apps or try a smaller image.",
+    "Não há espaço disponível no disco para salvar o resultado. Libere espaço e tente novamente.": "There is not enough disk space to save the result. Free up space and try again.",
+    "Falta uma dependência necessária para abrir este PDF criptografado. Reinstale o PDF Hub usando o pacote oficial.": "A dependency required to open this encrypted PDF is missing. Reinstall PDF Hub using the official package.",
+    "Falhas: {count}.": "Failures: {count}.",
+    "Abra esta pasta manualmente:\n{path}": "Open this folder manually:\n{path}",
+    "Criando PDF a partir das imagens…": "Creating PDF from images…",
+    "Criando PDF a partir das imagens": "Creating PDF from images",
+    "Escolha otimização sem perdas ou equilibrada.": "Choose lossless or balanced optimization.",
+    "Escolha uma senha por PDF ou deixe a senha como None.": "Provide one password per PDF or use None.",
+    "Processamento local:": "Local processing:",
+    "Qualidade JPEG precisa ficar entre 50 e 95.": "JPEG quality must be between 50 and 95.",
+    "Selecione pelo menos um arquivo de origem.": "Select at least one source file.",
+})
+TRANSLATIONS["es"].update({
+    "O PDF não possui páginas.": "El PDF no tiene páginas.",
+    "Informe páginas, por exemplo: 1-3, 5, 8-10.": "Indica páginas, por ejemplo: 1-3, 5, 8-10.",
+    "Há um item vazio na lista de páginas.": "La lista de páginas contiene un elemento vacío.",
+    "O intervalo '{range}' está invertido: a página inicial não pode ser maior que a final.": "El intervalo '{range}' está invertido: la página inicial no puede ser mayor que la final.",
+    "O caminho de saída é uma pasta, não um arquivo PDF.": "La ruta de salida es una carpeta, no un archivo PDF.",
+    "O arquivo de saída precisa ter a extensão .pdf.": "El archivo de salida debe tener la extensión .pdf.",
+    "A pasta de destino não existe.": "La carpeta de destino no existe.",
+    "O arquivo de saída não pode substituir uma imagem de origem.": "El archivo de salida no puede reemplazar una imagen de origen.",
+    "Formato de imagem não suportado: {name}": "Formato de imagen no compatible: {name}",
+    "O formato {image_format} aceita no máximo {limit} px por lado. Reduza a largura/altura máxima ou escolha PNG ou TIFF.": "{image_format} admite un máximo de {limit} px por lado. Reduce el ancho/alto máximo o elige PNG o TIFF.",
+    "Não foi possível obter o tamanho da página {number}.": "No se pudo obtener el tamaño de la página {number}.",
+    "Não foi possível renderizar a página {number}.": "No se pudo renderizar la página {number}.",
+    "Não foi possível salvar a imagem da página {number}.": "No se pudo guardar la imagen de la página {number}.",
+    "O perfil de cor incorporado na imagem não pôde ser interpretado.": "No se pudo interpretar el perfil de color incrustado en la imagen.",
+    "Não há memória suficiente para concluir a operação. Feche outros aplicativos ou tente uma imagem menor.": "No hay memoria suficiente para completar la operación. Cierra otras aplicaciones o prueba con una imagen más pequeña.",
+    "Não há espaço disponível no disco para salvar o resultado. Libere espaço e tente novamente.": "No hay espacio disponible en el disco para guardar el resultado. Libera espacio e inténtalo de nuevo.",
+    "Falta uma dependência necessária para abrir este PDF criptografado. Reinstale o PDF Hub usando o pacote oficial.": "Falta una dependencia necesaria para abrir este PDF cifrado. Reinstala PDF Hub con el paquete oficial.",
+    "Falhas: {count}.": "Fallos: {count}.",
+    "Abra esta pasta manualmente:\n{path}": "Abre esta carpeta manualmente:\n{path}",
+    "Criando PDF a partir das imagens…": "Creando PDF a partir de las imágenes…",
+    "Criando PDF a partir das imagens": "Creando PDF a partir de las imágenes",
+    "Escolha otimização sem perdas ou equilibrada.": "Elige optimización sin pérdida o equilibrada.",
+    "Escolha uma senha por PDF ou deixe a senha como None.": "Indica una contraseña por PDF o deja None.",
+    "Processamento local:": "Procesamiento local:",
+    "Qualidade JPEG precisa ficar entre 50 e 95.": "La calidad JPEG debe estar entre 50 y 95.",
+    "Selecione pelo menos um arquivo de origem.": "Selecciona al menos un archivo de origen.",
+})
 
 class ReorderPageDelegate(QStyledItemDelegate):
     """Keep each page thumbnail above its readable caption."""
@@ -5297,7 +5345,7 @@ class DocumentToolsWindow(QMainWindow):
                 count=len(completed), directory=directory
             )
             if failures:
-                summary += self._t(" Falhas: {count}.").format(count=len(failures)) + " " + " | ".join(failures[:3])
+                summary += self._t("Falhas: {count}.").format(count=len(failures)) + " " + " | ".join(failures[:3])
             if not completed:
                 raise ValueError(summary)
             return summary

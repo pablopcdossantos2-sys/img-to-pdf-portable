@@ -1389,3 +1389,19 @@ def test_convert_image_rejects_encoder_dimension_limits(
 
     with pytest.raises(ValueError, match="aceita no máximo"):
         convert_image(source, output, format_name)
+
+
+def test_same_existing_file_detects_aliases_and_distinct_files(tmp_path: Path) -> None:
+    target = tmp_path / "target.txt"
+    target.write_text("same", encoding="utf-8")
+    alias = tmp_path / "alias.txt"
+    try:
+        alias.symlink_to(target)
+    except (OSError, NotImplementedError):
+        alias = target
+    distinct = tmp_path / "distinct.txt"
+    distinct.write_text("other", encoding="utf-8")
+
+    assert pdf_ops.same_existing_file(target, alias)
+    assert not pdf_ops.same_existing_file(target, distinct)
+    assert not pdf_ops.same_existing_file(target, tmp_path / "missing.txt")

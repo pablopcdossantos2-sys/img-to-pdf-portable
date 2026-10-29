@@ -114,6 +114,10 @@ def _same_existing_file(first: Path, second: Path) -> bool:
         return False
 
 
+# Public alias for callers that need the same file-identity policy as PDF operations.
+same_existing_file = _same_existing_file
+
+
 def _normalise_pdf_paths(
     source_paths: Sequence[str | Path],
     output_path: str | Path,
