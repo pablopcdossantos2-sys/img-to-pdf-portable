@@ -24,10 +24,15 @@ def _cached_oriented_size(path_text: str, modified_ns: int, file_size: int) -> t
         warnings.simplefilter("error", Image.DecompressionBombWarning)
         with Image.open(path_text) as opened:
             width, height = opened.size
-            try:
-                orientation = opened.getexif().get(0x0112)
-            except (OSError, ValueError, EOFError, SyntaxError, Image.DecompressionBombError):
-                orientation = None
+            # JPEG stores EXIF orientation in its header. For PNG and other
+            # formats, getexif() may trigger pixel loading; stored dimensions
+            # are safer for this lightweight DPI estimate.
+            orientation = None
+            if opened.format == "JPEG":
+                try:
+                    orientation = opened.getexif().get(0x0112)
+                except (OSError, ValueError, EOFError, SyntaxError, Image.DecompressionBombError):
+                    orientation = None
             if orientation in {5, 6, 7, 8}:
                 return height, width
             return width, height

@@ -114,3 +114,16 @@ def test_recommend_dpi_skips_decompression_bomb_warning(
     source = create_image(tmp_path / "warning-threshold.png", (14, 14))
     monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 100)
     assert recommend_dpi_from_images([source], margin_mm=0) is None
+
+
+def test_recommend_dpi_reads_png_dimensions_without_loading_pixels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = create_image(tmp_path / "header-only.png", (2480, 3508))
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("DPI estimation must not decode PNG pixels")
+
+    monkeypatch.setattr(Image.Image, "load", forbidden)
+    monkeypatch.setattr(Image.Image, "copy", forbidden)
+    assert recommend_dpi_from_images([source]) == 300
